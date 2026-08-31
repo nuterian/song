@@ -71,18 +71,27 @@ def _ranged(path: Path, request: Request) -> Response:
     )
 
 
-def create_app(workdir: Path | str, device: str = "cpu") -> FastAPI:
-    workdir = Path(workdir).resolve()
-    if not (workdir / "project.json").exists():
-        raise FileNotFoundError(f"no project.json in {workdir}; run `lyricsync align` first")
+def create_app(target: Path | str, device: str = "cpu") -> FastAPI:
+    """Serve the review UI for a track, or for a root with no tracks in it yet.
 
-    app = FastAPI(title="lyricsync")
-    # The session is no longer bound to one track: everything derives from
+    Opening with nothing aligned used to raise. That made the app's own import
+    flow - drop an audio file and a lyrics file, watch the pipeline run -
+    reachable only *after* you had already done the same job at a command line,
+    which is the one moment you would most want it. An empty root is now a
+    first-class state: the API says so, and the UI opens on the import panel.
+    """
+    target = Path(target).resolve()
+    opened = (target / "project.json").exists()
+
+    app = FastAPI(title="song")
+    # The session is not bound to one track: everything derives from
     # state["workdir"], so importing or opening another track just moves it.
     state: dict = {
-        "workdir": workdir,
-        "root": workdir.parent,
-        "project": Project.load(workdir / "project.json"),
+        "workdir": target,
+        # With a track open, its siblings are the other tracks; with nothing
+        # open, the target *is* the place tracks live.
+        "root": target.parent if opened else target,
+        "project": Project.load(target / "project.json") if opened else None,
         "stem": None,          # (samples, VocalActivity) for the open track, decoded once
         "device": device,
         "job": None,
@@ -100,7 +109,15 @@ def create_app(workdir: Path | str, device: str = "cpu") -> FastAPI:
     def current() -> Project:
         return state["project"]
 
+    def require_project() -> Project:
+        """For everything that edits or measures a track: there has to be one."""
+        project = state["project"]
+        if project is None:
+            raise HTTPException(409, "no track is open")
+        return project
+
     def loaded_stem():
+        # Callers are all behind require_project(); this is the belt.
         """(samples, VocalActivity) for the open track, decoded once and kept.
 
         Re-score and the timing audit both need this; before this cache carried
@@ -108,7 +125,7 @@ def create_app(workdir: Path | str, device: str = "cpu") -> FastAPI:
         click even though the exact same array was already sitting in memory.
         """
         if state["stem"] is None:
-            stem = Path(current().stem_path or current().audio_path)
+            stem = Path(require_project().stem_path or require_project().audio_path)
             samples, _ = load_mono(stem, TARGET_SR)
             state["stem"] = (samples, vad.analyse(samples, TARGET_SR))
         return state["stem"]
@@ -140,7 +157,10 @@ def create_app(workdir: Path | str, device: str = "cpu") -> FastAPI:
 
     @app.get("/api/project")
     def get_project() -> JSONResponse:
-        return JSONResponse(current().to_dict())
+        project = current()
+        if project is None:
+            return JSONResponse({"empty": True, "root": str(state["root"])})
+        return JSONResponse(project.to_dict())
 
     @app.put("/api/project")
     async def put_project(request: Request) -> JSONResponse:
@@ -156,7 +176,7 @@ def create_app(workdir: Path | str, device: str = "cpu") -> FastAPI:
 
     @app.post("/api/rescore")
     def rescore() -> JSONResponse:
-        project = current()
+        project = require_project()
         samples, act = loaded_stem()
         card = pipeline.rescore(project, activity=act, samples=samples)
         project.save(project_file())
@@ -194,7 +214,7 @@ def create_app(workdir: Path | str, device: str = "cpu") -> FastAPI:
     @app.post("/api/audit")
     def run_audit() -> JSONResponse:
         """Repair the provably-wrong, then hand back what still needs an ear."""
-        project = current()
+        project = require_project()
         stem = Path(project.stem_path or project.audio_path)
         if not stem.exists():
             raise HTTPException(404, "no vocal stem for this project")
@@ -240,7 +260,7 @@ def create_app(workdir: Path | str, device: str = "cpu") -> FastAPI:
         if action != "accept":
             raise HTTPException(400, "action must be 'accept' or 'dismiss'")
 
-        project = current()
+        project = require_project()
         after = int(cand["after_line"])
         if not (0 <= after < len(project.lines)):
             raise HTTPException(400, "no such line to insert after")
@@ -285,12 +305,14 @@ def create_app(workdir: Path | str, device: str = "cpu") -> FastAPI:
 
     @app.post("/api/export")
     def export() -> JSONResponse:
-        written = exports.write_all(current(), wd())
+        written = exports.write_all(require_project(), wd())
         return JSONResponse({k: str(v) for k, v in written.items()})
 
     @app.get("/api/analysis")
     def get_analysis() -> JSONResponse:
         project = current()
+        if project is None:
+            return JSONResponse({"empty": True})
         data = analysis.build(
             project.audio_path, project.stem_path or project.audio_path, wd()
         )
@@ -301,12 +323,12 @@ def create_app(workdir: Path | str, device: str = "cpu") -> FastAPI:
 
     @app.get("/media/mix")
     def media_mix(request: Request) -> Response:
-        project = current()
+        project = require_project()
         return _ranged(_preview(Path(project.audio_path), wd() / "mix.m4a"), request)
 
     @app.get("/media/vocals")
     def media_vocals(request: Request) -> Response:
-        project = current()
+        project = require_project()
         stem = Path(project.stem_path or project.audio_path)
         if not stem.exists():
             raise HTTPException(404, "no vocal stem for this project")

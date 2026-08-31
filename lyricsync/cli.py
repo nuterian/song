@@ -55,13 +55,25 @@ def cmd_align(args) -> int:
 
 
 def cmd_ui(args) -> int:
-    project, workdir = _align(args)
-    exports.write_all(project, workdir)
-
     from .server import serve
 
+    if args.audio and args.lyrics:
+        project, workdir = _align(args)
+        exports.write_all(project, workdir)
+        target = workdir
+    elif args.audio or args.lyrics:
+        print("give both an audio file and a lyrics file, or neither", file=sys.stderr)
+        return 2
+    else:
+        # Nothing to align. Open on the directory tracks live in, so the first
+        # one can be added from inside the app instead of from here.
+        target = Path(args.workdir) if args.workdir else Path("workdir")
+        target.mkdir(parents=True, exist_ok=True)
+        if not any(d.joinpath("project.json").exists() for d in target.iterdir() if d.is_dir()):
+            print("no aligned tracks yet - add one from the app")
+
     serve(
-        workdir, host=args.host, port=args.port, open_browser=not args.no_browser,
+        target, host=args.host, port=args.port, open_browser=not args.no_browser,
         device=args.device,
     )
     return 0
@@ -131,9 +143,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
 
-    def add_align_args(p):
-        p.add_argument("audio", help="wav/mp3/flac/m4a track")
-        p.add_argument("lyrics", help="plain-text lyrics")
+    def add_align_args(p, inputs_optional: bool = False):
+        # `ui` can be asked for with no files at all - that opens the app on
+        # its first-run screen, where a track is added by dropping it in.
+        p.add_argument("audio", nargs="?" if inputs_optional else None,
+                       help="wav/mp3/flac/m4a track")
+        p.add_argument("lyrics", nargs="?" if inputs_optional else None,
+                       help="plain-text lyrics")
         p.add_argument("--workdir", default=None)
         p.add_argument("--model", default="medium", help="whisper model for refinement")
         p.add_argument("--retry-model", default="large-v3-turbo")
@@ -152,8 +168,10 @@ def build_parser() -> argparse.ArgumentParser:
     add_align_args(p_align)
     p_align.set_defaults(func=cmd_align)
 
-    p_ui = sub.add_parser("ui", help="align (if needed) then open the review UI")
-    add_align_args(p_ui)
+    p_ui = sub.add_parser(
+        "ui", help="open the review UI; align first if given an audio + lyrics pair"
+    )
+    add_align_args(p_ui, inputs_optional=True)
     p_ui.add_argument("--host", default="127.0.0.1")
     p_ui.add_argument("--port", type=int, default=8420)
     p_ui.add_argument("--no-browser", action="store_true")
@@ -183,7 +201,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
 
-    # `lyricsync song.wav lyrics.txt` is the common case: default to the UI.
+    # `song song.wav lyrics.txt` is the common case, and a bare `song` should
+    # open the app rather than print usage - that is where a first track is
+    # added from.
+    if not argv:
+        argv = ["ui"]
     if argv and not argv[0].startswith("-") and argv[0] not in {
         "align",
         "ui",

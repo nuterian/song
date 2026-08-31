@@ -150,6 +150,11 @@ button.track {
 button.track:hover { border-color: var(--line); color: var(--text); }
 .caret { margin-left: 6px; opacity: .5; font-size: 10px; }
 .bar-right { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+body.no-track #btn-review,
+body.no-track #btn-rescore,
+body.no-track #btn-export,
+body.no-track #btn-save,
+body.no-track .hist { display: none; }
 
 button {
   background: linear-gradient(180deg, #1e2634, var(--panel-2));
@@ -166,7 +171,16 @@ button {
 }
 button:hover { border-color: #3a4763; background: linear-gradient(180deg, #26303f, #1f2735); }
 button:active { transform: translateY(1px); }
-button[disabled] { cursor: default; }
+/* A dead control has to look dead. Without this a disabled button was visually
+   identical to a live one - the worst of both, since it invites the click and
+   then does nothing. */
+button[disabled] {
+  cursor: default;
+  opacity: .4;
+  box-shadow: none;
+}
+button[disabled]:hover { border-color: var(--line); background: var(--panel-2); }
+button[disabled]:active { transform: none; }
 button.ghost, button.track { box-shadow: none; }
 button.primary {
   background: linear-gradient(180deg, #6faaff, var(--accent));
@@ -381,6 +395,77 @@ button.primary .k { opacity: .6; }
 /* The resting tip teaches the gestures; a live readout answers a question you
    are asking right now. When the deck runs out of room the tip goes first. */
 @media (max-width: 1180px) { .hint.rest { display: none; } }
+
+/* ---------- the curtain: loading, empty, and failed ----------
+   Every state the app can be in before it has a track to show. It replaces the
+   working surfaces rather than sitting over them, so nothing behind it is
+   clickable and inert. */
+
+.curtain {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  padding: 0 24px 40px;
+}
+.curtain[hidden] { display: none; }
+.curtain-body { width: 100%; max-width: 560px; padding-top: clamp(28px, 9vh, 76px); }
+.cur-pane[hidden] { display: none; }
+
+.cur-mark {
+  display: inline-flex;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.cur-mark svg { width: 34px; height: 26px; }
+
+.curtain h2 { margin: 0 0 12px; font-size: 24px; letter-spacing: -0.02em; }
+.cur-lede { margin: 0 0 20px; font-size: 15px; line-height: 1.6; color: #c3cddd; }
+.cur-msg { margin: 0 0 18px; font-size: 14px; color: var(--muted); }
+
+.cur-steps { margin: 0 0 24px; padding: 0; list-style: none; counter-reset: step; }
+.cur-steps li {
+  position: relative;
+  counter-increment: step;
+  padding: 0 0 14px 34px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.cur-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  font: 11px/1 var(--mono);
+  color: var(--accent);
+}
+.cur-steps b { color: var(--text); font-weight: 600; }
+
+.cur-actions { display: flex; gap: 10px; margin: 0 0 8px; }
+.cur-actions .rv-go, .cur-actions .rv-keep { flex: 0 0 auto; padding: 11px 20px; }
+.cur-foot { margin: 16px 0 0; font-size: 12px; color: var(--dim, #6d7a90); }
+
+/* A spinner rather than a bar: the wait is short and of unknown length. */
+.cur-spin {
+  width: 22px;
+  height: 22px;
+  margin-bottom: 16px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: cur-spin .7s linear infinite;
+}
+@keyframes cur-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cur-spin { animation-duration: 2.4s; } }
 
 /* ---------- lyrics ---------- */
 

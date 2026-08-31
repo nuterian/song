@@ -34,6 +34,59 @@
   </div>
 </header>
 
+<!-- Shown until the project loads, and instead of it when there is nothing to
+     load or the load failed. The old behaviour was a 2.4s toast over an empty
+     grey page, which reads as a broken app rather than an empty one. -->
+<section id="curtain" class="curtain" hidden>
+  <div class="curtain-body">
+
+    <div id="cur-loading" class="cur-pane">
+      <div class="cur-spin"></div>
+      <p class="cur-msg">Loading the track…</p>
+    </div>
+
+    <div id="cur-error" class="cur-pane" hidden>
+      <h2>That track would not load</h2>
+      <p id="cur-error-msg" class="cur-msg"></p>
+      <div class="cur-actions">
+        <button id="cur-retry" class="rv-go">Try again</button>
+        <button id="cur-tracks" class="rv-keep">Open another track</button>
+      </div>
+    </div>
+
+    <div id="cur-welcome" class="cur-pane" hidden>
+      <span class="cur-mark">
+        <svg viewBox="0 0 26 20" aria-hidden="true">
+          <path d="M2 12 L2 8 M7 15 L7 5 M12 18 L12 2 M17 14 L17 6 M22 11 L22 9"
+                stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+        </svg>
+      </span>
+      <h2>Nothing aligned yet</h2>
+      <p class="cur-lede">
+        Drop in an audio file and its lyrics as plain text. Three models will
+        time every line against the isolated vocal, score each one, and hand you
+        only the handful that need an ear.
+      </p>
+      <ol class="cur-steps">
+        <li><b>Add a track.</b> An audio file and a <code>.txt</code> — one line
+            per lyric line, a blank line between sections.</li>
+        <li><b>Wait about five minutes.</b> The vocal is separated once and
+            cached; the progress log runs while it works.</li>
+        <li><b>Check the timings.</b> Every line gets a score, and the words two
+            models disagree about are queued for you to settle by ear.</li>
+      </ol>
+      <div class="cur-actions">
+        <button id="cur-add" class="rv-go">Add your first track</button>
+      </div>
+      <p class="cur-foot">
+        Everything runs on this machine. Nothing is uploaded, and the models
+        download once on the first run.
+      </p>
+    </div>
+
+  </div>
+</section>
+
 <section class="stage">
   <div class="stage-head">
     <div id="transport">

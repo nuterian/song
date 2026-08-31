@@ -2738,9 +2738,49 @@ function bindChrome() {
   });
 }
 
+/* ------------------------------------------------------------- the curtain
+
+   Three states the app can be in before it has a track: loading, empty, and
+   failed. Each replaces the working surfaces rather than covering them, so a
+   dead app never presents a toolbar full of live-looking buttons. */
+
+function showCurtain(which, message) {
+  const on = !!which;
+  RV('curtain').hidden = !on;
+  for (const id of ['cur-loading', 'cur-error', 'cur-welcome']) {
+    RV(id).hidden = id !== `cur-${which}`;
+  }
+  // The chrome is only meaningful with a track behind it. `?` stays: the
+  // shortcut sheet is reference material, and it explains Check timings.
+  document.querySelector('.stage').hidden = on;
+  document.querySelector('.lyrics').hidden = on;
+  document.body.classList.toggle('no-track', on);
+  for (const id of ['btn-review', 'btn-rescore', 'btn-export', 'btn-save',
+                    'btn-undo', 'btn-redo']) {
+    const el = RV(id);
+    if (el) el.disabled = on;
+  }
+  if (which === 'error' && message) RV('cur-error-msg').textContent = message;
+}
+
+function bindCurtain() {
+  RV('cur-retry').addEventListener('click', () => location.reload());
+  RV('cur-tracks').addEventListener('click', openTracks);
+  RV('cur-add').addEventListener('click', () => {
+    openTracks();
+    imShow('im-pick');
+    imSetFile('audio', null);
+    imSetFile('lyrics', null);
+  });
+}
+
 /* ---------------------------------------------------------------- boot */
 
 async function main() {
+  bindCurtain();
+  bindTracks();
+  showCurtain('loading');
+
   S.el.clock = document.getElementById('clock');
   S.el.hint = document.getElementById('hint');
   S.el.lyrics = document.querySelector('.lyrics');
@@ -2750,7 +2790,16 @@ async function main() {
   S.el.placeBtn = document.getElementById('btn-place');
 
   S.project = await (await fetch('/api/project')).json();
+  // Nothing aligned yet: the app opens on its own first run rather than
+  // refusing to start, which is how the import flow used to be unreachable
+  // until you had already done the same job at a command line.
+  if (S.project.empty) {
+    document.getElementById('track-name').textContent = 'no track';
+    showCurtain('welcome');
+    return;
+  }
   S.an = await (await fetch('/api/analysis')).json();
+  showCurtain(null);
 
   document.getElementById('track-name').textContent =
     S.project.audio_path.split('/').pop();
@@ -2769,7 +2818,6 @@ async function main() {
   bindChrome();
   bindReview();
   bindAdditions();
-  bindTracks();
   syncHistory();
   restHint();
   await loadAudit();
@@ -2787,4 +2835,9 @@ async function main() {
   } catch { /* no job endpoint yet is fine */ }
 }
 
-main().catch(err => { console.error(err); toast('failed to load: ' + err.message, true); });
+main().catch(err => {
+  console.error(err);
+  // A toast that vanishes in 2.4 s left a full toolbar over an empty page with
+  // no way to tell what had happened. This states it and stays.
+  showCurtain('error', err && err.message ? err.message : String(err));
+});

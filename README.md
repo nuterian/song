@@ -14,11 +14,16 @@ not, and the end goal is burning synchronized captions into a video.
 ![The lyricsync timeline showing a whole track](docs/img/timeline-track.png)
 
 ```bash
-./setup.sh                                   # one-time, ~5 min
-./.venv/bin/python -m lyricsync song.wav lyrics.txt
+./setup.sh                       # one-time, ~5 min
+./.venv/bin/python -m lyricsync  # opens the app at http://127.0.0.1:8420
 ```
 
-That aligns the track and opens the review UI at <http://127.0.0.1:8420>.
+Add your first track by dropping an audio file and a `.txt` into the app, or
+align one straight from the command line:
+
+```bash
+./.venv/bin/python -m lyricsync song.wav lyrics.txt
+```
 
 ## Why it is accurate
 
