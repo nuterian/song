@@ -69,7 +69,7 @@ SHOTS = [
 CLIP = "1:04-1:16"
 CLIP_WIDTH = 1160
 CLIP_CRF = "28"       # a soft gradient hides it, and docs/ already ships the demo audio
-STILL_AT = 5.6        # seconds in: mid-sweep, halfway across a line
+STILL_AT = 7.0        # seconds in: mid-sweep across a long word, so the swell shows
 
 BOOT = """
 <script>

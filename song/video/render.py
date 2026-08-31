@@ -59,15 +59,15 @@ def _filter_path(path: Path) -> str:
     return text
 
 
-def _chain(ass: Path, width: int, height: int, offset: float) -> str:
-    """The video filter chain: scale, burn, and hand back yuv420p.
+def _chain(ass: Path, offset: float) -> str:
+    """The video filter chain: burn the subtitles, hand back yuv420p.
 
     `offset` is non-zero only for a preview. Rather than writing a second,
     shifted .ass for the window - which would mean the thing under test is not
     the thing that ships - the frames are given their real timestamps on the
     track, burned, and then pulled back to zero for the muxer.
     """
-    steps = [f"scale={width}:{height}:flags=bicubic"]
+    steps = []
     if offset:
         steps.append(f"setpts=PTS+{offset}/TB")
     steps.append(f"ass=f='{_filter_path(ass)}'")
@@ -134,11 +134,8 @@ def run(
     # loses only the part that opens for the voice.
     stem = Path(project.stem_path or project.audio_path)
     data = analysis_module.build(audio, str(stem if stem.exists() else audio), workdir)
-    scene = Scene(project, data, grid, width=width // 2, height=height // 2)
-    progress(
-        f"      {len(scene.section_at)} sections, "
-        f"{scene.w}x{scene.h} upscaled to {width}x{height}"
-    )
+    scene = Scene(project, data, grid, width=width, height=height)
+    progress(f"      {len(scene.section_at)} sections at {scene.w}x{scene.h}")
 
     span = f"{start:.0f}s..{end:.0f}s" if preview else "whole track"
     progress(f"[4/4] rendering {frames} frames at {fps} fps ({span})")
@@ -154,7 +151,7 @@ def run(
         command += ["-ss", f"{start:.3f}", "-t", f"{end - start:.3f}"]
     command += [
         "-i", str(audio),
-        "-filter_complex", f"[0:v]{_chain(ass, width, height, start if preview else 0.0)}[v]",
+        "-filter_complex", f"[0:v]{_chain(ass, start if preview else 0.0)}[v]",
         "-map", "[v]", "-map", "1:a",
         "-c:v", "libx264", "-preset", "medium", "-crf", CRF,
         "-profile:v", "high", "-movflags", "+faststart",

@@ -385,10 +385,10 @@ footer a:hover{color:var(--text)}
     <p class="eyebrow">The payoff</p>
     <h2>One command turns it into a video.</h2>
     <p class="say">
-      The words fill in time with the vocal, off the timings you just checked.
-      Behind them, <b>the picture is generated from the same track</b> — the
-      section picks the colour, the beat drives the light, the mix scrolls
-      along the bottom. There is nothing to supply.
+      Each word fills, swells and warms on the beat it is sung on, off the
+      timings you just checked. Behind them, <b>the picture is generated from
+      the same track</b> — the section picks the colour, the beat drives the
+      light, the mix scrolls along the bottom. There is nothing to supply.
     </p>
   </div>
   <div class="wide">
@@ -440,12 +440,14 @@ footer a:hover{color:var(--text)}
         <div class="scroll"><table>
           <thead><tr><th>On screen</th><th>Driven by</th></tr></thead>
           <tbody>
-            <tr><td>the wash's hue</td><td>the section name in your lyrics file — every chorus is the same colour</td></tr>
-            <tr><td>the light's kick</td><td>the tracked beat, harder on the first of the bar</td></tr>
-            <tr><td>how wide it opens</td><td>the mix envelope</td></tr>
-            <tr><td>how bright it burns</td><td>the isolated vocal envelope</td></tr>
+            <tr><td>the colour</td><td>the section name in your lyrics file — every chorus is the same colour</td></tr>
+            <tr><td>three pools of light</td><td>hues spread around the section's, drifting on periods that share no multiple</td></tr>
+            <tr><td>their kick</td><td>the tracked beat, harder on the first of the bar</td></tr>
+            <tr><td>how wide they open</td><td>the mix envelope</td></tr>
+            <tr><td>how bright they burn</td><td>the isolated vocal envelope</td></tr>
             <tr><td>the ribbon</td><td>±6 seconds of the mix waveform, scrolling</td></tr>
             <tr><td>the sweep</td><td>the word timings in <code>project.json</code></td></tr>
+            <tr><td>the word swelling</td><td>the same timings, as a per-word transform</td></tr>
           </tbody>
         </table></div>
         <p>Beats are tracked on the <b>mix</b>, not the isolated vocal — the stem
@@ -453,13 +455,35 @@ footer a:hover{color:var(--text)}
         wants. And they are the beats librosa found, not a grid synthesized from
         the tempo: a grid is right for eight bars and then slides, and by the last
         chorus of a 4:46 song it is visibly ahead of the snare.</p>
-        <h3>Half the pixels, all of the text</h3>
-        <p>The generated frames are 640×360 and ffmpeg scales them to 1280×720
-        before libass touches them. Every layer down there is a smooth field, so
-        the upscale costs nothing you can see, while rendering a quarter of the
-        pixels costs a quarter of the time — and the words, burned after the
-        scale, are still drawn at output resolution.</p>
-        <p>About four minutes for a 4:46 track at 720p on an M4 CPU.
+        <h3>The word being sung</h3>
+        <p>It grows 14% and its halo warms, on one pair of <code>\t</code>
+        transforms per word. Every word's override block opens with
+        <code>\r</code>, because an override applies to everything after it and
+        a transform that has not started does not cancel one that has — without
+        the reset, <b>the whole line inflates with the first word</b>. That
+        looked correct until a frame was pulled at the moment the first word was
+        up, which is the argument for checking a render by looking at it.</p>
+        <p>Short words grow proportionally less. At full size on a 90 ms
+        syllable a swell is a flicker rather than an emphasis, and a fast run
+        strobes.</p>
+        <p>The border is blurred and there is no drop shadow. A hard black
+        stroke with an offset shadow under it is the look of a 2005 fansub: it
+        puts a stair-stepped edge on every glyph, which is most of what reads as
+        aliasing, and it fights the soft picture instead of sitting in it.</p>
+        <h3>Why it is drawn at full size</h3>
+        <p>The first version generated 640×360 and let ffmpeg scale it up, on
+        the theory that every layer is a smooth field. The ribbon is not — it
+        samples a 120 Hz envelope, and at half width each column stood for two
+        and a bit buckets, which is the textbook condition for aliasing. It
+        crawled.</p>
+        <p>Full size fixed that and cost nothing, because a pool of light is a
+        Gaussian and a Gaussian is separable: exp(−(dx²+dy²)) is exp(−dx²) times
+        exp(−dy²). So one costs two exponentials — over a row and over a column —
+        and an outer product, rather than an exponential at every pixel. Three
+        of them at 1280×720 take <b>13 ms a frame</b>, half what one
+        squared-distance blob cost at a quarter of the pixels. The encoder is
+        the slow half now.</p>
+        <p>About three minutes for a 4:46 track at 720p on an M4 CPU.
         <code>--preview 1:04</code> renders 25 seconds instead, so trying
         something is not five minutes a go.</p>
       </div>

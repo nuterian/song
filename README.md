@@ -92,11 +92,12 @@ python -m song video workdir/my-track --preview 1:04 # 25 seconds, to see it
 
 The lyrics sweep word by word — ASS `\kf` karaoke drawn by libass, off the same
 timings the UI edits, so there is no second renderer to keep in agreement with
-the first. Underneath, the picture is generated from the track: the wash takes
-its hue from the section you are in, keyed on the section's *name*, so every
-chorus is the same colour; a bloom kicks on each tracked beat and opens with the
-vocal envelope; the mix waveform scrolls along the bottom. Nothing to supply, no
-stock footage, no still image.
+the first. Each word swells and its halo warms on the beat it is sung on.
+Underneath, the picture is generated from the track: colour comes from the
+section you are in, keyed on its *name*, so every chorus looks the same; three
+pools of light drift, open with the mix and kick on the tracked beat; the mix
+waveform scrolls along the bottom. Nothing to supply, no stock footage, no still
+image.
 
 ![A frame of the karaoke video: a lyric line half-filled by the karaoke sweep over a generated wash, with the mix waveform scrolling along the bottom](docs/img/video-still.jpg)
 
@@ -139,7 +140,7 @@ Bring your own audio. `examples/lyrics.txt` is the full sample file.
 
 ## Notes
 
-Roughly 5 minutes end-to-end for a 5-minute track on an M4 CPU, and about 4 more
+Roughly 5 minutes end-to-end for a 5-minute track on an M4 CPU, and about 3 more
 to render the video. Models download once (~3 GB) to the usual torch/HF caches.
 Demucs on Apple MPS is broken under torch 2.5 and Whisper hits unimplemented
 sparse ops there, so it is CPU throughout.
@@ -150,7 +151,7 @@ sparse ops there, so it is CPU throughout.
 python -m unittest discover -s tests
 ```
 
-98 tests over the logic that carries the claims — lyrics parsing, the
+104 tests over the logic that carries the claims — lyrics parsing, the
 word-timing invariants, word-to-line mapping, the export formats, the
 missing-line thresholds and the karaoke arithmetic — plus a guard that those
 modules stay importable with no third-party package present at all, which is

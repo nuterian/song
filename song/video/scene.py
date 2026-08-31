@@ -7,22 +7,26 @@ and cannot drift out of agreement with them.
 
 Four layers, back to front:
 
-    wash     a two-tone vertical gradient, hue chosen per section
-    bloom    a soft radial glow that kicks on every beat and opens with the voice
+    wash     a near-black vertical gradient, tinted by the section
+    lobes    three drifting pools of light, hues spread around the section's,
+             breathing with the mix and kicking on the beat
     ribbon   a scrolling +/- 6 s window of the mix waveform along the bottom
     grain    a few thousandths of noise, which is what stops the gradient banding
 
 The lyrics are a fifth layer and libass draws them; see karaoke.py.
 
-Frames are generated at a fraction of the output size and scaled up by ffmpeg.
-Every layer here is a smooth field, so upscaling costs nothing visible, while
-rendering a quarter of the pixels costs a quarter of the time - and the text,
-burned after the scale, is still drawn at full resolution.
+Generated at output resolution. Half size and let ffmpeg scale was the first
+try, on the theory that every layer is a smooth field - but the ribbon is not:
+it samples a 120 Hz envelope, and at half width each column had to stand for
+two and a bit buckets, which is exactly the condition for aliasing. It crawled.
+Full size costs about 20 ms a frame against an encoder that wants 30, so it is
+free in wall time, and it fixed the crawl.
 """
 
 from __future__ import annotations
 
 import colorsys
+import math
 import re
 import zlib
 
@@ -30,7 +34,8 @@ import numpy as np
 
 from ..project import Project
 
-WIDTH, HEIGHT = 640, 360
+WIDTH, HEIGHT = 1280, 720
+TAU = 2.0 * math.pi
 
 # Hue per section, keyed on the name rather than the index so every chorus is
 # the same colour and the picture repeats when the song does. "Chorus" and
@@ -48,10 +53,23 @@ HUES = {
     "outro": 196,
 }
 
+# Three pools of light rather than one. A single radial glow centred in the
+# frame is a flat blob however it is animated - it reads as a gradient someone
+# reached for, not as a picture. Spread across the frame at different sizes,
+# hues and drift periods, they overlap into something with depth, and each one
+# can answer to a different part of the track.
+#
+#   hue offset, saturation, value, half-width, half-height, x drift, y drift
+LOBES = (
+    (  0.0, 0.66, 0.50, 0.40, 0.30, (0.041, 0.017), (0.029, 0.011)),
+    ( 44.0, 0.76, 0.34, 0.26, 0.20, (0.023, 0.053), (0.037, 0.019)),
+    (-38.0, 0.70, 0.26, 0.62, 0.13, (0.013, 0.031), (0.007, 0.023)),
+)
+
 RIBBON_SECONDS = 6.0     # half-width of the scrolling waveform window
 RIBBON_BASE = 0.885      # its centre line, in fractions of frame height
-RIBBON_HEIGHT = 0.085    # peak deflection either side
-GRAIN = 0.008            # dither amplitude
+RIBBON_HEIGHT = 0.080    # peak deflection either side
+GRAIN = 0.010            # dither amplitude
 GRAIN_FIELDS = 8         # cycled so the noise moves instead of sitting still
 
 
@@ -71,17 +89,31 @@ def _rgb(hue: float, sat: float, val: float) -> np.ndarray:
     return np.array([r, g, b], dtype=np.float32)
 
 
-def _palette(hue: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """One section's three colours: the floor, the lit top, and what the bloom adds.
+def _palette(hue: float) -> np.ndarray:
+    """A section's colours: floor, lit top, then one row per lobe.
 
     All of them dark. The words are white and they have to win, so the picture
-    is lit from behind rather than in front of them.
+    is lit from behind them rather than in front.
     """
-    return (
-        _rgb(hue + 8, 0.78, 0.045),
-        _rgb(hue - 14, 0.60, 0.24),
-        _rgb(hue - 30, 0.34, 1.00),
-    )
+    rows = [_rgb(hue + 10, 0.85, 0.035), _rgb(hue - 10, 0.70, 0.115)]
+    rows += [_rgb(hue + off, sat, val) for off, sat, val, *_ in LOBES]
+    return np.stack(rows)
+
+
+def _running_max(values: np.ndarray, width: int) -> np.ndarray:
+    """Peak-hold over `width` samples.
+
+    The ribbon resamples a 120 Hz envelope onto one column per pixel. Wherever a
+    column has to stand for more than one bucket, picking one and dropping the
+    rest means a transient lands in a column on one frame and between two
+    columns on the next, and the whole waveform crawls sideways. Holding the
+    peak over what each column covers means nothing can fall between them.
+    """
+    if width <= 1 or values.size < width:
+        return values
+    pad = width // 2
+    padded = np.pad(values, (pad, width - 1 - pad), mode="edge")
+    return np.lib.stride_tricks.sliding_window_view(padded, width).max(axis=1)
 
 
 def _envelope(peaks: list[float], rate: int, seconds: float) -> np.ndarray:
@@ -180,15 +212,21 @@ class Scene:
         xs = np.linspace(0.0, 1.0, w, dtype=np.float32)
         ys = np.linspace(0.0, 1.0, h, dtype=np.float32)
 
-        self.ax = ((xs - 0.5) * aspect)[None, :]          # (1, w)
-        self.ay = (ys - 0.5)[:, None]                     # (h, 1)
+        # Kept one-dimensional. A lobe is a Gaussian, and a Gaussian is
+        # separable: exp(-(dx^2 + dy^2)) is exp(-dx^2) times exp(-dy^2). So a
+        # pool of light costs two exponentials over w and h values and one
+        # outer product, instead of an exponential over every pixel - which is
+        # what makes three of them affordable where one squared-distance field
+        # was already the most expensive thing in the frame.
+        self.ax = (xs - 0.5) * aspect                     # (w,)
+        self.ay = ys - 0.5                                # (h,)
         # Lit toward the top, dark at the floor where the ribbon runs. Kept as
         # a column and broadcast at use: the gradient is constant across a row,
         # so storing it width times over would be h*w floats of the same number.
         self.wash = ((1.0 - ys) ** 1.5)[:, None].astype(np.float32)
 
-        radius = self.ax ** 2 + self.ay ** 2
-        self.vignette = (1.0 - 0.62 * np.clip(radius / 0.62, 0, 1) ** 1.25).astype(
+        radius = self.ax[None, :] ** 2 + self.ay[:, None] ** 2
+        self.vignette = (1.0 - 0.58 * np.clip(radius / 0.66, 0, 1) ** 1.25).astype(
             np.float32
         )
 
@@ -200,6 +238,19 @@ class Scene:
         self.rib_offsets = np.linspace(
             -RIBBON_SECONDS, RIBBON_SECONDS, w, dtype=np.float32
         )
+        # Peak-held to whatever one column covers, then read back with linear
+        # interpolation: held so no transient can hide between two columns,
+        # interpolated so the shape slides smoothly instead of stepping a column
+        # at a time as the window scrolls.
+        per_column = self.rate * 2.0 * RIBBON_SECONDS / w
+        self.rib_track = _running_max(self.raw_mix, int(round(per_column)))
+        self.rib_index = np.arange(self.rib_track.size, dtype=np.float32)
+
+        # Reused every frame. At output resolution these are 2.6 MB apiece and
+        # allocating them 8574 times is pure garbage-collector work.
+        self._img = np.empty((h, w, 3), dtype=np.float32)
+        self._lobe = np.empty((h, w), dtype=np.float32)
+        self._tint = np.empty((h, w), dtype=np.float32)
 
         self._grain = 0
         rng = np.random.default_rng(0xB3A7)
@@ -223,8 +274,8 @@ class Scene:
         phase = (t - float(self.beat_times[i])) / gap
         return float(np.exp(-3.4 * phase)) * float(self.beat_weight[i])
 
-    def _colours(self, t: float):
-        """Section colours at time t, crossfaded across the boundary."""
+    def _colours(self, t: float) -> np.ndarray:
+        """The section's colour rows at time t, crossfaded across the boundary."""
         i = 0
         for k, at in enumerate(self.section_at):
             if t >= at - 0.6:
@@ -236,49 +287,64 @@ class Scene:
         # smoothstep: a linear crossfade shows its two corners.
         mix = mix * mix * (3.0 - 2.0 * mix)
         previous, current = self.section_colour[i - 1], self.section_colour[i]
-        return tuple(a + (b - a) * mix for a, b in zip(previous, current))
+        return previous + (current - previous) * mix
 
     def _ribbon(self, t: float) -> np.ndarray:
         """Antialiased mask of the scrolling mix waveform. (h, w) in 0..1."""
-        idx = np.clip(
-            ((t + self.rib_offsets) * self.rate).astype(np.int32),
-            0,
-            self.raw_mix.size - 1,
-        )
-        heights = self.raw_mix[idx] * RIBBON_HEIGHT
+        seconds = t + self.rib_offsets
+        heights = np.interp(
+            seconds * self.rate, self.rib_index, self.rib_track
+        ).astype(np.float32) * RIBBON_HEIGHT
         # Nothing sampled beyond the ends of the track: a ribbon that keeps
-        # drawing the last frame of audio for six seconds reads as frozen.
-        live = (t + self.rib_offsets >= 0) & (
-            t + self.rib_offsets <= self.raw_mix.size / self.rate
-        )
-        heights = np.where(live, heights, 0.0).astype(np.float32)[None, :]
+        # drawing the last six seconds of audio reads as frozen, and np.interp
+        # holds its end values rather than running out.
+        live = (seconds >= 0.0) & (seconds <= self.rib_track.size / self.rate)
+        heights = np.where(live, heights, 0.0)[None, :]
         distance = np.abs(self.rib_y - RIBBON_BASE)
-        return np.clip((heights - distance) * (self.h * 0.9), 0.0, 1.0)
+        # Scaled by frame height, so the edge is one pixel of ramp whatever the
+        # output size - the whole point of an antialiased edge is that it is a
+        # pixel wide, not a fixed fraction of the picture.
+        return np.clip((heights - distance) * self.h, 0.0, 1.0)
 
     # ------------------------------------------------------------- the frame
 
     def frame(self, t: float) -> np.ndarray:
-        deep, mid, glow = self._colours(t)
+        palette = self._colours(t)
+        deep, mid, lobes = palette[0], palette[1], palette[2:]
         voice = self._at(self.voice, t)
         energy = self._at(self.mix, t)
         pulse = self._pulse(t)
 
-        column = deep[None, None, :] + (mid - deep)[None, None, :] * self.wash[:, :, None]
-        img = np.broadcast_to(column, (self.h, self.w, 3)).copy()
+        img, field, tint = self._img, self._lobe, self._tint
+        # The floor, lifted toward the top. Written as a column and broadcast:
+        # the gradient is constant across a row.
+        img[:] = deep + (mid - deep) * self.wash[:, :, None]
 
-        # The bloom drifts on two periods that do not divide into each other, so
-        # it never visibly loops back to where it started.
-        cx = 0.16 * np.sin(t * 0.21) + 0.05 * np.sin(t * 0.53)
-        cy = -0.04 + 0.10 * np.sin(t * 0.13 + 1.2)
-        spread = 0.19 * (1.0 + 0.55 * energy) * (1.0 + 0.30 * pulse)
-        falloff = ((self.ax - cx) ** 2 + (self.ay - cy) ** 2) / (spread + 1e-4)
-        strength = 0.10 + 0.34 * voice + 0.30 * pulse * (0.4 + 0.6 * energy)
-        img += glow[None, None, :] * (np.exp(-falloff) * strength)[:, :, None]
+        # Each lobe drifts on two periods that share no common multiple, so the
+        # field never visibly returns to an arrangement you have already seen.
+        # Sizes answer to the mix and the beat; brightness to the voice, which
+        # is why the picture opens where the words are.
+        breathe = 1.0 + 0.22 * energy + 0.30 * pulse
+        light = 0.50 + 0.26 * voice + 0.30 * pulse * (0.4 + 0.6 * energy)
+        for (_, _, _, rx, ry, drift_x, drift_y), colour in zip(LOBES, lobes):
+            cx = 0.30 * math.sin(t * drift_x[0] * TAU) + 0.13 * math.sin(t * drift_x[1] * TAU)
+            cy = 0.20 * math.sin(t * drift_y[0] * TAU + 1.1) + 0.09 * math.sin(t * drift_y[1] * TAU)
+            ex = np.exp(-(((self.ax - cx) / (rx * breathe)) ** 2))
+            ey = np.exp(-(((self.ay - cy) / (ry * breathe)) ** 2))
+            np.multiply(ey[:, None], ex[None, :], out=field)
+            for channel in range(3):
+                np.multiply(field, colour[channel] * light, out=tint)
+                img[:, :, channel] += tint
 
-        ribbon = self._ribbon(t) * (0.34 + 0.66 * self.rib_x)
-        img += (mid * 1.6 + 0.22)[None, None, :] * ribbon[:, :, None]
+        ribbon = self._ribbon(t)
+        ribbon *= 0.34 + 0.66 * self.rib_x
+        for channel in range(3):
+            np.multiply(ribbon, mid[channel] * 3.4 + 0.30, out=tint)
+            img[:, :, channel] += tint
 
         img *= self.vignette[:, :, None]
         self._grain = (self._grain + 1) % GRAIN_FIELDS
         img += self.grain[self._grain][:, :, None]
-        return (np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8)
+        np.clip(img, 0.0, 1.0, out=img)
+        img *= 255.0
+        return img.astype(np.uint8)

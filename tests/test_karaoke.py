@@ -7,6 +7,7 @@ land on the word boundaries the project already agreed on, and that they still
 do after a hundred words of rounding.
 """
 
+import re
 import unittest
 
 from song.parse_lyrics import Section
@@ -35,13 +36,13 @@ def project(*lines, duration=300.0):
 
 
 def durations(event: str) -> list[tuple[str, int]]:
-    """Every karaoke tag in a dialogue line, as (kind, centiseconds)."""
-    out = []
-    for chunk in event.split("{")[1:]:
-        tag = chunk.split("}")[0]
-        kind = "kf" if tag.startswith("\\kf") else "k"
-        out.append((kind, int(tag[3:] if kind == "kf" else tag[2:])))
-    return out
+    """Every karaoke tag in a dialogue line, as (kind, centiseconds).
+
+    Matched anywhere in an override block, because a word's block also carries
+    the reset, the blur and the swell, and the order of those is not the point.
+    """
+    return [("kf" if sweep else "k", int(value))
+            for sweep, value in re.findall(r"\\k(f?)(\d+)", event)]
 
 
 def events(text: str) -> list[str]:
@@ -173,6 +174,52 @@ class WhatIsOnScreen(unittest.TestCase):
         out = self.sung("one two three", words)
         self.assertIn("}a", out)
         self.assertNotIn("three", out)
+
+
+class TheWordBeingSung(unittest.TestCase):
+    """It swells, and only it does."""
+
+    def swells(self, event):
+        """The growing half of each word's pair; the other half settles back."""
+        return [(int(a), int(b), float(c))
+                for a, b, c in re.findall(r"\\t\((\d+),(\d+),\\fscx([\d.]+)", event)
+                if float(c) > 100.0]
+
+    def test_each_word_carries_its_own_swell(self):
+        ln = line(0, "one two three", 10.0, 13.0)
+        self.assertEqual(len(self.swells(karaoke.karaoke_text(ln, 1000))), 3)
+
+    def test_every_word_resets_first(self):
+        # Without \r the swell on word one is still in force when word two is
+        # drawn and the whole line inflates. This is the regression.
+        ln = line(0, "one two three", 10.0, 13.0)
+        text = karaoke.karaoke_text(ln, 1000)
+        self.assertEqual(text.count("\\r"), 3)
+        for chunk in text.split("{")[1:]:
+            if "\\kf" in chunk:
+                self.assertTrue(chunk.startswith("\\r"), chunk)
+
+    def test_the_swell_peaks_while_the_word_is_being_sung(self):
+        ln = line(0, "alpha bravo", 10.0, 12.0)
+        rise, peak, _ = self.swells(karaoke.karaoke_text(ln, karaoke.centis(10.0)))[0]
+        self.assertLessEqual(rise, 0)
+        self.assertLess(peak, 1000)          # the word runs 0..1000 ms
+
+    def test_a_short_word_swells_less_so_a_fast_run_does_not_strobe(self):
+        long_word = self.swells(karaoke.swell(0, 40))[0][2]      # a 400 ms word
+        short_word = self.swells(karaoke.swell(0, 8))[0][2]      # an 80 ms one
+        self.assertGreater(long_word, short_word)
+        self.assertEqual(long_word, 100 + karaoke.GROW)
+
+    def test_a_word_too_short_to_show_a_swell_gets_no_tags_for_one(self):
+        self.assertEqual(karaoke.swell(0, 1), "")
+
+    def test_the_blur_survives_the_reset_on_every_word(self):
+        # \r drops it, so each block has to say it again or only the first word
+        # keeps its halo.
+        ln = line(0, "one two three", 10.0, 13.0)
+        text = karaoke.karaoke_text(ln, 1000)
+        self.assertEqual(text.count(f"\\r\\blur{karaoke.BLUR}"), 3)
 
 
 class Windows(unittest.TestCase):
