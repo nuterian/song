@@ -46,6 +46,7 @@ import zlib
 import numpy as np
 
 from ..project import Project
+from .karaoke import FONT_SIZE, MARGIN_L, PLAY_H, PLAY_W, SLOT_NOW
 
 WIDTH, HEIGHT = 1280, 720
 TAU = 2.0 * math.pi
@@ -123,14 +124,26 @@ SHIVER_RATE = 2.6
 HUE_LIFT = 14.0
 VALUE_LIFT = 1.30
 
-# One line, low and to the right, opposite the words. It has no ends: the stroke
-# fades out into the picture well before it would reach an edge, so it reads as
-# an instrument sitting in the frame rather than as a rule drawn across it.
-TRACE_X = 0.744          # its centre, in fractions of frame width
-TRACE_BASE = 0.866       # its rest height, in fractions of frame height
-TRACE_REACH = 0.246      # half-length of the visible stroke
-TRACE_FADE = 0.072       # how much of each end is spent fading out
-TRACE_SPAN = 0.200       # half-width of the part that actually zigzags
+# One line, opposite the words and level with them. Both numbers below are
+# derived from where the text is rather than typed to match it: the line rests
+# on the optical centre of the lyric being sung, and its far end stops the same
+# distance from the right edge as the words start from the left. Type them as
+# constants and the two halves of the composition drift apart the first time
+# either moves.
+#
+# It has no ends: the stroke fades out into the picture well before it reaches
+# that stop, so it reads as an instrument sitting in the frame rather than as a
+# rule drawn across it.
+TRACE_BASE = (PLAY_H - SLOT_NOW - FONT_SIZE * 0.50) / PLAY_H
+TRACE_REACH = 0.158      # half-length of the stroke
+TRACE_FADE = 0.052       # how much of each end is spent fading out
+# The stroke is already invisible some way before its geometric end, so the
+# geometry has to run past where the ink should stop or the right margin comes
+# out wider than the left. Measured off a render rather than reasoned about:
+# 18 px of a 67 px fade, which is about a quarter of it.
+TRACE_TAIL = 0.25 * TRACE_FADE
+TRACE_X = 1.0 - MARGIN_L / PLAY_W - TRACE_REACH + TRACE_TAIL
+TRACE_SPAN = 0.122       # half-width of the part that actually zigzags
 TRACE_EDGE = 0.16        # the fraction of each end that ramps into the flat line
 TRACE_GAMMA = 0.90       # opens the quiet detail a little, without flattening loud
 
@@ -142,7 +155,7 @@ TRACE_GAMMA = 0.90       # opens the quiet detail a little, without flattening l
 # as a second shape. The mix is still what the line draws.
 #
 #   signal, teeth, seconds per tooth, deflection, stroke px
-TRACES = (("mix", 76, 1.0 / 40, 0.052, 1.35),)
+TRACES = (("mix", 52, 1.0 / 40, 0.038, 1.3),)
 TRACE_AIR = 0.30         # how much of the deflection the air band contributes
 TRACE_BASS_WEIGHT = 1.5  # how much heavier the stroke gets on a full kick
 
