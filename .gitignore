@@ -11,15 +11,15 @@ __pycache__/
 # Recreate with:  python -m lyricsync <audio> <lyrics>
 workdir/
 
-# Source audio: bring your own track. data/lyrics.txt is kept, so the sample
-# lyrics (and the section-header format) are here to read.
-data/*.wav
-data/*.mp3
-data/*.m4a
-data/*.flac
-data/*.aif
-data/*.aiff
-data/*.ogg
+# Source audio: bring your own track. examples/lyrics.txt is kept, so the
+# sample lyrics (and the section-header format) are here to read.
+examples/*.wav
+examples/*.mp3
+examples/*.m4a
+examples/*.flac
+examples/*.aif
+examples/*.aiff
+examples/*.ogg
 
 # Working notes. NEXT-*.md are plans for work in flight; once it ships the plan
 # is wrong on purpose (it describes a "before" that no longer exists) and the

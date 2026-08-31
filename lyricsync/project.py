@@ -75,6 +75,11 @@ class TimedLine:
         """
         if not self.words or self.end <= self.start:
             return
+        # Word 0's start *is* the line start - the UI has always enforced this
+        # and every export assumes it, but this side only clamped it upwards,
+        # so a project could round-trip with the word LRC starting later than
+        # the line LRC and the UI quietly disagreeing with the file on disk.
+        self.words[0].start = self.start
         previous = self.start
         for w in self.words:
             w.start = min(max(w.start, previous), self.end)

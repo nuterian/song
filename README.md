@@ -1,5 +1,7 @@
 # lyricsync
 
+[![tests](https://github.com/nuterian/song/actions/workflows/tests.yml/badge.svg)](https://github.com/nuterian/song/actions/workflows/tests.yml)
+
 Turn an audio track plus a plain-text lyrics file into accurate, time-synchronized
 lyrics — `.lrc`, word-level `.lrc`, `.srt`, `.vtt` — using only free, locally-run
 open-source models. No API keys, no uploads, no per-track cost.
@@ -88,15 +90,38 @@ Everything lands in `workdir/<track-slug>/`: `lyrics.lrc`, `lyrics.word.lrc`
 `project.json` — word timings, per-line scores and the scorecard, the richest
 source for a video generator.
 
-Lyrics input is plain text: one line per lyric line, blank lines between sections,
-and a `Verse 1 (...)` or `[Chorus]` style header naming a section. Bring your own
-audio; `data/lyrics.txt` shows the format.
+Lyrics input is plain text — one line per lyric line, a blank line between
+sections, and a header naming each one. `[Verse 1]`, `Chorus:`, `(Bridge)` and
+`Verse 1 (8 bars, pulsing bass)` all parse; the note in parentheses is kept as
+structure and never aligned as a lyric.
+
+```
+Verse 1 (8 bars, pulsing bass)
+Light breaks through the skyline haze,
+Feet find rhythm in endless maze,
+
+[Chorus]
+You're my gravity in motion,
+```
+
+Bring your own audio. `examples/lyrics.txt` is the full sample file.
 
 ## Notes
 
 Roughly 5 minutes end-to-end for a 5-minute track on an M4 CPU. Models download
 once (~3 GB) to the usual torch/HF caches. Demucs on Apple MPS is broken under
 torch 2.5 and Whisper hits unimplemented sparse ops there, so it is CPU throughout.
+
+## Tests
+
+```bash
+python -m unittest discover -s tests
+```
+
+66 tests over the logic that carries the claims — lyrics parsing, the
+word-timing invariants, word-to-line mapping, the export formats, and the
+missing-line thresholds. All pure stdlib, so they run in under a second with
+nothing installed.
 
 ## License
 
