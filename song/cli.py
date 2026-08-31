@@ -13,6 +13,28 @@ from .project import Project, slugify
 from .align.score import format_report
 
 
+# Long enough to hear a line land and see the picture move with the bar, short
+# enough that iterating on the look is not five minutes a try.
+PREVIEW_SECONDS = 25.0
+
+
+def _clock(text: str) -> float:
+    """`95`, `1:35` or `1:35.5` -> seconds."""
+    seconds = 0.0
+    for part in text.strip().split(":"):
+        seconds = seconds * 60 + float(part)
+    return seconds
+
+
+def _preview_window(text: str) -> tuple[float, float]:
+    """`--preview 1:04` is 25 s from 1:04; `--preview 1:04-1:34` is that range."""
+    if "-" in text:
+        head, tail = text.split("-", 1)
+        return _clock(head), _clock(tail)
+    at = _clock(text)
+    return at, at + PREVIEW_SECONDS
+
+
 def _workdir_for(audio: Path, explicit: str | None) -> Path:
     return Path(explicit) if explicit else Path("workdir") / slugify(audio.stem)
 
@@ -138,6 +160,17 @@ def cmd_export(args) -> int:
     return 0
 
 
+def cmd_video(args) -> int:
+    from .video import run as render_video
+
+    render_video(
+        Path(args.workdir),
+        preview=_preview_window(args.preview) if args.preview else None,
+        height=args.height,
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="song",
@@ -193,6 +226,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_audit.add_argument("--quiet", action="store_true")
     p_audit.set_defaults(func=cmd_audit)
 
+    p_video = sub.add_parser(
+        "video", help="render a karaoke video: lyrics burned over generated visuals"
+    )
+    p_video.add_argument("workdir")
+    p_video.add_argument(
+        "--preview", metavar="AT",
+        help="render a short window instead of the whole track: 1:04, or 1:04-1:34",
+    )
+    p_video.add_argument(
+        "--height", type=int, default=720, help="output height in pixels (default 720)"
+    )
+    p_video.set_defaults(func=cmd_video)
+
     p_export = sub.add_parser("export", help="rewrite lrc/srt/vtt from project.json")
     p_export.add_argument("workdir")
     p_export.set_defaults(func=cmd_export)
@@ -214,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         "score",
         "export",
         "audit",
+        "video",
     }:
         argv.insert(0, "ui")
 
