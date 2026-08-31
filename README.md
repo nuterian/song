@@ -7,7 +7,7 @@ open-source models. No API keys, no uploads, no per-track cost.
 Built for AI-generated songs, where the lyrics are known exactly but the timing is
 not, and the end goal is burning synchronized captions into a video.
 
-**[How it works, in full →](https://nuterian.github.io/song/)**
+**[How it works, in full →](https://jugalm.com/song/)**
 
 ![The lyricsync timeline showing a whole track](docs/img/timeline-track.png)
 
