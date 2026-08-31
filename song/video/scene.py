@@ -99,8 +99,24 @@ PAGE_LIGHT = 0.34               # how far toward white it lifts
 # A fast, tiny wobble on top of the slow drift, its size set by how loud the
 # track is right now. A couple of pixels at most: not a movement you watch, a
 # movement you would only notice if it stopped.
-SHIVER = 0.011
-SHIVER_RATE = 9.7
+# How long a beat takes to arrive. Short enough to still land on the beat, long
+# enough that four frames are drawn on the way up.
+PULSE_ATTACK = 0.11
+
+# How much of a second the fields average over. This is not about calm: a field
+# covers most of the picture, and a large area swinging 12 of 255 in three
+# frames - which is what a kick does to a lightly smoothed envelope - is read as
+# flicker rather than as a beat, however smooth the curve driving it is. The
+# lines keep their own unsmoothed copies; a thin stroke can show what a field
+# cannot.
+FIELD_SMOOTH = 0.30
+
+SHIVER = 0.013
+# Well under half the frame rate. At 9.7 Hz this was three samples a cycle at
+# 30 fps, which is not a shimmer - it is aliasing, and it read as the whole
+# frame twitching. Anything driving a large area has to stay slow enough to be
+# drawn smoothly at the rate it is being drawn.
+SHIVER_RATE = 2.6
 
 # How far the loud palette is from the quiet one. Small on purpose: the point is
 # that the colour is never quite still, not that it changes.
@@ -118,25 +134,22 @@ TRACE_SPAN = 0.200       # half-width of the part that actually zigzags
 TRACE_EDGE = 0.16        # the fraction of each end that ramps into the flat line
 TRACE_GAMMA = 0.90       # opens the quiet detail a little, without flattening loud
 
-# Three lines, stacked rather than overlaid, because a peak envelope cannot tell
-# a kick from a hi-hat and the difference is most of what a song sounds like.
-# Air is fast and fine and sits on top; the mix is the one you read; bass is
-# slow and broad and sits underneath. On one shared baseline they were a tangle
-# - three zigzags of similar height through each other, legible as none of them.
+# One line. Three of them - bass, mix and air, stacked - showed the bands
+# honestly and looked like a readout: three objects where the picture wanted
+# one. So the bands are felt in the single line instead. Bass sets how heavy
+# the stroke is, so a kick lands as weight; air is added to the teeth as a fine
+# tremor, so cymbals and consonants arrive as texture on the shape rather than
+# as a second shape. The mix is still what the line draws.
 #
-# Teeth are spaced in time rather than in beats, so a faster passage puts more
-# of them in front of you. That is where the tempo is.
-#
-#   signal, teeth, seconds per tooth, offset from the baseline,
-#   deflection, stroke px, opacity
-TRACES = (
-    ("high", 104, 1.0 / 56, -0.055, 0.026, 0.9, 0.55),
-    ("mix",   76, 1.0 / 40,  0.000, 0.046, 1.4, 1.00),
-    ("low",   28, 1.0 / 13, +0.058, 0.040, 2.4, 0.46),
-)
+#   signal, teeth, seconds per tooth, deflection, stroke px
+TRACES = (("mix", 76, 1.0 / 40, 0.052, 1.35),)
+TRACE_AIR = 0.30         # how much of the deflection the air band contributes
+TRACE_BASS_WEIGHT = 1.5  # how much heavier the stroke gets on a full kick
 
-GRAIN = 0.010            # dither amplitude
-GRAIN_FIELDS = 8         # cycled so the noise moves instead of sitting still
+# One field, and it does not move. Cycling eight of them repeated every eight
+# frames, which is 3.75 Hz - squarely in the band the eye reads as flicker. A
+# still dither breaks the banding just as well and cannot beat against anything.
+GRAIN = 0.010
 
 
 def _hue(name: str) -> float:
@@ -229,12 +242,13 @@ class Scene:
         self.duration = float(project.duration)
 
         self.rate = int(analysis.get("rate", 120))
-        # Barely smoothed. Long windows made the picture answer a bar late,
-        # which reads as decoration running alongside the song rather than as
-        # something the song is doing. Everything these drive is shallow, so
-        # the responsiveness costs no calm.
-        self.mix = _envelope(analysis.get("mix_peaks", []), self.rate, 0.05)
-        self.voice = _envelope(analysis.get("vocal_peaks", []), self.rate, 0.045)
+        # Smoothed to about 8 Hz. Not for calm - for the frame rate: these drive
+        # the brightness and size of things that cover most of the picture, and
+        # anything faster than a third of 30 fps cannot be drawn smoothly at 30
+        # fps. It is drawn as a twitch instead. The lines below read their own
+        # unsmoothed copies, because a thin stroke can show detail this cannot.
+        self.mix = _envelope(analysis.get("mix_peaks", []), self.rate, FIELD_SMOOTH)
+        self.voice = _envelope(analysis.get("vocal_peaks", []), self.rate, FIELD_SMOOTH)
         # Everything anything here reads, by name. The lines read peaks rather
         # than envelopes - the fields want the average, the lines want what
         # actually happened - and each is peak-held to whatever one of its own
@@ -242,13 +256,14 @@ class Scene:
         peaks = _envelope(analysis.get("mix_peaks", []), self.rate, 0.0)
         self.signal = {"mix": self.mix, "voice": self.voice}
         self.detail = {}
-        for name, _, lag, *_ in TRACES:
-            raw = {"mix": peaks}.get(name)
-            if raw is None:
-                raw = self._band(beats, name)
-            self.signal.setdefault(name, _envelope(raw.tolist(), self.rate, 0.06))
+        for name, source, lag in (("mix", peaks, TRACES[0][2]),
+                                  ("air", self._band(beats, "high"), 1.0 / 60),
+                                  ("low", self._band(beats, "low"), 1.0 / 20)):
             self.detail[name] = _running_max(
-                raw, max(1, round(lag * self.rate))) ** TRACE_GAMMA
+                source, max(1, round(lag * self.rate))) ** TRACE_GAMMA
+        for name in ("low", "high"):
+            self.signal[name] = _envelope(
+                self._band(beats, name).tolist(), self.rate, FIELD_SMOOTH)
 
         self._load_beats(beats)
         self._load_sections(project)
@@ -341,10 +356,9 @@ class Scene:
         # seventh of the frame, and a stroke computed over the whole picture is
         # six sevenths wasted - which is what makes three of them affordable
         # where one was already the second most expensive thing in the frame.
-        top = min(off - height for *_, off, height, _, _ in TRACES)
-        bottom = max(off + height for *_, off, height, _, _ in TRACES)
-        top = int((TRACE_BASE + top) * h) - 3
-        floor = int((TRACE_BASE + bottom) * h) + 3
+        tallest = max(height for *_, height, _ in TRACES) * (1.0 + TRACE_AIR)
+        top = int((TRACE_BASE - tallest) * h) - 4
+        floor = int((TRACE_BASE + tallest) * h) + 4
         self.band = slice(max(0, top), min(h, floor))
         self.band_y = (ys[self.band] * h)[:, None].astype(np.float32)
         self.columns = xs * w
@@ -389,11 +403,8 @@ class Scene:
         self._tint = np.empty((h, w), dtype=np.float32)
         self._band_tint = np.empty((self.band.stop - self.band.start, w), np.float32)
 
-        self._grain = 0
         rng = np.random.default_rng(0xB3A7)
-        self.grain = (
-            rng.random((GRAIN_FIELDS, h, w), dtype=np.float32) - 0.5
-        ) * GRAIN
+        self.grain = (rng.random((h, w), dtype=np.float32) - 0.5) * GRAIN
 
     # ------------------------------------------------------------- sampling
 
@@ -402,14 +413,22 @@ class Scene:
         return float(track[min(max(i, 0), track.size - 1)])
 
     def _pulse(self, t: float) -> float:
-        """How recently a beat landed, 1 at the hit and decaying to ~0 by the next."""
+        """How recently a beat landed: up over the attack, then decaying away.
+
+        The attack is the point. Jumping straight to 1 on the beat is a step,
+        and a step twice a second is broadband - it puts energy at every
+        frequency including the ones 30 fps cannot draw, so it arrives as a
+        flicker rather than as a pulse. A raised cosine has zero slope at both
+        ends, so nothing anywhere in the rise is abrupt.
+        """
         i = int(np.searchsorted(self.beat_times, t, side="right")) - 1
         if i < 0:
             return 0.0
         i = min(i, self.beat_times.size - 1)
+        since = t - float(self.beat_times[i])
         gap = float(self.beat_gap[i]) or 0.5
-        phase = (t - float(self.beat_times[i])) / gap
-        return float(np.exp(-3.4 * phase)) * float(self.beat_weight[i])
+        attack = 0.5 - 0.5 * math.cos(math.pi * min(1.0, since / PULSE_ATTACK))
+        return attack * math.exp(-3.4 * since / gap) * float(self.beat_weight[i])
 
     def _colours(self, t: float) -> np.ndarray:
         """The section's colour rows at time t, crossfaded across the boundary."""
@@ -426,8 +445,7 @@ class Scene:
         previous, current = self.section_colour[i - 1], self.section_colour[i]
         return previous + (current - previous) * mix
 
-    def _trace(self, t: float, name: str, offset: float, height: float,
-               weight: float) -> np.ndarray:
+    def _trace(self, t: float, name: str, height: float, weight: float) -> np.ndarray:
         """One thin zigzag line, over the band rows only. (band, w) in 0..1.
 
         Drawn as a stroke rather than a filled shape, and fixed in place rather
@@ -436,10 +454,16 @@ class Scene:
         """
         at, shape, lag = self.teeth[name]
         track = self.detail[name]
-        teeth = np.interp((t + lag) * self.rate,
-                          self.env_index[:track.size], track).astype(np.float32)
+        when = (t + lag) * self.rate
+        teeth = np.interp(when, self.env_index[:track.size], track).astype(np.float32)
+        # The air band rides on the teeth rather than beside them: a tremor on
+        # the shape, not a second shape.
+        air = self.detail.get("air")
+        if air is not None:
+            teeth = teeth + TRACE_AIR * np.interp(
+                when, self.env_index[:air.size], air).astype(np.float32)
         path = np.interp(self.columns, at, teeth * shape * (height * self.h))
-        path = path.astype(np.float32) + (TRACE_BASE + offset) * self.h
+        path = path.astype(np.float32) + TRACE_BASE * self.h
 
         # A steep segment is longer than the column it crosses, so measuring the
         # distance to it vertically would draw it thinner. Dividing by the slope
@@ -478,7 +502,7 @@ class Scene:
         shiver = SHIVER * energy
         for (_, _, rx, ry, gain, drift_x, drift_y, name), colour in zip(LOBES, fields):
             level = self._at(self.signal[name], t)
-            breathe = 1.0 + 0.16 * level + 0.07 * pulse
+            breathe = 1.0 + 0.11 * level + 0.05 * pulse
             cx = 0.30 * math.sin(t * drift_x[0] * TAU) + 0.13 * math.sin(t * drift_x[1] * TAU)
             cy = 0.20 * math.sin(t * drift_y[0] * TAU + 1.1) + 0.09 * math.sin(t * drift_y[1] * TAU)
             cx += shiver * math.sin(t * SHIVER_RATE * TAU + rx * 40.0)
@@ -486,7 +510,7 @@ class Scene:
             ex = np.exp(-(((self.ax - cx) / (rx * breathe)) ** 2))
             ey = np.exp(-(((self.ay - cy) / (ry * breathe)) ** 2))
             np.multiply(ey[:, None], ex[None, :], out=field)
-            field *= gain * (0.42 + 0.58 * level)
+            field *= gain * (0.58 + 0.42 * level)
             # Toward the field's colour, never added to it: adding a saturated
             # colour to a nearly-white area darkens some channel of it, and the
             # dark patches drifting round the frame were the pools themselves.
@@ -506,19 +530,18 @@ class Scene:
         # on and adding a dark colour to a light one lightens it: the trace was
         # drawn correctly and invisibly for a while on that mistake.
         band = img[self.band]
-        for name, _, _, offset, height, weight, opacity in TRACES:
-            # Every line brightens on the beat, harder on the first of the bar.
-            # That is where the tempo is: the rate at which they flicker.
-            stroke = self._trace(t, name, offset, height, weight)
-            stroke *= opacity * (0.62 + 0.30 * self._at(self.signal[name], t)
-                                 + 0.24 * pulse)
+        for name, _, _, height, weight in TRACES:
+            # Bass is the weight of the stroke, so a kick lands as a heavier
+            # line rather than as a taller one.
+            bass = self._at(self.detail["low"], t)
+            stroke = self._trace(t, name, height, weight * (1.0 + TRACE_BASS_WEIGHT * bass))
+            stroke *= 0.66 + 0.34 * self._at(self.mix, t)
             for channel in range(3):
                 np.multiply(stroke, band[:, :, channel] - trace[channel],
                             out=self._band_tint)
                 band[:, :, channel] -= self._band_tint
 
-        self._grain = (self._grain + 1) % GRAIN_FIELDS
-        img += self.grain[self._grain][:, :, None]
+        img += self.grain[:, :, None]
         np.clip(img, 0.0, 1.0, out=img)
         img *= 255.0
         return img.astype(np.uint8)

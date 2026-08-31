@@ -388,8 +388,9 @@ footer a:hover{color:var(--text)}
       Three lines, bottom left: the one being sung, with the one before and the
       one after smaller and faded either side. Each word <b>grows, thickens and
       lights up</b> as it lands; when the line changes, the whole stack rises by
-      one. Opposite them, three zigzag lines — bass, mix and air. There is
-      nothing to supply.
+      one. Opposite them, one zigzag line, drawn from the mix and carrying the
+      bass in its weight and the air in its tremor. There is nothing to
+      supply.
     </p>
   </div>
   <div class="wide">
@@ -447,7 +448,7 @@ footer a:hover{color:var(--text)}
             <tr><td>how wide each opens</td><td>the mix, the vocal, the bass or the air, one each</td></tr>
             <tr><td>a small kick</td><td>the tracked beat, harder on the first of the bar</td></tr>
             <tr><td>a fast, tiny shiver</td><td>the mix again — a couple of pixels, sized by how loud it is now</td></tr>
-            <tr><td>the three lines</td><td>bass under 260 Hz, the mix, and air over 3.5 kHz</td></tr>
+            <tr><td>the line's shape</td><td>the mix peaks; its weight the bass, its tremor the air</td></tr>
             <tr><td>the sweep</td><td>the word timings in <code>project.json</code></td></tr>
             <tr><td>the word growing and lit</td><td>the same timings, as an eased per-word transform</td></tr>
           </tbody>
@@ -457,13 +458,16 @@ footer a:hover{color:var(--text)}
         wants. And they are the beats librosa found, not a grid synthesized from
         the tempo: a grid is right for eight bars and then slides, and by the last
         chorus of a 4:46 song it is visibly ahead of the snare.</p>
-        <h3>Bass, mix and air</h3>
+        <h3>Bass, mix and air, in one line</h3>
         <p>A peak envelope cannot tell a kick from a hi-hat: both are one
         number. So the beat cache carries a two-band split as well — everything
-        under 260 Hz, everything over 3.5 kHz — and the corner draws three
-        stacked lines off them, with the mix between. On one shared baseline
-        they were a tangle: three zigzags of similar height through each other,
-        legible as none of them.</p>
+        under 260 Hz, everything over 3.5 kHz.</p>
+        <p>Drawing all three as stacked lines was the honest thing and it looked
+        like a readout: <b>three objects where the picture wanted one</b>. So
+        the bands are felt in the single line instead. Bass sets how heavy the
+        stroke is, so a kick lands as weight rather than as height; air is added
+        to the teeth as a fine tremor, so cymbals and consonants arrive as
+        texture on the shape rather than as a shape of their own.</p>
         <p>Teeth are spaced in <i>time</i> rather than in beats, so a faster
         passage puts more of them in front of you. That is where the tempo
         is.</p>

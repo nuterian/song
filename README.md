@@ -97,12 +97,12 @@ when the line changes, the whole stack rises by one. That is ASS `\kf` karaoke
 drawn by libass, off the same timings the UI edits, so there is no second
 renderer to keep in agreement with the first.
 
-Opposite it, three zigzag lines — bass, mix and air — because a peak envelope
-cannot tell a kick from a hi-hat and the difference is most of what a song
-sounds like. Behind both, four fields of light drift and answer different parts
-of the track, over a frame lit throughout and tinted by the section you are in,
-keyed on its *name*, so every chorus looks the same. Everything answers the mix
-within a frame, and everything it does is small. Nothing to supply, no stock
+Opposite it, one zigzag line — drawn from the mix, weighted by the bass and
+carrying the air band as a fine tremor, because a peak envelope cannot tell a
+kick from a hi-hat and the difference is most of what a song sounds like.
+Behind both, four fields of light drift and answer different parts of the
+track, over a frame lit throughout and tinted by the section you are in, keyed
+on its *name*, so every chorus looks the same. Nothing to supply, no stock
 footage, no still image.
 
 ![A frame of the karaoke video: a lyric line half-filled by the karaoke sweep over a generated wash, with the mix waveform scrolling along the bottom](docs/img/video-still.jpg)
