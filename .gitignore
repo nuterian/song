@@ -20,3 +20,8 @@ data/*.flac
 data/*.aif
 data/*.aiff
 data/*.ogg
+
+# Working notes. NEXT-*.md are plans for work in flight; once it ships the plan
+# is wrong on purpose (it describes a "before" that no longer exists) and the
+# README and the docs site are the record.
+NEXT-*.md
