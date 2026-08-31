@@ -71,6 +71,19 @@ def _rgb(hue: float, sat: float, val: float) -> np.ndarray:
     return np.array([r, g, b], dtype=np.float32)
 
 
+def _palette(hue: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """One section's three colours: the floor, the lit top, and what the bloom adds.
+
+    All of them dark. The words are white and they have to win, so the picture
+    is lit from behind rather than in front of them.
+    """
+    return (
+        _rgb(hue + 8, 0.78, 0.045),
+        _rgb(hue - 14, 0.60, 0.24),
+        _rgb(hue - 30, 0.34, 1.00),
+    )
+
+
 def _envelope(peaks: list[float], rate: int, seconds: float) -> np.ndarray:
     """Smooth an amplitude track and rescale it so its loud parts reach 1.
 
@@ -116,9 +129,13 @@ class Scene:
     def _load_beats(self, beats: dict) -> None:
         times = np.asarray(beats.get("beats", []), dtype=np.float32)
         if times.size < 2:
-            # No beat, no pulse. Everything downstream reads `weight` as zero
-            # and the picture simply breathes with the envelope instead.
-            times = np.array([0.0, self.duration or 1.0], dtype=np.float32)
+            # Nothing tracked - a spoken word track, or a fade with no drums in
+            # it. Weight zero, so the picture is driven by the envelopes alone
+            # rather than by one invented tempo that is wrong for the whole song.
+            self.beat_times = np.array([0.0, max(self.duration, 1.0)], dtype=np.float32)
+            self.beat_gap = np.ones(2, dtype=np.float32)
+            self.beat_weight = np.zeros(2, dtype=np.float32)
+            return
         self.beat_times = times
         self.beat_gap = np.diff(times, append=times[-1] + float(np.median(np.diff(times))))
         meter = int(beats.get("meter", 4)) or 4
@@ -148,22 +165,11 @@ class Scene:
             first = min(times)
             earlier = self.beat_times[self.beat_times <= first - 0.5]
             self.section_at.append(float(earlier[-1]) if earlier.size else first)
-            hue = _hue(section.name)
-            self.section_colour.append(
-                (
-                    _rgb(hue + 8, 0.78, 0.045),   # deep: the floor of the frame
-                    _rgb(hue - 14, 0.60, 0.24),   # mid: the lit top
-                    _rgb(hue - 30, 0.34, 1.00),   # glow: what the bloom adds
-                )
-            )
+            self.section_colour.append(_palette(_hue(section.name)))
 
         if not self.section_colour:
-            hue = 210.0
             self.section_at = [0.0]
-            self.section_colour = [
-                (_rgb(hue + 8, 0.78, 0.045), _rgb(hue - 14, 0.60, 0.24),
-                 _rgb(hue - 30, 0.34, 1.00))
-            ]
+            self.section_colour = [_palette(HUES["verse"])]
         # The intro belongs to whatever comes first; there is nothing else it
         # could belong to, and fading up from black would waste a verse of it.
         self.section_at[0] = 0.0
@@ -217,7 +223,7 @@ class Scene:
         phase = (t - float(self.beat_times[i])) / gap
         return float(np.exp(-3.4 * phase)) * float(self.beat_weight[i])
 
-    def _palette(self, t: float):
+    def _colours(self, t: float):
         """Section colours at time t, crossfaded across the boundary."""
         i = 0
         for k, at in enumerate(self.section_at):
@@ -252,7 +258,7 @@ class Scene:
     # ------------------------------------------------------------- the frame
 
     def frame(self, t: float) -> np.ndarray:
-        deep, mid, glow = self._palette(t)
+        deep, mid, glow = self._colours(t)
         voice = self._at(self.voice, t)
         energy = self._at(self.mix, t)
         pulse = self._pulse(t)
