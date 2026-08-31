@@ -4,6 +4,10 @@ CI runs the suite with nothing installed, which is what makes it finish in
 seconds. That only works while the modules under test can be imported without
 numpy or torch behind them - a property one convenience re-export in a package
 __init__ is enough to lose, silently, on any machine that happens to have them.
+
+Importing a submodule runs its package's __init__ first, so `song.video.karaoke`
+being on this list is also what holds `song/video/__init__.py` to resolving its
+names lazily, the way `song/align/__init__.py` does.
 """
 
 import importlib
@@ -17,6 +21,7 @@ PURE = [
     "song.exports",
     "song.align.mapping",
     "song.align.gaps",
+    "song.video.karaoke",
 ]
 
 HEAVY = ("numpy", "torch", "torchaudio", "librosa", "whisper", "demucs", "faster_whisper")
