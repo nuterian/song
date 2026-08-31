@@ -50,7 +50,8 @@ pre{background:#0b0f16;border:1px solid var(--line);border-radius:10px;padding:1
     overflow-x:auto;margin:0 0 20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 pre code{background:none;border:0;padding:0;font-size:13px;color:#a9b6cb;line-height:1.7}
 
-table{width:100%;border-collapse:collapse;margin:0 0 22px;font-size:14.5px}
+.scroll{overflow-x:auto;margin:0 0 22px;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;margin:0;font-size:14.5px;min-width:460px}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600;
    border-bottom-color:#2f3b4f}
@@ -195,7 +196,7 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
   There is no reference timing file, so accuracy is <em>estimated from evidence</em> rather than
   measured against truth. Every line gets a 0–100 score from six signals:
 </p>
-<table>
+<div class="scroll"><table>
   <thead><tr><th>Signal</th><th class="num">Weight</th><th>What it catches</th></tr></thead>
   <tbody>
     <tr><td>Cross-aligner agreement</td><td class="num">30</td><td>Two unrelated model families disagreeing means the line is uncertain</td></tr>
@@ -205,7 +206,7 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
     <tr><td>Word density</td><td class="num">8</td><td>Spans far too long or short for the words in them</td></tr>
     <tr><td>Aligner confidence</td><td class="num">8</td><td>Low per-word probability</td></tr>
   </tbody>
-</table>
+</table></div>
 <pre><code>  lines aligned             33/33
   median start disagreement 160 ms
   agreement &lt;=150/300/500ms 48% / 76% / 85%
@@ -225,7 +226,7 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
   A quality score that always says "fine" is worthless, so it was checked against a deliberately
   degraded run — the same track aligned against the full mix, skipping vocal isolation:
 </p>
-<table>
+<div class="scroll"><table>
   <thead><tr><th></th><th class="num">normal</th><th class="num">degraded (<code>--no-separate</code>)</th></tr></thead>
   <tbody>
     <tr><td>mean line score</td><td class="num"><span class="win">94.5</span></td><td class="num">69.9</td></tr>
@@ -233,7 +234,7 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
     <tr><td>lines needing review</td><td class="num">2 of 33</td><td class="num">11 of 33</td></tr>
     <tr><td>quality gate</td><td class="num">passed</td><td class="num">failed on 3 criteria</td></tr>
   </tbody>
-</table>
+</table></div>
 <p>
   The thresholds are calibrated against what two <em>different</em> model families can actually
   achieve, not against perfection — demanding near-total agreement makes the gate fail on good
@@ -264,14 +265,14 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
   drift the way a whole-track pass can. On the sample track that takes about 15 seconds and splits
   177 words three ways:
 </p>
-<table>
+<div class="scroll"><table>
   <thead><tr><th></th><th class="num">words</th><th>what happens</th></tr></thead>
   <tbody>
     <tr><td>both models agree within 150 ms</td><td class="num">137 (77%)</td><td>trusted, never shown to you</td></tr>
     <tr><td>provably impossible</td><td class="num">2</td><td><strong>repaired automatically</strong></td></tr>
     <tr><td>genuinely ambiguous</td><td class="num">40</td><td><strong>you decide, by ear</strong></td></tr>
   </tbody>
-</table>
+</table></div>
 <p>
   <em>Provably impossible</em> means no reading of the audio could justify it: a word lasting zero
   seconds, a word starting before the word in front of it, a word starting where the vocal stem is
@@ -298,7 +299,7 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
   on the way in. Accepting an adjustment is one undo step, exactly like accepting a suggestion.
   That closes the last reason to leave: a song can be word-aligned end to end from inside one dialog.
 </p>
-<table>
+<div class="scroll"><table>
   <thead><tr><th>Key</th><th>Action, while the sheet is open</th></tr></thead>
   <tbody>
     <tr><td><span class="k">←</span> <span class="k">→</span></td><td>nudge the adjusted timing ±50 ms (<span class="k">shift</span> ±10 ms)</td></tr>
@@ -306,7 +307,7 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
     <tr><td><span class="k">1</span> <span class="k">2</span> <span class="k">3</span></td><td>hear now / suggested / adjusted</td></tr>
     <tr><td><span class="k">enter</span></td><td>take the primary button</td></tr>
   </tbody>
-</table>
+</table></div>
 
 <h3 id="missing">Lines the lyrics file does not have</h3>
 <p>
@@ -328,7 +329,7 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
   line, and a ≥ 0.8 text match to a line the lyrics already contain, covering ≥ 60% of it. Every
   gap on the sample track, scored:
 </p>
-<table>
+<div class="scroll"><table>
   <thead><tr><th>gap</th><th class="num">vocal</th><th>heard</th><th class="num">conf</th><th>matches a line?</th></tr></thead>
   <tbody>
     <tr><td class="num"><strong>1:20→2:06</strong></td><td class="num">12.5s</td><td><strong>"You're my gravity in motion"</strong></td><td class="num"><span class="win">0.89</span></td><td><span class="win">1.00 — exact, 5/5 words</span></td></tr>
@@ -337,7 +338,7 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
     <tr><td class="num">4:38→end</td><td class="num">1.8s</td><td>"Thank you."</td><td class="num">0.50</td><td>0.30 — hallucinated over the fade</td></tr>
     <tr><td class="num">five others</td><td class="num">1.7–9.3s</td><td><em>nothing transcribed</em></td><td class="num">—</td><td>—</td></tr>
   </tbody>
-</table>
+</table></div>
 <p>
   One candidate survives, and it is the right one. Note the last test: the text has to be
   <strong>a line you already wrote</strong>. A transcription confident enough to trust for novel
@@ -419,7 +420,7 @@ python -m lyricsync export workdir/song</code></pre>
 
 <h2 id="output">Output</h2>
 <p>Everything lands in <code>workdir/&lt;track-slug&gt;/</code>:</p>
-<table>
+<div class="scroll"><table>
   <thead><tr><th>File</th><th>Purpose</th></tr></thead>
   <tbody>
     <tr><td><code>lyrics.lrc</code></td><td>Line-level synced lyrics, the standard format</td></tr>
@@ -429,7 +430,7 @@ python -m lyricsync export workdir/song</code></pre>
     <tr><td><code>vocals.wav</code></td><td>Cached vocal stem — separation is the slow step, never redone</td></tr>
     <tr><td><code>audit.json</code></td><td>Last timing check: what was auto-repaired, what needs an ear</td></tr>
   </tbody>
-</table>
+</table></div>
 <p>
   The point of all this is captions on a video, so that is what was checked: <code>lyrics.srt</code>
   burned onto video with <code>ffmpeg -vf subtitles=</code>, then frames sampled across the track.
