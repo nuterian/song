@@ -1,0 +1,942 @@
+:root {
+  --bg: #0e1116;
+  --panel: #151a22;
+  --panel-2: #1b2230;
+  --line: #232c3a;
+  --text: #e6edf7;
+  --muted: #8b98ad;
+  --accent: #5b9dff;
+  --good: #3ecf8e;
+  --ok: #e8b33d;
+  --bad: #ff6b6b;
+  --todo: #f0a63c;          /* queued for your ear - amber means "act here" */
+  --adj: #b48cff;           /* a timing you placed by hand - the only free hue */
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* Depth is done with light, not colour: a hairline of brightness along the
+     top edge of every raised surface, and layered shadows under floating ones. */
+  --edge: inset 0 1px 0 rgba(255, 255, 255, .035);
+  --float:
+    0 0 0 1px rgba(255, 255, 255, .04),
+    0 10px 24px rgba(0, 0, 0, .45),
+    0 32px 80px rgba(0, 0, 0, .55);
+  --ease: cubic-bezier(.2, .8, .25, 1);
+
+  /* One column width for the reading surface. The timeline is an instrument and
+     wants the full window; the lyrics are text and stop being readable long
+     before it, so they are bounded and centred instead of stretched. */
+  --col: 1000px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A barely-there cool wash from the top so the page has an axis of light. */
+body {
+  background:
+    linear-gradient(180deg, rgba(91, 157, 255, .045), rgba(91, 157, 255, 0) 340px),
+    var(--bg);
+}
+
+::selection { background: rgba(91, 157, 255, .35); }
+
+/* Keyboard focus gets a real ring; mouse clicks stay quiet. */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 7px;
+}
+
+/* Dark scrollbars for the three scrolling surfaces. */
+.lyrics::-webkit-scrollbar, .tk-rows::-webkit-scrollbar, .im-log::-webkit-scrollbar { width: 10px; }
+.lyrics::-webkit-scrollbar-thumb, .tk-rows::-webkit-scrollbar-thumb, .im-log::-webkit-scrollbar-thumb {
+  background: #2a3547;
+  border-radius: 5px;
+  border: 2px solid var(--bg);
+}
+.lyrics::-webkit-scrollbar-thumb:hover, .tk-rows::-webkit-scrollbar-thumb:hover { background: #3a4a63; }
+
+/* ---------- dialogs: one chrome, so a new dialog can never ship unstyled ---------- */
+
+dialog {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #181e29, var(--panel) 90px);
+  color: var(--text);
+  padding: 0;
+  box-shadow: var(--float);
+}
+dialog::backdrop { background: rgba(5, 8, 13, .72); backdrop-filter: blur(3px); }
+dialog[open] { animation: dialog-rise .16s var(--ease); }
+@keyframes dialog-rise {
+  from { opacity: 0; transform: translateY(8px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+/* The three surfaces arrive in the order you read them. Opacity only - a
+   transform here would move the canvas under a click that lands during it, and
+   every mouse coordinate in the timeline is read off its bounding box. */
+@keyframes surface-in { from { opacity: 0; } to { opacity: 1; } }
+.bar { animation: surface-in .3s var(--ease) both; }
+.stage { animation: surface-in .3s var(--ease) .05s both; }
+.lyrics { animation: surface-in .34s var(--ease) .11s both; }
+
+@media (prefers-reduced-motion: reduce) {
+  dialog[open], .bar, .stage, .lyrics,
+  .review-cta.all-clear, #btn-save.dirty, #line-list,
+  .rv-pane.stepped .rv-context, .rv-pane.stepped .rv-reasons,
+  .rv-pane.stepped .rv-strip, .rv-pane.stepped .rv-ab { animation: none; }
+  * { transition: none !important; }
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Every timecode aligns digit-for-digit. */
+.clock, .times, .place-time, .rv-time, .tk-meta { font-variant-numeric: tabular-nums; }
+
+/* ---------- top bar ---------- */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.bar-left { display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 240px; }
+.logo {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+/* The wordmark's bars ride the vocal while the track plays - the app's own
+   pulse, borrowed from the thing it works on. */
+.mark { width: 20px; height: 15px; color: var(--accent); flex: none; }
+.mark path { transition: opacity .2s var(--ease); }
+body.playing .mark path { animation: mark-pulse 1.15s var(--ease) infinite; }
+@keyframes mark-pulse {
+  0%, 100% { opacity: .55; }
+  50%      { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.playing .mark path { animation: none; }
+}
+button.track {
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  padding: 4px 8px;
+  max-width: 260px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+button.track:hover { border-color: var(--line); color: var(--text); }
+.caret { margin-left: 6px; opacity: .5; font-size: 10px; }
+.bar-right { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+
+button {
+  background: linear-gradient(180deg, #1e2634, var(--panel-2));
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;          /* a two-line "Re-score" breaks the bar */
+  box-shadow: var(--edge);
+  transition: border-color .14s var(--ease), background .14s var(--ease),
+              color .14s var(--ease), transform .07s var(--ease);
+}
+button:hover { border-color: #3a4763; background: linear-gradient(180deg, #26303f, #1f2735); }
+button:active { transform: translateY(1px); }
+button[disabled] { cursor: default; }
+button.ghost, button.track { box-shadow: none; }
+button.primary {
+  background: linear-gradient(180deg, #6faaff, var(--accent));
+  border-color: var(--accent);
+  color: #06101f;
+  font-weight: 600;
+  box-shadow: var(--edge), 0 1px 10px rgba(91, 157, 255, .28);
+}
+button.primary:hover {
+  background: linear-gradient(180deg, #83b6ff, #6aa6ff);
+  border-color: #83b6ff;
+}
+
+/* Save is chrome until there is something to save, and then it is the loudest
+   thing in the bar. Two permanent blue buttons teach you to ignore both. */
+#btn-save {
+  background: var(--panel-2);
+  border-color: var(--line);
+  color: var(--muted);
+  box-shadow: var(--edge);
+}
+#btn-save:hover { color: var(--text); }
+#btn-save.dirty {
+  background: linear-gradient(180deg, #6faaff, var(--accent));
+  border-color: var(--accent);
+  color: #06101f;
+  box-shadow: var(--edge), 0 1px 10px rgba(91, 157, 255, .28);
+  animation: save-wake .32s var(--ease);
+}
+#btn-save.dirty:hover { background: linear-gradient(180deg, #83b6ff, #6aa6ff); }
+@keyframes save-wake {
+  from { box-shadow: var(--edge), 0 0 0 0 rgba(91, 157, 255, .55); }
+  to   { box-shadow: var(--edge), 0 0 0 7px rgba(91, 157, 255, 0); }
+}
+button.play { min-width: 76px; }
+
+/* Secondary chrome recedes until pointed at, so the two things worth pressing -
+   Check timings and Save - are the only lit controls in the bar. */
+#btn-rescore, #btn-export { color: var(--muted); background: transparent; }
+#btn-rescore:hover, #btn-export:hover { color: var(--text); background: var(--panel-2); }
+
+/* The hotkey a button mirrors, set light and condensed so it reads as a
+   footnote on the label rather than competing with it. */
+.k {
+  margin-left: 7px;
+  font: 10px/1 var(--mono);
+  letter-spacing: -0.04em;
+  font-weight: 400;
+  opacity: .42;
+}
+button.primary .k { opacity: .6; }
+
+/* Toggles carry state, so they have to look different when they are on. */
+.tgl { color: var(--muted); }
+.tgl.on {
+  background: #1d2c46;
+  border-color: #4066a8;
+  color: #dceaff;
+  box-shadow: var(--edge), 0 0 0 1px rgba(91, 157, 255, .12);
+}
+.tgl.on:hover { background: #24375a; border-color: #4f7bc4; }
+.tgl.on .k { opacity: .55; }
+
+.ghost { color: var(--muted); padding: 6px 10px; }
+#btn-help { min-width: 30px; padding: 6px 8px; font-weight: 600; }
+
+/* Undo/redo read as one control, so they are joined rather than spaced. */
+.hist { display: flex; }
+.hist button {
+  min-width: 32px;
+  padding: 6px 8px;
+  font-size: 15px;
+  line-height: 1;
+}
+.hist button:first-child { border-radius: 7px 0 0 7px; }
+.hist button:last-child { border-radius: 0 7px 7px 0; margin-left: -1px; }
+.hist button[disabled] { opacity: .32; cursor: default; }
+.hist button[disabled]:hover { border-color: var(--line); }
+
+/* Six readings off one benchmark, so they are read as one gauge cluster: a
+   single bordered group split by hairlines rather than six floating pills. */
+.chips {
+  display: flex;
+  min-width: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  box-shadow: var(--edge);
+  overflow: hidden;
+}
+.chip {
+  font: 10.5px/1 var(--mono);
+  padding: 5px 8px;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+.chip:last-child { border-right: 0; }
+/* A summary of what the list below already says, so it is the first thing to
+   go when the window cannot hold everything. */
+@media (max-width: 1080px) { .chips { display: none; } }
+.chip b { color: var(--text); font-weight: 600; }
+.chip.good b { color: var(--good); }
+.chip.ok b { color: var(--ok); }
+.chip.bad b { color: var(--bad); }
+
+/* ---------- timeline ---------- */
+
+.stage {
+  flex: none;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 6px 12px 8px;
+}
+
+.stage-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 1px 6px;
+}
+#transport { display: flex; align-items: center; gap: 9px; }
+.clock {
+  font: 12px/1 var(--mono);
+  color: var(--muted);
+  transition: color .16s var(--ease);
+}
+.clock.slow { color: var(--accent); }
+.stage-tools { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+.stage-tools .tgl { padding: 4px 9px; font-size: 12.5px; }
+#btn-rate { min-width: 56px; font-variant-numeric: tabular-nums; }
+
+/* Zoom is one control with three parts, so it is drawn as one. */
+.zoom { display: flex; margin-left: 4px; }
+.zoom button { padding: 4px 9px; color: var(--muted); border-radius: 0; }
+.zoom button:first-child { border-radius: 7px 0 0 7px; }
+.zoom button:last-child { border-radius: 0 7px 7px 0; }
+.zoom button + button { margin-left: -1px; }
+.zoom button:hover { color: var(--text); z-index: 1; }
+
+#timeline {
+  display: block;
+  width: 100%;
+  cursor: crosshair;
+  border-radius: 9px;
+  box-shadow: 0 0 0 1px var(--line), 0 1px 0 rgba(255, 255, 255, .03) inset;
+}
+
+/* One deck under the waveform. The selected line on the left (what the buttons
+   act on), the live pointer readout on the right (what you are hovering), and
+   the one control that joins them. They used to be two stacked rows saying two
+   halves of the same sentence. */
+.deck {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 4px 4px 4px 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--edge);
+}
+.place-idx {
+  font: 10.5px/1 var(--mono);
+  color: var(--muted);
+  background: #0f1420;
+  border: 1px solid #1e2634;
+  border-radius: 5px;
+  padding: 4px 6px;
+  flex: none;
+}
+.place-text {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+}
+.place-time { font: 11.5px/1 var(--mono); color: var(--muted); flex: none; }
+.place-go {
+  flex: none;
+  padding: 5px 11px;
+  background: #1d3357;
+  border-color: #35538a;
+  color: #cfe0ff;
+  font-weight: 600;
+}
+.place-go:hover { background: #24406c; border-color: #4368ad; }
+.place-go[disabled] {
+  opacity: .45;
+  background: var(--panel-2);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+/* The pointer readout. Fixed to the right of the deck so it can churn on every
+   mouse move without shoving the rest of the row around. */
+.hint {
+  margin-left: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  text-align: right;
+  font: 11px/1 var(--mono);
+  color: #6d7a90;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The resting tip teaches the gestures; a live readout answers a question you
+   are asking right now. When the deck runs out of room the tip goes first. */
+@media (max-width: 1180px) { .hint.rest { display: none; } }
+
+/* ---------- lyrics ---------- */
+
+/* The reading column is bounded and centred. Stretched to 1440 px a lyric line
+   ends a third of the way across and the score sits a thousand pixels from the
+   words it grades, which is a long way to move your eye to learn one digit. */
+.lyrics {
+  flex: 1;
+  overflow: auto;
+  padding: 0 0 28px;
+  --gutter: max(14px, calc((100% - var(--col)) / 2));
+}
+
+.lyrics-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 36px;                /* fixed, so the section heads can stick under it */
+  padding: 0 var(--gutter);
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Two views of one list, so they are one segmented control. */
+.filters { display: flex; }
+.filter {
+  padding: 3px 11px;
+  font-size: 12px;
+  border-radius: 0;
+  color: var(--muted);
+}
+.filter:first-child { border-radius: 7px 0 0 7px; }
+.filter:last-child { border-radius: 0 7px 7px 0; margin-left: -1px; }
+.filter.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06101f;
+  font-weight: 600;
+  z-index: 1;
+}
+.line-count { font: 11px/1 var(--mono); color: #5a677f; }
+.legend { margin-left: auto; display: flex; gap: 11px; font-size: 10.5px; color: #6d7a90; }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.sw.good { background: var(--good); }
+.sw.ok { background: var(--ok); }
+.sw.bad { background: var(--bad); }
+@media (max-width: 720px) { .legend { display: none; } }
+
+/* Sticky, so the section you are inside is always named even deep into it. */
+.section-head {
+  position: sticky;
+  top: 36px;                   /* exactly under the filter bar */
+  z-index: 2;
+  padding: 12px var(--gutter) 4px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6d7a90;
+  background: var(--bg);
+}
+#line-list { animation: list-in .2s var(--ease); }
+@keyframes list-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+.section-head span { color: #5a677f; }
+.section-note { text-transform: none; letter-spacing: 0; color: #55617a; }
+/* A rule that fades out rather than a full-width line: it marks the break
+   without drawing a second grid across the page. */
+.section-head::after {
+  content: "";
+  display: block;
+  height: 1px;
+  margin-top: 6px;
+  background: linear-gradient(90deg, var(--line) 55%, rgba(35, 44, 58, 0));
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 22px 118px minmax(0, 1fr) minmax(0, auto) 30px;
+  gap: 10px;
+  align-items: center;
+  position: relative;
+  margin: 0 var(--gutter);
+  padding: 4px 9px 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  scroll-margin-top: 78px;      /* clear of the filter bar and the section head */
+  scroll-margin-bottom: 10px;
+  transition: background .13s var(--ease);
+}
+.row:hover { background: #151b26; }
+
+/* The "act here" marker. A pseudo-element rather than a border, so it stays a
+   crisp bar inside the row's rounded corners instead of a bent sliver. */
+.row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: transparent;
+  transition: background .13s var(--ease), top .13s var(--ease), bottom .13s var(--ease);
+}
+
+/* Colour is reserved for "this needs you". A line that is fine gets no mark at
+   all, so the eye lands on the handful that do - amber for words the audit
+   queued, red for a line the benchmark flagged. Selection outranks both. */
+.row.has-todo::before { background: var(--todo); }
+.row.flagged::before { background: var(--bad); }
+.row.selected::before { background: var(--accent); top: 0; bottom: 0; }
+.row.selected {
+  background: #172136;
+  box-shadow: inset 0 0 0 1px rgba(91, 157, 255, .16);
+}
+/* The line currently sounding. Quieter than selection - it moves on by itself,
+   so it should register without ever pulling the eye off the edit in hand. */
+.row.playing { background: #131b28; }
+.row.playing .text { color: #fff; }
+.row.selected.playing { background: #1b2740; }
+
+.row .idx { font: 10.5px/1 var(--mono); color: #4d5970; text-align: right; }
+.row.selected .idx { color: var(--accent); }
+.row .times {
+  font: 11.5px/1 var(--mono);
+  color: #6d7a90;
+  white-space: nowrap;
+  transition: color .13s var(--ease);
+}
+.row:hover .times { color: var(--muted); }
+.row.selected .times { color: #b9c6da; }
+.row .text { min-width: 0; }
+.row .text .w {
+  transition: color .07s linear, background .07s linear;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 2px;
+  margin: 0 -1px;
+}
+.row .text .w:hover { background: #24314b; color: #fff; }
+/* The word sounding right now. A tinted pill rather than colour alone, so it
+   still reads as the live word when it lands on a queued or selected one. */
+/* The word sounding right now. A lit pill rather than colour alone, so it still
+   reads as live when it lands on a queued or a selected word. */
+.row .text .w.on {
+  color: #e8f1ff;
+  background: rgba(91, 157, 255, .26);
+  box-shadow: 0 0 12px rgba(91, 157, 255, .22);
+  font-weight: 600;
+}
+.row .text .w.sel { background: var(--accent); color: #06101f; font-weight: 600; }
+.row .text .w.sel.on { background: #83b6ff; color: #06101f; }
+
+/* ---------- a line the lyrics file does not have ----------
+   Dashed, because it is a question rather than a lyric. Green: the app's
+   colour for "the second opinion says this", which is exactly what it is. */
+.row.ghost {
+  grid-template-columns: 22px 118px minmax(0, 1fr) auto;
+  background: rgba(62, 207, 142, .05);
+  border: 1px dashed rgba(62, 207, 142, .38);
+  padding: 5px 8px 5px 9px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+  animation: ghost-in .26s var(--ease) both;
+}
+.row.ghost:hover { background: rgba(62, 207, 142, .09); }
+.row.ghost::before { background: none; }
+.row.ghost .idx { color: var(--good); font-weight: 700; }
+.row.ghost .times { color: #7fbfa0; }
+.row.ghost .text { color: #cfe6da; }
+.ghost-note {
+  margin-left: 10px;
+  font-size: 11px;
+  color: #5f8d78;
+}
+.ghost-acts { display: flex; gap: 5px; align-items: center; }
+.ghost-acts button { padding: 3px 9px; font-size: 12px; }
+.g-hear { min-width: 30px; color: var(--muted); }
+.g-add {
+  background: #17301f;
+  border-color: #2c5c44;
+  color: #8fe3ba;
+  font-weight: 600;
+}
+.g-add:hover { background: #1d4029; border-color: #3a7a5a; }
+.g-no { color: var(--muted); min-width: 30px; }
+.g-no:hover { color: var(--bad); border-color: #5a3038; }
+@keyframes ghost-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The addition card's own strip, same chrome as the review one. */
+#ad-wave {
+  display: block;
+  box-sizing: content-box;
+  width: 100%;
+  height: 72px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #101520;
+  box-shadow: var(--edge);
+}
+#ad-text {
+  border-left: 3px solid var(--good);
+  padding-left: 12px;
+  color: #dff0e7;
+}
+#ad-progress-fill { background: linear-gradient(90deg, #2f9d6c, #3ecf8e); }
+#ad-accept { background: var(--good); border-color: var(--good); color: #04140d; }
+#ad-accept:hover { background: #57dfa0; border-color: #57dfa0; }
+
+/* A word the audit wants an ear on. Underlined rather than filled so the line
+   still reads as a sentence, and so it survives being the active word. */
+.row .text .w.todo {
+  text-decoration: underline wavy var(--todo);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px;
+}
+.row .text .w.todo:hover { background: #3a2d16; }
+
+.score {
+  font: 10.5px/1 var(--mono);
+  text-align: center;
+  padding: 4px 0;
+  border-radius: 5px;
+  background: transparent;
+}
+/* A good score is the default and should not compete for attention. */
+.score.good { color: #414d63; }
+.score.ok { color: var(--ok); background: rgba(232, 179, 61, .10); }
+.score.bad { color: var(--bad); background: rgba(255, 107, 107, .13); font-weight: 600; }
+
+/* Why the benchmark flagged it, in the space to the right of the words. Muted,
+   because it is a footnote on the line rather than a second headline. */
+.issues {
+  font: 11px/1 -apple-system, system-ui, sans-serif;
+  color: #5d6a80;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color .13s var(--ease);
+}
+.row:hover .issues, .row.selected .issues { color: #8b98ad; }
+.row.flagged .issues { color: #a8707a; }
+.row.flagged:hover .issues, .row.flagged.selected .issues { color: #e08d97; }
+
+.tk-rows { margin: 14px 0 4px; max-height: 46vh; overflow: auto; }
+.tk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  margin-bottom: 6px;
+  background: #121722;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.tk-row:hover { border-color: #35415a; }
+.tk-row.active { border-color: var(--accent); background: #17223a; }
+.tk-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-meta { font: 11px/1 var(--mono); color: var(--muted); flex: none; }
+.tk-badge {
+  font: 11px/1 var(--mono);
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: var(--panel-2);
+  color: var(--muted);
+  flex: none;
+}
+.tk-badge.todo { background: #3a2d16; color: var(--todo); }
+.tk-badge.here { background: var(--accent); color: #06101f; font-weight: 600; }
+
+.drops { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 6px 0 4px; }
+.drop {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 20px 14px;
+  border: 1.5px dashed var(--line);
+  border-radius: 10px;
+  background: #101520;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color .12s, background .12s;
+}
+.drop:hover { border-color: #3d4c6a; }
+.drop.over { border-color: var(--accent); background: #16223a; }
+.drop.set { border-style: solid; border-color: var(--good); background: #12211a; }
+.drop b { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.drop.set b { color: var(--good); }
+.drop-hint { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.drop.set .drop-hint { color: var(--text); }
+
+.im-log {
+  margin: 14px 0 0;
+  padding: 12px;
+  max-height: 220px;
+  overflow: auto;
+  background: #0b0f16;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: 11.5px/1.6 var(--mono);
+  color: #a9b6cb;
+  white-space: pre-wrap;
+}
+
+/* ---------- review: the guided fix queue ----------
+   Deliberately larger and plainer than the rest of the app: this is the path
+   for someone who has never used a timeline and should never have to. */
+
+.review-cta {
+  background: #1d3357;
+  border-color: #35538a;
+  color: #cfe0ff;
+  font-weight: 600;
+}
+.review-cta.has-work { background: var(--accent); border-color: var(--accent); color: #06101f; }
+.review-cta.has-work:hover { background: #79b0ff; border-color: #79b0ff; }
+/* Clearing the last item is worth a beat of acknowledgement. */
+.review-cta.all-clear { animation: clear-in .4s var(--ease); }
+@keyframes clear-in {
+  from { transform: scale(.94); opacity: .4; }
+  to   { transform: none; opacity: 1; }
+}
+/* Clearing the queue is the one genuine milestone in this tool. */
+.review-cta.all-clear {
+  background: #13291f;
+  border-color: #2c5c44;
+  color: var(--good);
+}
+.review-cta.all-clear::before { content: "✓"; margin-right: 7px; }
+
+#review, #tracks { width: min(680px, calc(100vw - 40px)); }
+#review { max-height: calc(100vh - 40px); overflow: auto; }
+.rv { padding: 26px 30px 24px; }
+.rv h2 { margin: 0 0 12px; font-size: 21px; letter-spacing: -0.02em; }
+.rv-lede { margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #c3cddd; }
+.rv-dim { color: var(--muted); }
+.rv-foot { margin: 14px 0 0; font-size: 12px; color: var(--muted); }
+
+.rv-top { display: flex; align-items: baseline; gap: 12px; }
+.rv-count { font-size: 15px; font-weight: 600; }
+.rv-where { font: 12px/1 var(--mono); color: var(--muted); }
+.rv-top button { margin-left: auto; }
+
+.rv-progress { height: 3px; background: var(--panel-2); border-radius: 2px; margin: 12px 0 20px; }
+.rv-progress i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #4d8ae8, #79b0ff);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(91, 157, 255, .45);
+  transition: width .26s var(--ease);
+}
+
+/* Advancing the queue should feel like the next card arriving, not like the
+   text on this one being swapped out underneath you. The strip fades without
+   moving: every drag coordinate in it is read off its bounding box, and a
+   transform would bend that for the length of the animation. */
+.rv-pane.stepped .rv-context { animation: rv-step .24s var(--ease) both; }
+.rv-pane.stepped .rv-reasons { animation: rv-step .24s var(--ease) .03s both; }
+.rv-pane.stepped .rv-ab { animation: rv-step .24s var(--ease) .07s both; }
+.rv-pane.stepped .rv-strip { animation: rv-fade .28s var(--ease) .04s both; }
+@keyframes rv-step {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes rv-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.rv-context {
+  margin: 0 0 14px;
+  font-size: 19px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+}
+.rv-context b {
+  background: var(--accent);
+  color: #06101f;
+  border-radius: 5px;
+  padding: 1px 7px;
+}
+
+.rv-reasons { margin: 0 0 20px; padding: 0; list-style: none; }
+.rv-reasons li { font-size: 13px; color: var(--muted); padding: 2px 0 2px 16px; position: relative; }
+.rv-reasons li::before { content: "•"; position: absolute; left: 3px; }
+
+.rv-ab { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rv-opt {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+  background: #121722;
+}
+/* Green is "suggested" throughout - the card, the legend dot and the strip
+   marker all point at the same candidate, so the eye can carry one mapping. */
+.rv-opt-alt { border-color: #2c5c44; background: #12211a; }
+.rv-opt-adj { border-color: #503a7d; background: #1a1630; }
+.rv-opt-head { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.rv-time { font: 20px/1.4 var(--mono); margin: 6px 0 10px; }
+.rv-play { width: 100%; padding: 10px; font-size: 14px; }
+.rv-opt-alt .rv-play { background: #17301f; border-color: #2c5c44; }
+.rv-opt-adj .rv-play { background: #271e45; border-color: #503a7d; }
+
+/* The waveform strip. Same chrome as the option cards either side of it, so it
+   reads as part of the card rather than as an instrument bolted onto one. */
+.rv-strip { margin: 0 0 16px; }
+#rv-wave {
+  display: block;
+  box-sizing: content-box;   /* the 72 px is the drawing surface, not the box */
+  width: 100%;
+  height: 72px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #101520;
+  box-shadow: var(--edge);
+  cursor: crosshair;
+}
+.rv-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.rv-key { display: inline-flex; align-items: center; gap: 6px; }
+.rv-key[hidden] { display: none; }
+.rv-key i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; }
+.sw-now { background: var(--accent); }
+.sw-new { background: var(--good); }
+.sw-adj { background: var(--adj); }
+.sw-add { background: var(--good); }
+.sw-known { background: var(--accent); }
+.rv-strip-hint { margin-left: auto; color: #5a677f; }
+#rv-adj-reset { margin-left: auto; font-size: 11.5px; padding: 3px 9px; }
+
+/* The third candidate only exists once you make one, and it takes its own
+   column rather than crowding the two that are always there. */
+.rv-ab.has-adj { grid-template-columns: 1fr 1fr 1fr; }
+.rv-ab.has-adj .rv-time { font-size: 17px; }
+
+.rv-hint { margin: 12px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.rv-hint em { color: var(--text); font-style: normal; font-weight: 600; }
+
+.rv-actions { display: flex; gap: 10px; margin-top: 20px; }
+.rv-go {
+  flex: 1;
+  padding: 13px;
+  font-size: 15px;
+  font-weight: 600;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06101f;
+}
+.rv-keep { flex: 1; padding: 13px; font-size: 15px; }
+
+.rv-under {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.rv-check { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.rv-under button { margin-left: 0; font-size: 12px; padding: 5px 9px; }
+.rv-under button:last-child { margin-left: auto; }
+.rv-under button[disabled] { opacity: .4; cursor: default; }
+
+.rv-bar { height: 4px; background: var(--panel-2); border-radius: 2px; overflow: hidden; margin: 18px 0 0; }
+.rv-bar i {
+  display: block; height: 100%; width: 38%;
+  background: var(--accent); border-radius: 2px;
+  animation: rv-slide 1.15s ease-in-out infinite;
+}
+@keyframes rv-slide { 0% { margin-left: -38%; } 100% { margin-left: 100%; } }
+
+/* ---------- shortcuts dialog ---------- */
+
+#help { max-width: 860px; width: calc(100vw - 48px); max-height: calc(100vh - 64px); }
+.help-body { padding: 18px 22px 20px; }
+
+.help-head { display: flex; align-items: center; gap: 16px; margin-bottom: 4px; }
+.help-head h2 { margin: 0; font-size: 15px; letter-spacing: -0.01em; }
+.help-head button { margin-left: auto; }
+
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 4px 32px;
+}
+.help-grid h3 {
+  margin: 16px 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.help-grid dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(84px, auto) 1fr;
+  gap: 5px 12px;
+  align-items: baseline;
+}
+.help-grid dt { text-align: right; white-space: nowrap; }
+.help-grid dt.mouse { font-size: 11.5px; color: var(--muted); font-style: italic; }
+.help-grid dd { margin: 0; font-size: 12.5px; color: #c3cddd; }
+
+.help-note {
+  margin: 20px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.help-note em { color: var(--text); font-style: normal; font-weight: 600; }
+
+kbd {
+  font: 11px/1 var(--mono);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 3px 5px;
+  color: var(--text);
+}
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(14px);
+  background: linear-gradient(180deg, #1d2431, var(--panel-2));
+  border: 1px solid #2c3850;
+  border-left: 3px solid var(--accent);
+  border-radius: 9px;
+  padding: 9px 15px;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: var(--float);
+  transition: opacity .18s var(--ease), transform .18s var(--ease);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { border-left-color: var(--bad); color: var(--bad); }

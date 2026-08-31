@@ -1,0 +1,32 @@
+# Pinned for macOS arm64 + Python 3.12.
+# numpy is held below 2.0 because numba/librosa/demucs in this combination are
+# only validated against the 1.26 ABI.
+numpy==1.26.4
+
+torch==2.5.1
+torchaudio==2.5.1
+
+# Whisper-based forced alignment (lyrics -> word timestamps).
+openai-whisper==20240930
+stable-ts==2.19.0
+
+# Independent second-opinion transcription for the benchmark.
+faster-whisper==1.1.1
+
+# Vocal separation. demucs 4.0.1 declares torchaudio<2.1, which is stale; it is
+# installed with --no-deps by setup.sh and its real runtime deps are listed here.
+demucs==4.0.1
+dora-search==0.1.12
+einops==0.8.0
+julius==0.2.7
+lameenc==1.7.0
+openunmix==1.2.1
+pyyaml==6.0.2
+tqdm==4.67.1
+
+librosa==0.10.2.post1
+soundfile==0.12.1
+rapidfuzz==3.10.1
+
+fastapi==0.115.6
+uvicorn==0.34.0

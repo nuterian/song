@@ -1,0 +1,22 @@
+# Virtualenv — ./setup.sh rebuilds it, and it is a gigabyte of torch.
+.venv/
+__pycache__/
+*.py[cod]
+
+.DS_Store
+
+# Aligned tracks. Everything under here is derived from an audio file and a
+# lyrics file — isolated stems, playback previews, the analysis payload, the
+# scored project and its exports — and runs to tens of megabytes per track.
+# Recreate with:  python -m lyricsync <audio> <lyrics>
+workdir/
+
+# Source audio: bring your own track. data/lyrics.txt is kept, so the sample
+# lyrics (and the section-header format) are here to read.
+data/*.wav
+data/*.mp3
+data/*.m4a
+data/*.flac
+data/*.aif
+data/*.aiff
+data/*.ogg
