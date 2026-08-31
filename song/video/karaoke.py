@@ -31,15 +31,15 @@ PLAY_W, PLAY_H = 1280, 720
 # the macOS .ttc collection and the whole song renders oblique with nothing
 # anywhere saying italic.
 FONT = "Avenir Next Heavy"
-FONT_SIZE = 60
+FONT_SIZE = 46
 
 # No blur on the words themselves, at all. libass's \blur is described as
 # softening the border, but with a border thick enough to read it bleeds into
 # the fill: at bord 3.0 / blur 2.8 the letterforms visibly lose their edges, and
 # every word came *into focus* as it was sung, which is not an effect anybody
 # asked for. So the lyric layer is a hairline edge and nothing else.
-BORDER = 1.2
-EDGE = (0x000000, 0x50)
+BORDER = 1.0
+EDGE = (0x000000, 0x64)
 
 # The shadow is a second event underneath, carrying the same words with no fill
 # and a thick blurred border, sitting a few pixels lower. That is the only way
@@ -47,14 +47,21 @@ EDGE = (0x000000, 0x50)
 # offset copy, which is the 1990s word-processor look, and \blur on the lyric
 # layer would take the letterforms with it. Nothing is drawn on this layer that
 # a blur could soften except the shadow itself.
-SHADE = (0x000000, 0x60)
-SHADE_BORDER = 6.5
-SHADE_BLUR = 8.0
+SHADE = (0x000000, 0x72)
+SHADE_BORDER = 5.0
+SHADE_BLUR = 9.0
 SHADE_DROP = 3               # pixels lower than the words
 
 # Where the block sits, in the 1280x720 frame the coordinates above assume.
-MARGIN = 86
-BASELINE = 180
+MARGIN = 130
+BASELINE = 176
+
+# Lines arrive and leave rather than cutting. \fad measures its out-fade from
+# the *end* of the event, and consecutive lines here touch rather than overlap,
+# so one line has finished fading out on the exact frame the next starts fading
+# in - no dissolve between two different sentences, and no gap either.
+FADE_IN = 340
+FADE_OUT = 440
 
 # Three states, and the middle one is the point. A word not yet sung is dim
 # white; the word being sung fills in the accent; a word already sung settles to
@@ -70,7 +77,7 @@ SETTLE = 320                 # ...then this long to fade to white
 # The word being sung swells. Capped by how long the word lasts: at full size on
 # a 90 ms syllable it is a flicker rather than an emphasis, so short words grow
 # proportionally less and a fast run reads as a ripple instead of a strobe.
-GROW = 12.0        # percent, for a word long enough to see it
+GROW = 5.0         # percent, for a word long enough to see it
 GROW_FULL = 220    # ms of word length that earns the full swell
 GROW_LEAD = 90     # ms early, so the word is already up when it is sung
 GROW_IN = 130      # ms to swell
@@ -324,12 +331,14 @@ def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
         start_cs = centis(appear)
         end_cs = max(start_cs + 1, centis(vanish))
         stamps = f"{ass_time(start_cs)},{ass_time(end_cs)}"
+        fade = f"{{\\fad({FADE_IN},{FADE_OUT})}}"
         out.append(
-            f"Dialogue: 0,{stamps},Shade,,0,0,0,,"
+            f"Dialogue: 0,{stamps},Shade,,0,0,0,,{fade}"
             f"{karaoke_text(line, start_cs, shade=True)}"
         )
         out.append(
-            f"Dialogue: 1,{stamps},Lyric,,0,0,0,,{karaoke_text(line, start_cs)}"
+            f"Dialogue: 1,{stamps},Lyric,,0,0,0,,{fade}"
+            f"{karaoke_text(line, start_cs)}"
         )
 
     return "\n".join(out) + "\n"

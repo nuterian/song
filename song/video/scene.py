@@ -8,11 +8,16 @@ and cannot drift out of agreement with them.
 Four layers, back to front:
 
     wash     a near-black vertical gradient, tinted by the section
-    lobes    three drifting pools of light, hues spread around the section's,
-             breathing with the mix and kicking on the beat
-    ring     a wave of light leaving the centre on every downbeat
-    ribbon   a scrolling +/- 6 s window of the mix waveform along the bottom
+    lobes    three drifting pools of light, hues spread around the section's
+    trace    one thin zigzag line, deflecting with the amplitude
     grain    a few thousandths of noise, which is what stops the gradient banding
+
+Sensitive, and quiet with it. The envelopes are barely smoothed, so the picture
+answers the track within a frame or two of a transient - but every depth it
+drives is small, so what you see is a room breathing rather than anything
+flashing. Colour moves the same way: each section carries two palettes a few
+degrees and a little brightness apart, and the mix envelope slides between
+them.
 
 The lyrics are a fifth layer and libass draws them; see karaoke.py.
 
@@ -62,24 +67,26 @@ HUES = {
 #
 #   hue offset, saturation, value, half-width, half-height, x drift, y drift
 LOBES = (
-    (  0.0, 0.60, 0.88, 0.40, 0.30, (0.041, 0.017), (0.029, 0.011)),
-    ( 52.0, 0.72, 0.62, 0.26, 0.20, (0.023, 0.053), (0.037, 0.019)),
-    (-46.0, 0.66, 0.46, 0.62, 0.13, (0.013, 0.031), (0.007, 0.023)),
+    (  0.0, 0.52, 0.60, 0.42, 0.32, (0.041, 0.017), (0.029, 0.011)),
+    ( 46.0, 0.60, 0.40, 0.28, 0.21, (0.023, 0.053), (0.037, 0.019)),
+    (-40.0, 0.56, 0.30, 0.64, 0.14, (0.013, 0.031), (0.007, 0.023)),
 )
 
-# A bar is the largest unit you feel without counting, so it gets the largest
-# gesture: a wave of light leaving the centre on every downbeat and fading as it
-# goes. Everything else here breathes, and breathing alone reads as a wallpaper
-# with a slow animation on it.
-RING_LIFE = 1.15         # seconds from the downbeat to gone
-RING_REACH = 0.88        # far enough to leave the frame by every edge at once
-RING_WIDTH = 0.16        # how thick the band is
-RING_START = 0.18        # never starts at nothing: a ring of radius 0 is a flash
-RING_LIGHT = 0.34
+# How far the loud palette is from the quiet one. Small on purpose: the point is
+# that the colour is never quite still, not that it changes.
+HUE_LIFT = 14.0
+VALUE_LIFT = 1.30
 
-RIBBON_SECONDS = 6.0     # half-width of the scrolling waveform window
-RIBBON_BASE = 0.885      # its centre line, in fractions of frame height
-RIBBON_HEIGHT = 0.080    # peak deflection either side
+# One line. It zigzags where the song is, and lies flat where it is not - a
+# fixed span in the middle of the frame with the deflection tapering to nothing
+# before either edge, so it reads as an instrument rather than as a border.
+TRACE_BASE = 0.870       # the line's rest height, in fractions of frame height
+TRACE_HEIGHT = 0.062     # deflection at full amplitude
+TRACE_SPAN = 0.32        # half-width of the active part
+TRACE_TEETH = 30         # zigzag vertices across it
+TRACE_LAG = 0.060        # seconds between one tooth's sample and the next
+TRACE_WEIGHT = 1.9       # stroke, in pixels
+
 GRAIN = 0.010            # dither amplitude
 GRAIN_FIELDS = 8         # cycled so the noise moves instead of sitting still
 
@@ -106,26 +113,21 @@ def _palette(hue: float) -> np.ndarray:
     All of them dark. The words are white and they have to win, so the picture
     is lit from behind them rather than in front.
     """
-    rows = [_rgb(hue + 10, 0.85, 0.030), _rgb(hue - 10, 0.70, 0.105)]
+    rows = [_rgb(hue + 10, 0.85, 0.028), _rgb(hue - 10, 0.70, 0.095)]
     rows += [_rgb(hue + off, sat, val) for off, sat, val, *_ in LOBES]
-    rows.append(_rgb(hue - 22, 0.34, 1.00))      # the ring, close to white
+    rows.append(_rgb(hue - 20, 0.30, 0.95))      # the trace
     return np.stack(rows)
 
 
-def _running_max(values: np.ndarray, width: int) -> np.ndarray:
-    """Peak-hold over `width` samples.
+def _palettes(hue: float) -> np.ndarray:
+    """The quiet and loud versions of one section, stacked.
 
-    The ribbon resamples a 120 Hz envelope onto one column per pixel. Wherever a
-    column has to stand for more than one bucket, picking one and dropping the
-    rest means a transient lands in a column on one frame and between two
-    columns on the next, and the whole waveform crawls sideways. Holding the
-    peak over what each column covers means nothing can fall between them.
+    Two whole palettes rather than a hue shift applied at render time, because
+    the crossfade between sections has to interpolate colours and it is much
+    easier to be sure of that when there is only ever one kind of colour to
+    interpolate.
     """
-    if width <= 1 or values.size < width:
-        return values
-    pad = width // 2
-    padded = np.pad(values, (pad, width - 1 - pad), mode="edge")
-    return np.lib.stride_tricks.sliding_window_view(padded, width).max(axis=1)
+    return np.stack([_palette(hue), _palette(hue + HUE_LIFT) * VALUE_LIFT])
 
 
 def _envelope(peaks: list[float], rate: int, seconds: float) -> np.ndarray:
@@ -159,10 +161,12 @@ class Scene:
         self.duration = float(project.duration)
 
         self.rate = int(analysis.get("rate", 120))
-        self.mix = _envelope(analysis.get("mix_peaks", []), self.rate, 0.16)
-        self.voice = _envelope(analysis.get("vocal_peaks", []), self.rate, 0.10)
-        # Un-smoothed, for the ribbon: the whole point of it is the detail.
-        self.raw_mix = np.asarray(analysis.get("mix_peaks", [0.0]), dtype=np.float32)
+        # Barely smoothed. Long windows made the picture answer a bar late,
+        # which reads as decoration running alongside the song rather than as
+        # something the song is doing. Everything these drive is shallow, so
+        # the responsiveness costs no calm.
+        self.mix = _envelope(analysis.get("mix_peaks", []), self.rate, 0.05)
+        self.voice = _envelope(analysis.get("vocal_peaks", []), self.rate, 0.045)
 
         self._load_beats(beats)
         self._load_sections(project)
@@ -179,7 +183,6 @@ class Scene:
             self.beat_times = np.array([0.0, max(self.duration, 1.0)], dtype=np.float32)
             self.beat_gap = np.ones(2, dtype=np.float32)
             self.beat_weight = np.zeros(2, dtype=np.float32)
-            self.downbeats = np.zeros(0, dtype=np.float32)
             return
         self.beat_times = times
         self.beat_gap = np.diff(times, append=times[-1] + float(np.median(np.diff(times))))
@@ -191,8 +194,6 @@ class Scene:
         self.beat_weight = np.where((index - phase) % meter == 0, 1.0, 0.55).astype(
             np.float32
         )
-        downs = np.asarray(beats.get("downbeats", []), dtype=np.float32)
-        self.downbeats = downs if downs.size else times[phase::meter]
 
     def _load_sections(self, project: Project) -> None:
         """Where the colour changes, and to what.
@@ -202,7 +203,7 @@ class Scene:
         instead of a beat and a half after it.
         """
         self.section_at: list[float] = []
-        self.section_colour: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+        self.section_colour: list[np.ndarray] = []
 
         starts = {ln.index: ln.start for ln in project.lines if ln.end > ln.start}
         for section in project.sections:
@@ -212,11 +213,11 @@ class Scene:
             first = min(times)
             earlier = self.beat_times[self.beat_times <= first - 0.5]
             self.section_at.append(float(earlier[-1]) if earlier.size else first)
-            self.section_colour.append(_palette(_hue(section.name)))
+            self.section_colour.append(_palettes(_hue(section.name)))
 
         if not self.section_colour:
             self.section_at = [0.0]
-            self.section_colour = [_palette(HUES["verse"])]
+            self.section_colour = [_palettes(HUES["verse"])]
         # The intro belongs to whatever comes first; there is nothing else it
         # could belong to, and fading up from black would waste a verse of it.
         self.section_at[0] = 0.0
@@ -235,46 +236,44 @@ class Scene:
         # was already the most expensive thing in the frame.
         self.ax = (xs - 0.5) * aspect                     # (w,)
         self.ay = ys - 0.5                                # (h,)
-        # Lit toward the top, dark at the floor where the ribbon runs. Kept as
+        # Lit toward the top, dark at the floor where the trace runs. Kept as
         # a column and broadcast at use: the gradient is constant across a row,
         # so storing it width times over would be h*w floats of the same number.
         self.wash = ((1.0 - ys) ** 1.5)[:, None].astype(np.float32)
 
-        # Two squared-distance fields, and they are not the same shape. The
-        # vignette wants circles - it is a lens, and a lens does not know how
-        # wide the frame is. The ring wants the frame's own proportions, or it
-        # leaves by the top and bottom well before the sides and reads for half
-        # a second as two vertical walls sliding outward.
         radius = self.ax[None, :] ** 2 + self.ay[:, None] ** 2
-        self.vignette = (1.0 - 0.38 * np.clip(radius / 0.80, 0, 1) ** 1.3).astype(
+        self.vignette = (1.0 - 0.34 * np.clip(radius / 0.84, 0, 1) ** 1.3).astype(
             np.float32
         )
-        self.ring_radius = (
-            (self.ax[None, :] / aspect) ** 2 + self.ay[:, None] ** 2
-        ).astype(np.float32)
 
-        self.rib_y = ys[:, None]
-        # "Now" is the middle column, so brighten it and let the rest fall off.
-        self.rib_x = np.exp(-(((xs - 0.5) / 0.085) ** 2)).astype(np.float32)[None, :]
-        # Where in the mix envelope each ribbon column samples from, as an
-        # offset in seconds from the playhead.
-        self.rib_offsets = np.linspace(
-            -RIBBON_SECONDS, RIBBON_SECONDS, w, dtype=np.float32
+        # --- the trace
+        self.pixel_y = (ys * h)[:, None].astype(np.float32)
+        self.columns = xs * w
+        # Where each tooth sits, and how far its deflection is allowed to go.
+        # A raised cosine, so the zigzag grows out of the flat line and settles
+        # back into it rather than starting and stopping at a corner.
+        self.teeth_x = np.linspace(
+            0.5 - TRACE_SPAN, 0.5 + TRACE_SPAN, TRACE_TEETH, dtype=np.float32
         )
-        # Peak-held to whatever one column covers, then read back with linear
-        # interpolation: held so no transient can hide between two columns,
-        # interpolated so the shape slides smoothly instead of stepping a column
-        # at a time as the window scrolls.
-        per_column = self.rate * 2.0 * RIBBON_SECONDS / w
-        self.rib_track = _running_max(self.raw_mix, int(round(per_column)))
-        self.rib_index = np.arange(self.rib_track.size, dtype=np.float32)
+        taper = 0.5 - 0.5 * np.cos(
+            np.linspace(0.0, 2.0 * np.pi, TRACE_TEETH, dtype=np.float32)
+        )
+        # Alternating, which is what makes it a zigzag rather than a curve.
+        self.teeth_shape = (taper * np.where(np.arange(TRACE_TEETH) % 2, 1.0, -1.0)
+                            ).astype(np.float32)
+        # Each tooth reads the envelope a little further back than the one
+        # before it, so the shape ripples left to right instead of every tooth
+        # moving as one.
+        self.teeth_lag = (np.arange(TRACE_TEETH, dtype=np.float32)
+                          - TRACE_TEETH / 2.0) * TRACE_LAG
+        self.teeth_pixels = self.teeth_x * w
+        self.env_index = np.arange(self.mix.size, dtype=np.float32)
 
         # Reused every frame. At output resolution these are 2.6 MB apiece and
         # allocating them 8574 times is pure garbage-collector work.
         self._img = np.empty((h, w, 3), dtype=np.float32)
         self._lobe = np.empty((h, w), dtype=np.float32)
         self._tint = np.empty((h, w), dtype=np.float32)
-        self._ring = np.empty((h, w), dtype=np.float32)
 
         self._grain = 0
         rng = np.random.default_rng(0xB3A7)
@@ -298,26 +297,6 @@ class Scene:
         phase = (t - float(self.beat_times[i])) / gap
         return float(np.exp(-3.4 * phase)) * float(self.beat_weight[i])
 
-    def _wave(self, t: float) -> tuple[float, float]:
-        """The live ring as (squared radius it has reached, how bright it still is).
-
-        Only the most recent downbeat is drawn. Two overlapping rings read as
-        interference rather than as a pulse, and one is what a bar is.
-        """
-        if self.downbeats.size == 0:
-            return 0.0, 0.0
-        i = int(np.searchsorted(self.downbeats, t, side="right")) - 1
-        if i < 0:
-            return 0.0, 0.0
-        age = (t - float(self.downbeats[i])) / RING_LIFE
-        if age >= 1.0:
-            return 0.0, 0.0
-        # Out fast and slowing, the way a wavefront actually behaves, and gone
-        # before the next bar so two are never on screen together.
-        travel = RING_START + (1.0 - RING_START) * (1.0 - (1.0 - age) ** 2)
-        reach = RING_REACH * travel
-        return reach * reach, RING_LIGHT * (1.0 - age) ** 2
-
     def _colours(self, t: float) -> np.ndarray:
         """The section's colour rows at time t, crossfaded across the boundary."""
         i = 0
@@ -333,31 +312,46 @@ class Scene:
         previous, current = self.section_colour[i - 1], self.section_colour[i]
         return previous + (current - previous) * mix
 
-    def _ribbon(self, t: float) -> np.ndarray:
-        """Antialiased mask of the scrolling mix waveform. (h, w) in 0..1."""
-        seconds = t + self.rib_offsets
-        heights = np.interp(
-            seconds * self.rate, self.rib_index, self.rib_track
-        ).astype(np.float32) * RIBBON_HEIGHT
-        # Nothing sampled beyond the ends of the track: a ribbon that keeps
-        # drawing the last six seconds of audio reads as frozen, and np.interp
-        # holds its end values rather than running out.
-        live = (seconds >= 0.0) & (seconds <= self.rib_track.size / self.rate)
-        heights = np.where(live, heights, 0.0)[None, :]
-        distance = np.abs(self.rib_y - RIBBON_BASE)
-        # Scaled by frame height, so the edge is one pixel of ramp whatever the
-        # output size - the whole point of an antialiased edge is that it is a
-        # pixel wide, not a fixed fraction of the picture.
-        return np.clip((heights - distance) * self.h, 0.0, 1.0)
+    def _trace(self, t: float) -> np.ndarray:
+        """One thin zigzag line across the frame. (h, w) in 0..1.
+
+        Drawn as a stroke rather than a filled band, and fixed in place rather
+        than scrolling: the shape is the amplitude of the song right now, not
+        six seconds of its history sliding past.
+        """
+        teeth = np.interp(
+            (t + self.teeth_lag) * self.rate, self.env_index, self.mix
+        ).astype(np.float32)
+        deflection = teeth * self.teeth_shape * (TRACE_HEIGHT * self.h)
+        # The path, one y per pixel column, straight between teeth.
+        path = np.interp(self.columns, self.teeth_pixels, deflection).astype(np.float32)
+        path += TRACE_BASE * self.h
+
+        # A steep segment is longer than the column it crosses, so measuring the
+        # distance to it vertically would draw it thinner. Dividing by the slope
+        # term measures perpendicular instead, and the stroke keeps one weight
+        # all the way along.
+        slope = np.gradient(path)
+        weight = TRACE_WEIGHT * np.sqrt(1.0 + slope * slope)
+
+        stroke = np.abs(self.pixel_y - path[None, :])
+        stroke /= weight[None, :]
+        np.subtract(1.0, stroke, out=stroke)
+        return np.clip(stroke, 0.0, 1.0)
 
     # ------------------------------------------------------------- the frame
 
     def frame(self, t: float) -> np.ndarray:
-        palette = self._colours(t)
-        deep, mid, lobes, wave = palette[0], palette[1], palette[2:5], palette[5]
         voice = self._at(self.voice, t)
         energy = self._at(self.mix, t)
         pulse = self._pulse(t)
+
+        # Colour answers the mix directly. Sliding between two palettes a few
+        # degrees apart is what makes the room feel lit by the track rather
+        # than painted once per section.
+        quiet, loud = self._colours(t)
+        palette = quiet + (loud - quiet) * energy
+        deep, mid, lobes, trace = palette[0], palette[1], palette[2:5], palette[5]
 
         img, field, tint = self._img, self._lobe, self._tint
         # The floor, lifted toward the top. Written as a column and broadcast:
@@ -366,10 +360,10 @@ class Scene:
 
         # Each lobe drifts on two periods that share no common multiple, so the
         # field never visibly returns to an arrangement you have already seen.
-        # Sizes answer to the mix and the beat; brightness to the voice, which
-        # is why the picture opens where the words are.
-        breathe = 1.0 + 0.22 * energy + 0.30 * pulse
-        light = 0.50 + 0.26 * voice + 0.30 * pulse * (0.4 + 0.6 * energy)
+        # The depths are small deliberately - the envelopes underneath are
+        # barely smoothed, so a large depth on top of them would twitch.
+        breathe = 1.0 + 0.10 * energy + 0.07 * pulse
+        light = 0.72 + 0.16 * voice + 0.12 * pulse * (0.4 + 0.6 * energy)
         for (_, _, _, rx, ry, drift_x, drift_y), colour in zip(LOBES, lobes):
             cx = 0.30 * math.sin(t * drift_x[0] * TAU) + 0.13 * math.sin(t * drift_x[1] * TAU)
             cy = 0.20 * math.sin(t * drift_y[0] * TAU + 1.1) + 0.09 * math.sin(t * drift_y[1] * TAU)
@@ -380,25 +374,9 @@ class Scene:
                 np.multiply(field, colour[channel] * light, out=tint)
                 img[:, :, channel] += tint
 
-        edge, glow = self._wave(t)
-        if glow > 0.0:
-            # Worked in squared radius so there is no square root over every
-            # pixel: the band's width in r^2 grows with r, which is what keeps
-            # it an even thickness as it travels.
-            ring = self._ring
-            np.subtract(self.ring_radius, edge, out=ring)
-            ring *= 1.0 / max(RING_WIDTH * (2.0 * np.sqrt(edge) + RING_WIDTH), 1e-3)
-            np.multiply(ring, ring, out=ring)
-            np.negative(ring, out=ring)
-            np.exp(ring, out=ring)
-            for channel in range(3):
-                np.multiply(ring, wave[channel] * glow, out=tint)
-                img[:, :, channel] += tint
-
-        ribbon = self._ribbon(t)
-        ribbon *= 0.34 + 0.66 * self.rib_x
+        stroke = self._trace(t)
         for channel in range(3):
-            np.multiply(ribbon, mid[channel] * 3.4 + 0.42, out=tint)
+            np.multiply(stroke, trace[channel] * (0.55 + 0.38 * energy), out=tint)
             img[:, :, channel] += tint
 
         img *= self.vignette[:, :, None]
