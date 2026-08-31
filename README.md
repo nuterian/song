@@ -9,7 +9,12 @@ open-source models. No API keys, no uploads, no per-track cost.
 Built for AI-generated songs, where the lyrics are known exactly but the timing is
 not, and the end goal is burning synchronized captions into a video.
 
-**[How it works, in full →](https://jugalm.com/song/)**
+**[Try it in your browser →](https://jugalm.com/song/demo/)** · **[How it works, in full →](https://jugalm.com/song/)**
+
+The demo is the real app against a real aligned track. Everything edits — drag a
+line, drag a word boundary, run the guided check, hear both candidates for a
+disputed word and drag a third onto the waveform. Only writing to disk needs it
+running on your machine.
 
 ![The song timeline showing a whole track](docs/img/timeline-track.png)
 
@@ -128,6 +133,20 @@ word-timing invariants, word-to-line mapping, the export formats, and the
 missing-line thresholds — plus a guard that those modules stay importable with
 no third-party package present at all, which is what lets CI run them in
 seconds without installing anything.
+
+## The hosted demo
+
+`docs/demo/` is generated from a real workdir, never hand-copied, so it cannot
+drift from the app it claims to be a copy of:
+
+```bash
+python tools/build_demo.py workdir/my-track
+```
+
+It writes the project, the analysis payload the server would have sent, the
+cached audit, and the two audio previews re-encoded to 64 kbps mono. The page
+sets `window.SONG_STATIC`, which points the same `app.js` at those files instead
+of the API and turns off every action that would write.
 
 ## License
 

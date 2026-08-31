@@ -1,0 +1,1001 @@
+{
+ "n_words": 177,
+ "n_verified": 137,
+ "repairs": [],
+ "queue": [
+  {
+   "line": 32,
+   "word": 2,
+   "text": "motion...",
+   "context": "Gravity in \u2e24motion...\u2e25 still in motion.",
+   "current": 276.02,
+   "proposed": 267.202,
+   "delta": -8.817,
+   "reasons": [
+    "the two aligners disagree by 8.82s",
+    "this lands outside the line, so the whole line looks misplaced",
+    "the aligner was unsure it heard this word (13%)",
+    "no vocal attack within 460 ms of this start"
+   ],
+   "severity": 4,
+   "scope": "line"
+  },
+  {
+   "line": 32,
+   "word": 3,
+   "text": "still",
+   "context": "Gravity in motion... \u2e24still\u2e25 in motion.",
+   "current": 276.146,
+   "proposed": 268.142,
+   "delta": -8.004,
+   "reasons": [
+    "the two aligners disagree by 8.00s",
+    "this lands outside the line, so the whole line looks misplaced",
+    "the aligner was unsure it heard this word (0%)",
+    "no vocal attack within 334 ms of this start"
+   ],
+   "severity": 4,
+   "scope": "line"
+  },
+  {
+   "line": 32,
+   "word": 1,
+   "text": "in",
+   "context": "Gravity \u2e24in\u2e25 motion... still in motion.",
+   "current": 275.282,
+   "proposed": 265.982,
+   "delta": -9.3,
+   "reasons": [
+    "the two aligners disagree by 9.30s",
+    "the aligner was unsure it heard this word (0%)"
+   ],
+   "severity": 3,
+   "scope": "word"
+  },
+  {
+   "line": 19,
+   "word": 3,
+   "text": "in",
+   "context": "You're my gravity \u2e24in\u2e25 motion.",
+   "current": 169.81,
+   "proposed": 171.359,
+   "delta": 1.549,
+   "reasons": [
+    "the two aligners disagree by 1.55s",
+    "held for 2.0s, long for a 1-syllable word"
+   ],
+   "severity": 3,
+   "scope": "word"
+  },
+  {
+   "line": 27,
+   "word": 3,
+   "text": "in",
+   "context": "You're my gravity \u2e24in\u2e25 motion,",
+   "current": 231.496,
+   "proposed": 232.827,
+   "delta": 1.331,
+   "reasons": [
+    "the two aligners disagree by 1.33s",
+    "held for 1.7s, long for a 1-syllable word"
+   ],
+   "severity": 3,
+   "scope": "word"
+  },
+  {
+   "line": 5,
+   "word": 4,
+   "text": "emotion.",
+   "context": "Caught within this wild \u2e24emotion.\u2e25",
+   "current": 62.08,
+   "proposed": 60.986,
+   "delta": -1.093,
+   "reasons": [
+    "the two aligners disagree by 1.09s",
+    "the aligner was unsure it heard this word (8%)"
+   ],
+   "severity": 3,
+   "scope": "word"
+  },
+  {
+   "line": 31,
+   "word": 1,
+   "text": "my",
+   "context": "You're \u2e24my\u2e25 gravity in motion",
+   "current": 248.919,
+   "proposed": 249.578,
+   "delta": 0.659,
+   "reasons": [
+    "the two aligners disagree by 0.66s",
+    "this lands outside the line, so the whole line looks misplaced",
+    "the aligner was unsure it heard this word (1%)"
+   ],
+   "severity": 3,
+   "scope": "line"
+  },
+  {
+   "line": 31,
+   "word": 2,
+   "text": "gravity",
+   "context": "You're my \u2e24gravity\u2e25 in motion",
+   "current": 249.203,
+   "proposed": 249.819,
+   "delta": 0.615,
+   "reasons": [
+    "the two aligners disagree by 0.62s",
+    "the aligner was unsure it heard this word (23%)"
+   ],
+   "severity": 3,
+   "scope": "word"
+  },
+  {
+   "line": 31,
+   "word": 0,
+   "text": "You're",
+   "context": "\u2e24You're\u2e25 my gravity in motion",
+   "current": 248.736,
+   "proposed": 249.258,
+   "delta": 0.523,
+   "reasons": [
+    "the two aligners disagree by 0.52s",
+    "this lands outside the line, so the whole line looks misplaced",
+    "the aligner was unsure it heard this word (1%)"
+   ],
+   "severity": 3,
+   "scope": "line"
+  },
+  {
+   "line": 10,
+   "word": 0,
+   "text": "Silver",
+   "context": "\u2e24Silver\u2e25 lights trace across the floor,",
+   "current": 126.4,
+   "proposed": 126.883,
+   "delta": 0.483,
+   "reasons": [
+    "the two aligners disagree by 0.48s",
+    "the aligner was unsure it heard this word (2%)"
+   ],
+   "severity": 2,
+   "scope": "word"
+  },
+  {
+   "line": 3,
+   "word": 4,
+   "text": "beats",
+   "context": "Pulling me where the \u2e24beats\u2e25 collide.",
+   "current": 48.012,
+   "proposed": 47.694,
+   "delta": -0.318,
+   "reasons": [
+    "the two aligners disagree by 0.32s",
+    "no vocal attack within 332 ms of this start"
+   ],
+   "severity": 2,
+   "scope": "word"
+  },
+  {
+   "line": 32,
+   "word": 5,
+   "text": "motion.",
+   "context": "Gravity in motion... still in \u2e24motion.\u2e25",
+   "current": 276.398,
+   "proposed": 276.102,
+   "delta": -0.296,
+   "reasons": [
+    "the two aligners disagree by 0.30s",
+    "this lands outside the line, so the whole line looks misplaced",
+    "held for 1.7s, long for a 2-syllable word"
+   ],
+   "severity": 2,
+   "scope": "line"
+  },
+  {
+   "line": 23,
+   "word": 2,
+   "text": "orbit,",
+   "context": "In this \u2e24orbit,\u2e25 endlessly strong.",
+   "current": 199.758,
+   "proposed": 199.487,
+   "delta": -0.272,
+   "reasons": [
+    "the two aligners disagree by 0.27s",
+    "held for 2.1s, long for a 2-syllable word"
+   ],
+   "severity": 2,
+   "scope": "word"
+  },
+  {
+   "line": 16,
+   "word": 3,
+   "text": "in",
+   "context": "You're my gravity \u2e24in\u2e25 motion,",
+   "current": 158.397,
+   "proposed": 158.667,
+   "delta": 0.27,
+   "reasons": [
+    "the two aligners disagree by 0.27s",
+    "no vocal attack within 611 ms of this start"
+   ],
+   "severity": 2,
+   "scope": "word"
+  },
+  {
+   "line": 20,
+   "word": 3,
+   "text": "after",
+   "context": "In the silence \u2e24after\u2e25 heat,",
+   "current": 189.101,
+   "proposed": 189.371,
+   "delta": 0.27,
+   "reasons": [
+    "the two aligners disagree by 0.27s",
+    "the aligner was unsure it heard this word (8%)"
+   ],
+   "severity": 2,
+   "scope": "word"
+  },
+  {
+   "line": 0,
+   "word": 0,
+   "text": "Light",
+   "context": "\u2e24Light\u2e25 breaks through the skyline haze,",
+   "current": 34.496,
+   "proposed": 34.758,
+   "delta": 0.262,
+   "reasons": [
+    "the two aligners disagree by 0.26s",
+    "the aligner was unsure it heard this word (0%)"
+   ],
+   "severity": 2,
+   "scope": "word"
+  },
+  {
+   "line": 24,
+   "word": 3,
+   "text": "in",
+   "context": "You're my gravity \u2e24in\u2e25 motion,",
+   "current": 219.916,
+   "proposed": 219.659,
+   "delta": -0.257,
+   "reasons": [
+    "the two aligners disagree by 0.26s",
+    "no vocal attack within 340 ms of this start"
+   ],
+   "severity": 2,
+   "scope": "word"
+  },
+  {
+   "line": 15,
+   "word": 4,
+   "text": "emotion.",
+   "context": "We dissolve in pure \u2e24emotion.\u2e25",
+   "current": 153.182,
+   "proposed": 152.935,
+   "delta": -0.247,
+   "reasons": [
+    "the two aligners disagree by 0.25s",
+    "no vocal attack within 510 ms of this start"
+   ],
+   "severity": 2,
+   "scope": "word"
+  },
+  {
+   "line": 10,
+   "word": 5,
+   "text": "floor,",
+   "context": "Silver lights trace across the \u2e24floor,\u2e25",
+   "current": 129.647,
+   "proposed": 129.423,
+   "delta": -0.224,
+   "reasons": [
+    "the two aligners disagree by 0.22s",
+    "no vocal attack within 399 ms of this start"
+   ],
+   "severity": 2,
+   "scope": "word"
+  },
+  {
+   "line": 23,
+   "word": 3,
+   "text": "endlessly",
+   "context": "In this orbit, \u2e24endlessly\u2e25 strong.",
+   "current": 201.876,
+   "proposed": 201.387,
+   "delta": -0.489,
+   "reasons": [
+    "the two aligners disagree by 0.49s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 11,
+   "word": 0,
+   "text": "Shadow",
+   "context": "\u2e24Shadow\u2e25 dancers want something more,",
+   "current": 130.336,
+   "proposed": 130.719,
+   "delta": 0.382,
+   "reasons": [
+    "the two aligners disagree by 0.38s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 23,
+   "word": 1,
+   "text": "this",
+   "context": "In \u2e24this\u2e25 orbit, endlessly strong.",
+   "current": 199.258,
+   "proposed": 198.907,
+   "delta": -0.351,
+   "reasons": [
+    "the two aligners disagree by 0.35s",
+    "this lands outside the line, so the whole line looks misplaced"
+   ],
+   "severity": 1,
+   "scope": "line"
+  },
+  {
+   "line": 13,
+   "word": 5,
+   "text": "sound",
+   "context": "Lost and found in the \u2e24sound\u2e25 we draw.",
+   "current": 140.146,
+   "proposed": 139.831,
+   "delta": -0.315,
+   "reasons": [
+    "the two aligners disagree by 0.32s",
+    "this lands outside the line, so the whole line looks misplaced"
+   ],
+   "severity": 1,
+   "scope": "line"
+  },
+  {
+   "line": 23,
+   "word": 0,
+   "text": "In",
+   "context": "\u2e24In\u2e25 this orbit, endlessly strong.",
+   "current": 199.104,
+   "proposed": 198.807,
+   "delta": -0.297,
+   "reasons": [
+    "the two aligners disagree by 0.30s",
+    "this lands outside the line, so the whole line looks misplaced"
+   ],
+   "severity": 1,
+   "scope": "line"
+  },
+  {
+   "line": 18,
+   "word": 2,
+   "text": "is",
+   "context": "Every pulse \u2e24is\u2e25 pure emotion,",
+   "current": 165.244,
+   "proposed": 165.538,
+   "delta": 0.294,
+   "reasons": [
+    "the two aligners disagree by 0.29s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 13,
+   "word": 4,
+   "text": "the",
+   "context": "Lost and found in \u2e24the\u2e25 sound we draw.",
+   "current": 139.872,
+   "proposed": 139.59,
+   "delta": -0.282,
+   "reasons": [
+    "the two aligners disagree by 0.28s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 3,
+   "word": 0,
+   "text": "Pulling",
+   "context": "\u2e24Pulling\u2e25 me where the beats collide.",
+   "current": 46.272,
+   "proposed": 45.994,
+   "delta": -0.278,
+   "reasons": [
+    "the two aligners disagree by 0.28s",
+    "this lands outside the line, so the whole line looks misplaced"
+   ],
+   "severity": 1,
+   "scope": "line"
+  },
+  {
+   "line": 21,
+   "word": 3,
+   "text": "skip,",
+   "context": "Our hearts don't \u2e24skip,\u2e25 they just repeat,",
+   "current": 191.878,
+   "proposed": 191.611,
+   "delta": -0.267,
+   "reasons": [
+    "the two aligners disagree by 0.27s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 6,
+   "word": 0,
+   "text": "You're",
+   "context": "\u2e24You're\u2e25 my gravity in motion,",
+   "current": 64.544,
+   "proposed": 64.287,
+   "delta": -0.257,
+   "reasons": [
+    "the two aligners disagree by 0.26s",
+    "this lands outside the line, so the whole line looks misplaced"
+   ],
+   "severity": 1,
+   "scope": "line"
+  },
+  {
+   "line": 16,
+   "word": 0,
+   "text": "You're",
+   "context": "\u2e24You're\u2e25 my gravity in motion,",
+   "current": 156.704,
+   "proposed": 156.447,
+   "delta": -0.257,
+   "reasons": [
+    "the two aligners disagree by 0.26s",
+    "this lands outside the line, so the whole line looks misplaced"
+   ],
+   "severity": 1,
+   "scope": "line"
+  },
+  {
+   "line": 13,
+   "word": 2,
+   "text": "found",
+   "context": "Lost and \u2e24found\u2e25 in the sound we draw.",
+   "current": 139.11,
+   "proposed": 138.87,
+   "delta": -0.24,
+   "reasons": [
+    "the two aligners disagree by 0.24s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 2,
+   "word": 0,
+   "text": "Velvet",
+   "context": "\u2e24Velvet\u2e25 air and a spark inside",
+   "current": 42.672,
+   "proposed": 42.434,
+   "delta": -0.238,
+   "reasons": [
+    "the two aligners disagree by 0.24s",
+    "this lands outside the line, so the whole line looks misplaced"
+   ],
+   "severity": 1,
+   "scope": "line"
+  },
+  {
+   "line": 28,
+   "word": 2,
+   "text": "light",
+   "context": "When the \u2e24light\u2e25 fades into dawn,",
+   "current": 236.101,
+   "proposed": 235.867,
+   "delta": -0.234,
+   "reasons": [
+    "the two aligners disagree by 0.23s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 32,
+   "word": 4,
+   "text": "in",
+   "context": "Gravity in motion... still \u2e24in\u2e25 motion.",
+   "current": 276.272,
+   "proposed": 276.042,
+   "delta": -0.23,
+   "reasons": [
+    "the two aligners disagree by 0.23s",
+    "this lands outside the line, so the whole line looks misplaced"
+   ],
+   "severity": 1,
+   "scope": "line"
+  },
+  {
+   "line": 27,
+   "word": 1,
+   "text": "my",
+   "context": "You're \u2e24my\u2e25 gravity in motion,",
+   "current": 229.786,
+   "proposed": 230.006,
+   "delta": 0.22,
+   "reasons": [
+    "the two aligners disagree by 0.22s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 30,
+   "word": 2,
+   "text": "fire,",
+   "context": "Through the \u2e24fire,\u2e25 through devotion,",
+   "current": 243.709,
+   "proposed": 243.491,
+   "delta": -0.218,
+   "reasons": [
+    "the two aligners disagree by 0.22s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 0,
+   "word": 4,
+   "text": "skyline",
+   "context": "Light breaks through the \u2e24skyline\u2e25 haze,",
+   "current": 36.545,
+   "proposed": 36.339,
+   "delta": -0.206,
+   "reasons": [
+    "the two aligners disagree by 0.21s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 7,
+   "word": 0,
+   "text": "Spinning",
+   "context": "\u2e24Spinning\u2e25 worlds in slow explosion,",
+   "current": 67.808,
+   "proposed": 68.011,
+   "delta": 0.203,
+   "reasons": [
+    "the two aligners disagree by 0.20s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 20,
+   "word": 1,
+   "text": "the",
+   "context": "In \u2e24the\u2e25 silence after heat,",
+   "current": 187.65,
+   "proposed": 187.851,
+   "delta": 0.201,
+   "reasons": [
+    "the two aligners disagree by 0.20s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  },
+  {
+   "line": 19,
+   "word": 1,
+   "text": "my",
+   "context": "You're \u2e24my\u2e25 gravity in motion.",
+   "current": 168.399,
+   "proposed": 168.199,
+   "delta": -0.2,
+   "reasons": [
+    "the two aligners disagree by 0.20s"
+   ],
+   "severity": 1,
+   "scope": "word"
+  }
+ ],
+ "line_proposals": {
+  "0": {
+   "start": 34.758,
+   "end": 38.279,
+   "starts": [
+    34.758,
+    35.218,
+    35.699,
+    36.159,
+    36.339,
+    37.379
+   ]
+  },
+  "1": {
+   "start": 38.583,
+   "end": 42.543,
+   "starts": [
+    38.583,
+    39.023,
+    39.322,
+    39.903,
+    40.403,
+    41.203
+   ]
+  },
+  "2": {
+   "start": 42.434,
+   "end": 45.534,
+   "starts": [
+    42.434,
+    43.254,
+    43.694,
+    43.894,
+    43.994,
+    44.674
+   ]
+  },
+  "3": {
+   "start": 45.994,
+   "end": 49.255,
+   "starts": [
+    45.994,
+    46.494,
+    46.774,
+    47.454,
+    47.694,
+    48.394
+   ]
+  },
+  "4": {
+   "start": 51.142,
+   "end": 54.422,
+   "starts": [
+    51.142,
+    51.542,
+    52.262,
+    53.242
+   ]
+  },
+  "5": {
+   "start": 58.687,
+   "end": 62.107,
+   "starts": [
+    58.687,
+    59.246,
+    59.706,
+    60.166,
+    60.986
+   ]
+  },
+  "6": {
+   "start": 64.287,
+   "end": 67.727,
+   "starts": [
+    64.287,
+    64.526,
+    64.987,
+    66.487,
+    66.907
+   ]
+  },
+  "7": {
+   "start": 68.011,
+   "end": 71.451,
+   "starts": [
+    68.011,
+    68.831,
+    69.411,
+    69.691,
+    70.391
+   ]
+  },
+  "8": {
+   "start": 72.019,
+   "end": 75.299,
+   "starts": [
+    72.019,
+    72.619,
+    73.339,
+    73.599,
+    74.339
+   ]
+  },
+  "9": {
+   "start": 75.819,
+   "end": 80.379,
+   "starts": [
+    75.819,
+    76.038,
+    76.519,
+    79.219,
+    79.579
+   ]
+  },
+  "10": {
+   "start": 126.883,
+   "end": 129.963,
+   "starts": [
+    126.883,
+    127.543,
+    128.043,
+    128.423,
+    129.083,
+    129.423
+   ]
+  },
+  "11": {
+   "start": 130.719,
+   "end": 134.679,
+   "starts": [
+    130.719,
+    131.439,
+    131.979,
+    132.379,
+    133.359
+   ]
+  },
+  "12": {
+   "start": 134.655,
+   "end": 137.555,
+   "starts": [
+    134.655,
+    135.256,
+    135.775,
+    136.115,
+    137.196
+   ]
+  },
+  "13": {
+   "start": 138.171,
+   "end": 141.191,
+   "starts": [
+    138.171,
+    138.691,
+    138.87,
+    139.47,
+    139.59,
+    139.831,
+    140.37,
+    140.791
+   ]
+  },
+  "14": {
+   "start": 143.202,
+   "end": 146.683,
+   "starts": [
+    143.202,
+    143.702,
+    144.382,
+    144.642,
+    145.422
+   ]
+  },
+  "15": {
+   "start": 150.855,
+   "end": 154.455,
+   "starts": [
+    150.855,
+    151.155,
+    152.075,
+    152.275,
+    152.935
+   ]
+  },
+  "16": {
+   "start": 156.447,
+   "end": 160.327,
+   "starts": [
+    156.447,
+    156.927,
+    157.127,
+    158.667,
+    159.047
+   ]
+  },
+  "17": {
+   "start": 160.102,
+   "end": 163.662,
+   "starts": [
+    160.102,
+    160.963,
+    161.562,
+    161.882,
+    162.523
+   ]
+  },
+  "18": {
+   "start": 164.179,
+   "end": 167.478,
+   "starts": [
+    164.179,
+    164.779,
+    165.538,
+    165.758,
+    166.439
+   ]
+  },
+  "19": {
+   "start": 167.959,
+   "end": 172.579,
+   "starts": [
+    167.959,
+    168.199,
+    168.679,
+    171.359,
+    171.759
+   ]
+  },
+  "20": {
+   "start": 187.451,
+   "end": 190.951,
+   "starts": [
+    187.451,
+    187.851,
+    188.231,
+    189.371,
+    189.77
+   ]
+  },
+  "21": {
+   "start": 190.831,
+   "end": 194.951,
+   "starts": [
+    190.831,
+    190.99,
+    191.35,
+    191.611,
+    192.65,
+    192.87,
+    193.21
+   ]
+  },
+  "22": {
+   "start": 194.758,
+   "end": 198.859,
+   "starts": [
+    194.758,
+    195.538,
+    196.478,
+    196.639,
+    196.999
+   ]
+  },
+  "23": {
+   "start": 198.807,
+   "end": 203.307,
+   "starts": [
+    198.807,
+    198.907,
+    199.487,
+    201.387,
+    202.447
+   ]
+  },
+  "24": {
+   "start": 217.858,
+   "end": 221.779,
+   "starts": [
+    217.858,
+    218.099,
+    218.578,
+    219.659,
+    220.478
+   ]
+  },
+  "25": {
+   "start": 221.555,
+   "end": 225.095,
+   "starts": [
+    221.555,
+    222.395,
+    223.015,
+    223.335,
+    223.975
+   ]
+  },
+  "26": {
+   "start": 225.619,
+   "end": 228.918,
+   "starts": [
+    225.619,
+    226.219,
+    226.839,
+    227.198,
+    227.859
+   ]
+  },
+  "27": {
+   "start": 229.367,
+   "end": 234.026,
+   "starts": [
+    229.367,
+    230.006,
+    230.126,
+    232.827,
+    233.167
+   ]
+  },
+  "28": {
+   "start": 235.347,
+   "end": 238.327,
+   "starts": [
+    235.347,
+    235.647,
+    235.867,
+    236.307,
+    236.907,
+    237.767
+   ]
+  },
+  "29": {
+   "start": 239.147,
+   "end": 242.187,
+   "starts": [
+    239.147,
+    239.527,
+    240.027,
+    240.627,
+    241.167,
+    241.747
+   ]
+  },
+  "30": {
+   "start": 243.011,
+   "end": 246.111,
+   "starts": [
+    243.011,
+    243.271,
+    243.491,
+    244.471,
+    244.971
+   ]
+  },
+  "31": {
+   "start": 249.258,
+   "end": 253.198,
+   "starts": [
+    249.258,
+    249.578,
+    249.819,
+    251.999,
+    252.379
+   ]
+  },
+  "32": {
+   "start": 264.642,
+   "end": 277.542,
+   "starts": [
+    264.642,
+    265.982,
+    267.202,
+    268.142,
+    276.042,
+    276.102
+   ]
+  }
+ },
+ "additions": [
+  {
+   "id": "90.25",
+   "after_line": 9,
+   "section": 2,
+   "start": 90.252,
+   "end": 95.972,
+   "text": "You're my gravity in motion,",
+   "like_line": 6,
+   "repeats": 7,
+   "heard": "You're my gravity in motion",
+   "confidence": 0.892,
+   "match": 1.0,
+   "starts": [
+    90.252,
+    91.652,
+    91.952,
+    93.452,
+    95.172
+   ],
+   "dismissed": false
+  }
+ ]
+}

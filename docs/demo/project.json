@@ -1,0 +1,2682 @@
+{
+  "version": 1,
+  "audio_path": "data/Gravity in Motion.wav",
+  "lyrics_path": "data/lyrics.txt",
+  "duration": 285.8,
+  "workdir": "workdir/gravity-in-motion",
+  "stem_path": "workdir/gravity-in-motion/vocals.wav",
+  "sections": [
+    {
+      "index": 0,
+      "name": "Verse 1",
+      "note": "8 bars, pulsing bass + filtered synth pad",
+      "raw": "Verse 1 (8 bars, pulsing bass + filtered synth pad)",
+      "line_indices": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "index": 1,
+      "name": "Pre-Chorus",
+      "note": "4 bars, hi-hat lift + airy vocal",
+      "raw": "Pre-Chorus (4 bars, hi-hat lift + airy vocal)",
+      "line_indices": [
+        4,
+        5
+      ]
+    },
+    {
+      "index": 2,
+      "name": "Chorus",
+      "note": "8 bars, full drop + lead synth",
+      "raw": "Chorus (8 bars, full drop + lead synth)",
+      "line_indices": [
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "index": 3,
+      "name": "Verse 2",
+      "note": "8 bars, low arps + tight kick groove",
+      "raw": "Verse 2 (8 bars, low arps + tight kick groove)",
+      "line_indices": [
+        10,
+        11,
+        12,
+        13
+      ]
+    },
+    {
+      "index": 4,
+      "name": "Pre-Chorus",
+      "note": "4 bars, filter sweep + vocal stack build",
+      "raw": "Pre-Chorus (4 bars, filter sweep + vocal stack build)",
+      "line_indices": [
+        14,
+        15
+      ]
+    },
+    {
+      "index": 5,
+      "name": "Chorus",
+      "note": "8 bars, sidechain pads + deep female lead",
+      "raw": "Chorus (8 bars, sidechain pads + deep female lead)",
+      "line_indices": [
+        16,
+        17,
+        18,
+        19
+      ]
+    },
+    {
+      "index": 6,
+      "name": "Bridge",
+      "note": "8 bars, half-time drop + reverb tail",
+      "raw": "Bridge (8 bars, half-time drop + reverb tail)",
+      "line_indices": [
+        20,
+        21,
+        22,
+        23
+      ]
+    },
+    {
+      "index": 7,
+      "name": "Final Chorus",
+      "note": "16 bars, layered harmonies + bright lead",
+      "raw": "Final Chorus (16 bars, layered harmonies + bright lead)",
+      "line_indices": [
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "index": 8,
+      "name": "Outro",
+      "note": "4 bars, delayed vocal chop + fade",
+      "raw": "Outro (4 bars, delayed vocal chop + fade)",
+      "line_indices": [
+        32
+      ]
+    }
+  ],
+  "lines": [
+    {
+      "index": 0,
+      "section": 0,
+      "text": "Light breaks through the skyline haze,",
+      "start": 34.496,
+      "end": 38.272,
+      "words": [
+        {
+          "text": "Light",
+          "start": 34.496,
+          "end": 35.099,
+          "prob": 0.0047
+        },
+        {
+          "text": "breaks",
+          "start": 35.099,
+          "end": 35.661,
+          "prob": 0.9803
+        },
+        {
+          "text": "through",
+          "start": 35.661,
+          "end": 36.224,
+          "prob": 0.9746
+        },
+        {
+          "text": "the",
+          "start": 36.224,
+          "end": 36.545,
+          "prob": 0.9791
+        },
+        {
+          "text": "skyline",
+          "start": 36.545,
+          "end": 37.389,
+          "prob": 0.9732
+        },
+        {
+          "text": "haze,",
+          "start": 37.389,
+          "end": 38.272,
+          "prob": 0.5667
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 97.4,
+        "components": {
+          "agreement": 0.914,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.59,
+        "prob": 0.746,
+        "delta_start": 0.24,
+        "delta_end": 0.001,
+        "issues": []
+      }
+    },
+    {
+      "index": 1,
+      "section": 0,
+      "text": "Feet find rhythm in endless maze,",
+      "start": 38.56,
+      "end": 42.672,
+      "words": [
+        {
+          "text": "Feet",
+          "start": 38.56,
+          "end": 39.142,
+          "prob": 0.7145
+        },
+        {
+          "text": "find",
+          "start": 39.142,
+          "end": 39.302,
+          "prob": 0.9499
+        },
+        {
+          "text": "rhythm",
+          "start": 39.302,
+          "end": 39.864,
+          "prob": 0.9715
+        },
+        {
+          "text": "in",
+          "start": 39.864,
+          "end": 40.506,
+          "prob": 0.9843
+        },
+        {
+          "text": "endless",
+          "start": 40.506,
+          "end": 41.148,
+          "prob": 0.8469
+        },
+        {
+          "text": "maze,",
+          "start": 41.148,
+          "end": 42.672,
+          "prob": 0.8888
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.46,
+        "prob": 0.893,
+        "delta_start": 0.0,
+        "delta_end": 0.519,
+        "issues": []
+      }
+    },
+    {
+      "index": 2,
+      "section": 0,
+      "text": "Velvet air and a spark inside,",
+      "start": 42.672,
+      "end": 45.553,
+      "words": [
+        {
+          "text": "Velvet",
+          "start": 42.672,
+          "end": 43.429,
+          "prob": 0.4429
+        },
+        {
+          "text": "air",
+          "start": 43.429,
+          "end": 43.836,
+          "prob": 0.3754
+        },
+        {
+          "text": "and",
+          "start": 43.836,
+          "end": 44.02,
+          "prob": 0.4972
+        },
+        {
+          "text": "a",
+          "start": 44.02,
+          "end": 44.112,
+          "prob": 0.4052
+        },
+        {
+          "text": "spark",
+          "start": 44.112,
+          "end": 44.74,
+          "prob": 0.9392
+        },
+        {
+          "text": "inside",
+          "start": 44.74,
+          "end": 45.553,
+          "prob": 0.9185
+        }
+      ],
+      "source": "ctc",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 88.2,
+        "components": {
+          "agreement": 0.61,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 0.993
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.08,
+        "density": 2.08,
+        "prob": 0.596,
+        "delta_start": 0.56,
+        "delta_end": 0.139,
+        "issues": []
+      }
+    },
+    {
+      "index": 3,
+      "section": 0,
+      "text": "Pulling me where the beats collide.",
+      "start": 46.272,
+      "end": 49.733,
+      "words": [
+        {
+          "text": "Pulling",
+          "start": 46.272,
+          "end": 46.687,
+          "prob": 0.9474
+        },
+        {
+          "text": "me",
+          "start": 46.687,
+          "end": 46.905,
+          "prob": 0.9979
+        },
+        {
+          "text": "where",
+          "start": 46.905,
+          "end": 47.478,
+          "prob": 0.9911
+        },
+        {
+          "text": "the",
+          "start": 47.478,
+          "end": 48.012,
+          "prob": 0.9915
+        },
+        {
+          "text": "beats",
+          "start": 48.012,
+          "end": 48.368,
+          "prob": 0.8517
+        },
+        {
+          "text": "collide.",
+          "start": 48.368,
+          "end": 49.733,
+          "prob": 0.6329
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 97.4,
+        "components": {
+          "agreement": 0.913,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.73,
+        "prob": 0.902,
+        "delta_start": 0.241,
+        "delta_end": 1.14,
+        "issues": []
+      }
+    },
+    {
+      "index": 4,
+      "section": 1,
+      "text": "Every breath becomes devotion,",
+      "start": 51.04,
+      "end": 54.513,
+      "words": [
+        {
+          "text": "Every",
+          "start": 51.04,
+          "end": 51.559,
+          "prob": 0.0248
+        },
+        {
+          "text": "breath",
+          "start": 51.559,
+          "end": 52.317,
+          "prob": 0.9276
+        },
+        {
+          "text": "becomes",
+          "start": 52.317,
+          "end": 53.275,
+          "prob": 0.9653
+        },
+        {
+          "text": "devotion,",
+          "start": 53.275,
+          "end": 54.513,
+          "prob": 0.5038
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 95.7,
+        "components": {
+          "agreement": 0.857,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.15,
+        "prob": 0.605,
+        "delta_start": 0.3,
+        "delta_end": 0.1,
+        "issues": []
+      }
+    },
+    {
+      "index": 5,
+      "section": 1,
+      "text": "Caught within this wild emotion.",
+      "start": 58.624,
+      "end": 62.203,
+      "words": [
+        {
+          "text": "Caught",
+          "start": 58.624,
+          "end": 59.124,
+          "prob": 0.4396
+        },
+        {
+          "text": "within",
+          "start": 59.124,
+          "end": 59.654,
+          "prob": 0.9705
+        },
+        {
+          "text": "this",
+          "start": 59.654,
+          "end": 60.347,
+          "prob": 0.9777
+        },
+        {
+          "text": "wild",
+          "start": 60.347,
+          "end": 62.08,
+          "prob": 0.9875
+        },
+        {
+          "text": "emotion.",
+          "start": 62.08,
+          "end": 62.203,
+          "prob": 0.0771
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": true,
+      "score": {
+        "total": 66.6,
+        "components": {
+          "agreement": 0.0,
+          "roundtrip": 0.847,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.4,
+        "prob": 0.69,
+        "delta_start": 4.04,
+        "delta_end": 0.11,
+        "issues": [
+          "ctc disagrees by 4.04s at start"
+        ]
+      }
+    },
+    {
+      "index": 6,
+      "section": 2,
+      "text": "You're my gravity in motion,",
+      "start": 64.544,
+      "end": 67.733,
+      "words": [
+        {
+          "text": "You're",
+          "start": 64.544,
+          "end": 64.623,
+          "prob": 0.4471
+        },
+        {
+          "text": "my",
+          "start": 64.623,
+          "end": 65.036,
+          "prob": 0.9506
+        },
+        {
+          "text": "gravity",
+          "start": 65.036,
+          "end": 66.315,
+          "prob": 0.9645
+        },
+        {
+          "text": "in",
+          "start": 66.315,
+          "end": 67.063,
+          "prob": 0.9003
+        },
+        {
+          "text": "motion,",
+          "start": 67.063,
+          "end": 67.733,
+          "prob": 0.5702
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 97.4,
+        "components": {
+          "agreement": 0.914,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.57,
+        "prob": 0.767,
+        "delta_start": 0.24,
+        "delta_end": 0.061,
+        "issues": []
+      }
+    },
+    {
+      "index": 7,
+      "section": 2,
+      "text": "Spinning worlds in slow explosion,",
+      "start": 67.808,
+      "end": 71.812,
+      "words": [
+        {
+          "text": "Spinning",
+          "start": 67.808,
+          "end": 69.025,
+          "prob": 0.5687
+        },
+        {
+          "text": "worlds",
+          "start": 69.025,
+          "end": 69.457,
+          "prob": 0.8425
+        },
+        {
+          "text": "in",
+          "start": 69.457,
+          "end": 69.81,
+          "prob": 0.9776
+        },
+        {
+          "text": "slow",
+          "start": 69.81,
+          "end": 70.438,
+          "prob": 0.9927
+        },
+        {
+          "text": "explosion,",
+          "start": 70.438,
+          "end": 71.812,
+          "prob": 0.7452
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 97.5,
+        "components": {
+          "agreement": 0.915,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.25,
+        "prob": 0.825,
+        "delta_start": 0.239,
+        "delta_end": 0.34,
+        "issues": []
+      }
+    },
+    {
+      "index": 8,
+      "section": 2,
+      "text": "Every pulse is pure emotion,",
+      "start": 71.936,
+      "end": 75.672,
+      "words": [
+        {
+          "text": "Every",
+          "start": 71.936,
+          "end": 72.586,
+          "prob": 0.9703
+        },
+        {
+          "text": "pulse",
+          "start": 72.586,
+          "end": 73.154,
+          "prob": 0.9952
+        },
+        {
+          "text": "is",
+          "start": 73.154,
+          "end": 73.621,
+          "prob": 0.9943
+        },
+        {
+          "text": "pure",
+          "start": 73.621,
+          "end": 74.312,
+          "prob": 0.9891
+        },
+        {
+          "text": "emotion,",
+          "start": 74.312,
+          "end": 75.672,
+          "prob": 0.9338
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.34,
+        "prob": 0.977,
+        "delta_start": 0.021,
+        "delta_end": 0.319,
+        "issues": []
+      }
+    },
+    {
+      "index": 9,
+      "section": 2,
+      "text": "You're my gravity in motion.",
+      "start": 75.776,
+      "end": 80.552,
+      "words": [
+        {
+          "text": "You're",
+          "start": 75.776,
+          "end": 76.177,
+          "prob": 0.9905
+        },
+        {
+          "text": "my",
+          "start": 76.177,
+          "end": 76.579,
+          "prob": 0.9955
+        },
+        {
+          "text": "gravity",
+          "start": 76.579,
+          "end": 79.128,
+          "prob": 0.9955
+        },
+        {
+          "text": "in",
+          "start": 79.128,
+          "end": 79.649,
+          "prob": 0.4846
+        },
+        {
+          "text": "motion.",
+          "start": 79.649,
+          "end": 80.552,
+          "prob": 0.6413
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 0.958,
+        "onset_distance": 0.0,
+        "density": 1.05,
+        "prob": 0.821,
+        "delta_start": 0.02,
+        "delta_end": 15.22,
+        "issues": []
+      }
+    },
+    {
+      "index": 10,
+      "section": 3,
+      "text": "Silver lights trace across the floor,",
+      "start": 126.4,
+      "end": 130.312,
+      "words": [
+        {
+          "text": "Silver",
+          "start": 126.4,
+          "end": 127.509,
+          "prob": 0.016
+        },
+        {
+          "text": "lights",
+          "start": 127.509,
+          "end": 128.094,
+          "prob": 0.5681
+        },
+        {
+          "text": "trace",
+          "start": 128.094,
+          "end": 128.437,
+          "prob": 0.9454
+        },
+        {
+          "text": "across",
+          "start": 128.437,
+          "end": 129.062,
+          "prob": 0.9948
+        },
+        {
+          "text": "the",
+          "start": 129.062,
+          "end": 129.647,
+          "prob": 0.9972
+        },
+        {
+          "text": "floor,",
+          "start": 129.647,
+          "end": 130.312,
+          "prob": 0.6132
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 91.7,
+        "components": {
+          "agreement": 0.724,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.53,
+        "prob": 0.689,
+        "delta_start": 0.44,
+        "delta_end": 0.379,
+        "issues": []
+      }
+    },
+    {
+      "index": 11,
+      "section": 3,
+      "text": "Shadow dancers want something more,",
+      "start": 130.336,
+      "end": 134.773,
+      "words": [
+        {
+          "text": "Shadow",
+          "start": 130.336,
+          "end": 131.43,
+          "prob": 0.4185
+        },
+        {
+          "text": "dancers",
+          "start": 131.43,
+          "end": 131.947,
+          "prob": 0.9644
+        },
+        {
+          "text": "want",
+          "start": 131.947,
+          "end": 132.445,
+          "prob": 0.9905
+        },
+        {
+          "text": "something",
+          "start": 132.445,
+          "end": 133.161,
+          "prob": 0.8803
+        },
+        {
+          "text": "more,",
+          "start": 133.161,
+          "end": 134.773,
+          "prob": 0.878
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 92.3,
+        "components": {
+          "agreement": 0.743,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.13,
+        "prob": 0.826,
+        "delta_start": 0.42,
+        "delta_end": 0.9,
+        "issues": []
+      }
+    },
+    {
+      "index": 12,
+      "section": 3,
+      "text": "Every glance feels electric, raw,",
+      "start": 134.773,
+      "end": 137.572,
+      "words": [
+        {
+          "text": "Every",
+          "start": 134.773,
+          "end": 135.348,
+          "prob": 0.843
+        },
+        {
+          "text": "glance",
+          "start": 135.348,
+          "end": 135.846,
+          "prob": 0.425
+        },
+        {
+          "text": "feels",
+          "start": 135.846,
+          "end": 136.153,
+          "prob": 0.4392
+        },
+        {
+          "text": "electric",
+          "start": 136.153,
+          "end": 137.208,
+          "prob": 0.8831
+        },
+        {
+          "text": "raw",
+          "start": 137.208,
+          "end": 137.572,
+          "prob": 0.3833
+        }
+      ],
+      "source": "ctc",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 95.6,
+        "components": {
+          "agreement": 0.857,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 0.99
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.053,
+        "density": 1.79,
+        "prob": 0.595,
+        "delta_start": 0.3,
+        "delta_end": 0.72,
+        "issues": []
+      }
+    },
+    {
+      "index": 13,
+      "section": 3,
+      "text": "Lost and found in the sound we draw.",
+      "start": 138.368,
+      "end": 141.532,
+      "words": [
+        {
+          "text": "Lost",
+          "start": 138.368,
+          "end": 138.759,
+          "prob": 0.9857
+        },
+        {
+          "text": "and",
+          "start": 138.759,
+          "end": 139.11,
+          "prob": 0.948
+        },
+        {
+          "text": "found",
+          "start": 139.11,
+          "end": 139.481,
+          "prob": 0.9968
+        },
+        {
+          "text": "in",
+          "start": 139.481,
+          "end": 139.872,
+          "prob": 0.8626
+        },
+        {
+          "text": "the",
+          "start": 139.872,
+          "end": 140.146,
+          "prob": 0.9681
+        },
+        {
+          "text": "sound",
+          "start": 140.146,
+          "end": 140.439,
+          "prob": 0.991
+        },
+        {
+          "text": "we",
+          "start": 140.439,
+          "end": 140.966,
+          "prob": 0.9621
+        },
+        {
+          "text": "draw.",
+          "start": 140.966,
+          "end": 141.532,
+          "prob": 0.6458
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 2.53,
+        "prob": 0.92,
+        "delta_start": 0.119,
+        "delta_end": 0.3,
+        "issues": []
+      }
+    },
+    {
+      "index": 14,
+      "section": 4,
+      "text": "Bodies close, the night's devotion,",
+      "start": 143.2,
+      "end": 146.653,
+      "words": [
+        {
+          "text": "Bodies",
+          "start": 143.2,
+          "end": 143.682,
+          "prob": 0.3618
+        },
+        {
+          "text": "close",
+          "start": 143.682,
+          "end": 144.424,
+          "prob": 0.6625
+        },
+        {
+          "text": "the",
+          "start": 144.424,
+          "end": 144.645,
+          "prob": 0.0776
+        },
+        {
+          "text": "night's",
+          "start": 144.645,
+          "end": 145.408,
+          "prob": 0.2655
+        },
+        {
+          "text": "devotion",
+          "start": 145.408,
+          "end": 146.653,
+          "prob": 0.6621
+        }
+      ],
+      "source": "ctc",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 97.2,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 0.647
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.45,
+        "prob": 0.406,
+        "delta_start": 0.04,
+        "delta_end": 3.599,
+        "issues": []
+      }
+    },
+    {
+      "index": 15,
+      "section": 4,
+      "text": "We dissolve in pure emotion.",
+      "start": 150.752,
+      "end": 155.733,
+      "words": [
+        {
+          "text": "We",
+          "start": 150.752,
+          "end": 151.056,
+          "prob": 0.0166
+        },
+        {
+          "text": "dissolve",
+          "start": 151.056,
+          "end": 151.947,
+          "prob": 0.0132
+        },
+        {
+          "text": "in",
+          "start": 151.947,
+          "end": 152.432,
+          "prob": 0.9016
+        },
+        {
+          "text": "pure",
+          "start": 152.432,
+          "end": 153.182,
+          "prob": 0.9589
+        },
+        {
+          "text": "emotion.",
+          "start": 153.182,
+          "end": 155.733,
+          "prob": 0.5748
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 98.4,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 0.805
+        },
+        "coverage": 0.994,
+        "onset_distance": 0.0,
+        "density": 1.0,
+        "prob": 0.493,
+        "delta_start": 0.061,
+        "delta_end": 1.34,
+        "issues": []
+      }
+    },
+    {
+      "index": 16,
+      "section": 5,
+      "text": "You're my gravity in motion,",
+      "start": 156.704,
+      "end": 159.993,
+      "words": [
+        {
+          "text": "You're",
+          "start": 156.704,
+          "end": 156.862,
+          "prob": 0.4717
+        },
+        {
+          "text": "my",
+          "start": 156.862,
+          "end": 157.216,
+          "prob": 0.9714
+        },
+        {
+          "text": "gravity",
+          "start": 157.216,
+          "end": 158.397,
+          "prob": 0.9731
+        },
+        {
+          "text": "in",
+          "start": 158.397,
+          "end": 159.244,
+          "prob": 0.9052
+        },
+        {
+          "text": "motion,",
+          "start": 159.244,
+          "end": 159.993,
+          "prob": 0.5663
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 97.4,
+        "components": {
+          "agreement": 0.913,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.52,
+        "prob": 0.778,
+        "delta_start": 0.241,
+        "delta_end": 0.081,
+        "issues": []
+      }
+    },
+    {
+      "index": 17,
+      "section": 5,
+      "text": "Spinning worlds in slow explosion,",
+      "start": 160.0,
+      "end": 164.032,
+      "words": [
+        {
+          "text": "Spinning",
+          "start": 160.0,
+          "end": 161.158,
+          "prob": 0.5763
+        },
+        {
+          "text": "worlds",
+          "start": 161.158,
+          "end": 161.597,
+          "prob": 0.2103
+        },
+        {
+          "text": "in",
+          "start": 161.597,
+          "end": 161.936,
+          "prob": 0.9765
+        },
+        {
+          "text": "slow",
+          "start": 161.936,
+          "end": 162.535,
+          "prob": 0.9898
+        },
+        {
+          "text": "explosion,",
+          "start": 162.535,
+          "end": 164.032,
+          "prob": 0.7781
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.24,
+        "prob": 0.706,
+        "delta_start": 0.12,
+        "delta_end": 0.379,
+        "issues": []
+      }
+    },
+    {
+      "index": 18,
+      "section": 5,
+      "text": "Every pulse is pure emotion,",
+      "start": 164.096,
+      "end": 167.832,
+      "words": [
+        {
+          "text": "Every",
+          "start": 164.096,
+          "end": 164.66,
+          "prob": 0.9777
+        },
+        {
+          "text": "pulse",
+          "start": 164.66,
+          "end": 165.244,
+          "prob": 0.994
+        },
+        {
+          "text": "is",
+          "start": 165.244,
+          "end": 165.766,
+          "prob": 0.9948
+        },
+        {
+          "text": "pure",
+          "start": 165.766,
+          "end": 166.455,
+          "prob": 0.9962
+        },
+        {
+          "text": "emotion,",
+          "start": 166.455,
+          "end": 167.832,
+          "prob": 0.872
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.34,
+        "prob": 0.967,
+        "delta_start": 0.079,
+        "delta_end": 0.339,
+        "issues": []
+      }
+    },
+    {
+      "index": 19,
+      "section": 5,
+      "text": "You're my gravity in motion.",
+      "start": 167.936,
+      "end": 172.812,
+      "words": [
+        {
+          "text": "You're",
+          "start": 167.936,
+          "end": 168.399,
+          "prob": 0.9921
+        },
+        {
+          "text": "my",
+          "start": 168.399,
+          "end": 168.722,
+          "prob": 0.9964
+        },
+        {
+          "text": "gravity",
+          "start": 168.722,
+          "end": 169.81,
+          "prob": 0.9966
+        },
+        {
+          "text": "in",
+          "start": 169.81,
+          "end": 171.805,
+          "prob": 0.4921
+        },
+        {
+          "text": "motion.",
+          "start": 171.805,
+          "end": 172.812,
+          "prob": 0.5767
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.03,
+        "prob": 0.811,
+        "delta_start": 0.0,
+        "delta_end": 0.259,
+        "issues": []
+      }
+    },
+    {
+      "index": 20,
+      "section": 6,
+      "text": "In the silence after heat,",
+      "start": 187.328,
+      "end": 190.652,
+      "words": [
+        {
+          "text": "In",
+          "start": 187.328,
+          "end": 187.65,
+          "prob": 0.0369
+        },
+        {
+          "text": "the",
+          "start": 187.65,
+          "end": 188.053,
+          "prob": 0.7907
+        },
+        {
+          "text": "silence",
+          "start": 188.053,
+          "end": 189.101,
+          "prob": 0.9743
+        },
+        {
+          "text": "after",
+          "start": 189.101,
+          "end": 189.706,
+          "prob": 0.0761
+        },
+        {
+          "text": "heat,",
+          "start": 189.706,
+          "end": 190.652,
+          "prob": 0.5009
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 98.2,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 0.774
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.5,
+        "prob": 0.476,
+        "delta_start": 0.1,
+        "delta_end": 0.1,
+        "issues": []
+      }
+    },
+    {
+      "index": 21,
+      "section": 6,
+      "text": "Our hearts don't skip, they just repeat,",
+      "start": 190.688,
+      "end": 194.752,
+      "words": [
+        {
+          "text": "Our",
+          "start": 190.688,
+          "end": 191.065,
+          "prob": 0.3934
+        },
+        {
+          "text": "hearts",
+          "start": 191.065,
+          "end": 191.362,
+          "prob": 0.9864
+        },
+        {
+          "text": "don't",
+          "start": 191.362,
+          "end": 191.878,
+          "prob": 0.9841
+        },
+        {
+          "text": "skip,",
+          "start": 191.878,
+          "end": 192.631,
+          "prob": 0.8704
+        },
+        {
+          "text": "they",
+          "start": 192.631,
+          "end": 192.928,
+          "prob": 0.7041
+        },
+        {
+          "text": "just",
+          "start": 192.928,
+          "end": 193.325,
+          "prob": 0.9968
+        },
+        {
+          "text": "repeat,",
+          "start": 193.325,
+          "end": 194.752,
+          "prob": 0.6961
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 99.7,
+        "components": {
+          "agreement": 0.99,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.72,
+        "prob": 0.804,
+        "delta_start": 0.16,
+        "delta_end": 0.62,
+        "issues": []
+      }
+    },
+    {
+      "index": 22,
+      "section": 6,
+      "text": "Floating high, we still belong,",
+      "start": 194.816,
+      "end": 198.732,
+      "words": [
+        {
+          "text": "Floating",
+          "start": 194.816,
+          "end": 195.408,
+          "prob": 0.9451
+        },
+        {
+          "text": "high,",
+          "start": 195.408,
+          "end": 196.468,
+          "prob": 0.9224
+        },
+        {
+          "text": "we",
+          "start": 196.468,
+          "end": 196.733,
+          "prob": 0.9053
+        },
+        {
+          "text": "still",
+          "start": 196.733,
+          "end": 197.08,
+          "prob": 0.8172
+        },
+        {
+          "text": "belong,",
+          "start": 197.08,
+          "end": 198.732,
+          "prob": 0.7927
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.28,
+        "prob": 0.877,
+        "delta_start": 0.14,
+        "delta_end": 0.7,
+        "issues": []
+      }
+    },
+    {
+      "index": 23,
+      "section": 6,
+      "text": "In this orbit, endlessly strong.",
+      "start": 199.104,
+      "end": 203.492,
+      "words": [
+        {
+          "text": "In",
+          "start": 199.104,
+          "end": 199.258,
+          "prob": 0.9643
+        },
+        {
+          "text": "this",
+          "start": 199.258,
+          "end": 199.758,
+          "prob": 0.9691
+        },
+        {
+          "text": "orbit,",
+          "start": 199.758,
+          "end": 201.876,
+          "prob": 0.4234
+        },
+        {
+          "text": "endlessly",
+          "start": 201.876,
+          "end": 202.261,
+          "prob": 0.8414
+        },
+        {
+          "text": "strong.",
+          "start": 202.261,
+          "end": 203.492,
+          "prob": 0.7692
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 98.0,
+        "components": {
+          "agreement": 0.934,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.14,
+        "prob": 0.793,
+        "delta_start": 0.219,
+        "delta_end": 0.42,
+        "issues": []
+      }
+    },
+    {
+      "index": 24,
+      "section": 7,
+      "text": "You're my gravity in motion,",
+      "start": 218.016,
+      "end": 221.472,
+      "words": [
+        {
+          "text": "You're",
+          "start": 218.016,
+          "end": 218.137,
+          "prob": 0.4676
+        },
+        {
+          "text": "my",
+          "start": 218.137,
+          "end": 218.683,
+          "prob": 0.9629
+        },
+        {
+          "text": "gravity",
+          "start": 218.683,
+          "end": 219.916,
+          "prob": 0.9906
+        },
+        {
+          "text": "in",
+          "start": 219.916,
+          "end": 220.624,
+          "prob": 0.829
+        },
+        {
+          "text": "motion,",
+          "start": 220.624,
+          "end": 221.472,
+          "prob": 0.5719
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.45,
+        "prob": 0.764,
+        "delta_start": 0.08,
+        "delta_end": 0.0,
+        "issues": []
+      }
+    },
+    {
+      "index": 25,
+      "section": 7,
+      "text": "Spinning worlds in slow explosion,",
+      "start": 221.472,
+      "end": 225.433,
+      "words": [
+        {
+          "text": "Spinning",
+          "start": 221.472,
+          "end": 222.572,
+          "prob": 0.5369
+        },
+        {
+          "text": "worlds",
+          "start": 222.572,
+          "end": 222.972,
+          "prob": 0.8315
+        },
+        {
+          "text": "in",
+          "start": 222.972,
+          "end": 223.412,
+          "prob": 0.9829
+        },
+        {
+          "text": "slow",
+          "start": 223.412,
+          "end": 224.012,
+          "prob": 0.9909
+        },
+        {
+          "text": "explosion,",
+          "start": 224.012,
+          "end": 225.433,
+          "prob": 0.7558
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 98.5,
+        "components": {
+          "agreement": 0.951,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.096,
+        "density": 1.26,
+        "prob": 0.82,
+        "delta_start": 0.201,
+        "delta_end": 0.361,
+        "issues": []
+      }
+    },
+    {
+      "index": 26,
+      "section": 7,
+      "text": "Every pulse is pure emotion,",
+      "start": 225.536,
+      "end": 229.252,
+      "words": [
+        {
+          "text": "Every",
+          "start": 225.536,
+          "end": 226.169,
+          "prob": 0.9542
+        },
+        {
+          "text": "pulse",
+          "start": 226.169,
+          "end": 226.741,
+          "prob": 0.9721
+        },
+        {
+          "text": "is",
+          "start": 226.741,
+          "end": 227.17,
+          "prob": 0.9457
+        },
+        {
+          "text": "pure",
+          "start": 227.17,
+          "end": 227.905,
+          "prob": 0.9933
+        },
+        {
+          "text": "emotion,",
+          "start": 227.905,
+          "end": 229.252,
+          "prob": 0.7855
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.35,
+        "prob": 0.93,
+        "delta_start": 0.059,
+        "delta_end": 0.279,
+        "issues": []
+      }
+    },
+    {
+      "index": 27,
+      "section": 7,
+      "text": "You're my gravity in motion,",
+      "start": 229.344,
+      "end": 234.472,
+      "words": [
+        {
+          "text": "You're",
+          "start": 229.344,
+          "end": 229.786,
+          "prob": 0.9846
+        },
+        {
+          "text": "my",
+          "start": 229.786,
+          "end": 230.309,
+          "prob": 0.9974
+        },
+        {
+          "text": "gravity",
+          "start": 230.309,
+          "end": 231.496,
+          "prob": 0.9981
+        },
+        {
+          "text": "in",
+          "start": 231.496,
+          "end": 233.226,
+          "prob": 0.4636
+        },
+        {
+          "text": "motion,",
+          "start": 233.226,
+          "end": 234.472,
+          "prob": 0.8631
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 99.7,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 0.967,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 0.98,
+        "prob": 0.861,
+        "delta_start": 0.041,
+        "delta_end": 0.459,
+        "issues": [
+          "slow: 1.0 words/s"
+        ]
+      }
+    },
+    {
+      "index": 28,
+      "section": 7,
+      "text": "When the light fades into dawn,",
+      "start": 235.264,
+      "end": 239.093,
+      "words": [
+        {
+          "text": "When",
+          "start": 235.264,
+          "end": 235.703,
+          "prob": 0.9873
+        },
+        {
+          "text": "the",
+          "start": 235.703,
+          "end": 236.101,
+          "prob": 0.7695
+        },
+        {
+          "text": "light",
+          "start": 236.101,
+          "end": 236.321,
+          "prob": 0.9764
+        },
+        {
+          "text": "fades",
+          "start": 236.321,
+          "end": 236.959,
+          "prob": 0.9962
+        },
+        {
+          "text": "into",
+          "start": 236.959,
+          "end": 237.737,
+          "prob": 0.9859
+        },
+        {
+          "text": "dawn,",
+          "start": 237.737,
+          "end": 239.093,
+          "prob": 0.974
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.57,
+        "prob": 0.948,
+        "delta_start": 0.061,
+        "delta_end": 0.679,
+        "issues": []
+      }
+    },
+    {
+      "index": 29,
+      "section": 7,
+      "text": "Still your rhythm pulls me on,",
+      "start": 239.104,
+      "end": 242.912,
+      "words": [
+        {
+          "text": "Still",
+          "start": 239.104,
+          "end": 239.507,
+          "prob": 0.974
+        },
+        {
+          "text": "your",
+          "start": 239.507,
+          "end": 240.112,
+          "prob": 0.8865
+        },
+        {
+          "text": "rhythm",
+          "start": 240.112,
+          "end": 240.595,
+          "prob": 0.9941
+        },
+        {
+          "text": "pulls",
+          "start": 240.595,
+          "end": 241.099,
+          "prob": 0.9963
+        },
+        {
+          "text": "me",
+          "start": 241.099,
+          "end": 241.865,
+          "prob": 0.9993
+        },
+        {
+          "text": "on,",
+          "start": 241.865,
+          "end": 242.912,
+          "prob": 0.9825
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 100.0,
+        "components": {
+          "agreement": 1.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.58,
+        "prob": 0.972,
+        "delta_start": 0.021,
+        "delta_end": 2.38,
+        "issues": []
+      }
+    },
+    {
+      "index": 30,
+      "section": 7,
+      "text": "Through the fire, through devotion,",
+      "start": 243.008,
+      "end": 245.832,
+      "words": [
+        {
+          "text": "Through",
+          "start": 243.008,
+          "end": 243.349,
+          "prob": 0.975
+        },
+        {
+          "text": "the",
+          "start": 243.349,
+          "end": 243.709,
+          "prob": 0.9876
+        },
+        {
+          "text": "fire,",
+          "start": 243.709,
+          "end": 244.43,
+          "prob": 0.9373
+        },
+        {
+          "text": "through",
+          "start": 244.43,
+          "end": 244.971,
+          "prob": 0.8508
+        },
+        {
+          "text": "devotion,",
+          "start": 244.971,
+          "end": 245.832,
+          "prob": 0.8932
+        }
+      ],
+      "source": "whisper",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 70.0,
+        "components": {
+          "agreement": 0.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 1.0
+        },
+        "coverage": 1.0,
+        "onset_distance": 0.0,
+        "density": 1.77,
+        "prob": 0.929,
+        "delta_start": 2.361,
+        "delta_end": 2.46,
+        "issues": [
+          "ctc disagrees by 2.36s at start"
+        ]
+      }
+    },
+    {
+      "index": 31,
+      "section": 7,
+      "text": "You're my gravity in motion.",
+      "start": 248.736,
+      "end": 253.165,
+      "words": [
+        {
+          "text": "You're",
+          "start": 248.736,
+          "end": 248.919,
+          "prob": 0.01
+        },
+        {
+          "text": "my",
+          "start": 248.919,
+          "end": 249.203,
+          "prob": 0.0087
+        },
+        {
+          "text": "gravity",
+          "start": 249.203,
+          "end": 251.966,
+          "prob": 0.229
+        },
+        {
+          "text": "in",
+          "start": 251.966,
+          "end": 252.373,
+          "prob": 0.3434
+        },
+        {
+          "text": "motion",
+          "start": 252.373,
+          "end": 253.165,
+          "prob": 0.2808
+        }
+      ],
+      "source": "ctc_local",
+      "locked": false,
+      "flagged": true,
+      "score": {
+        "total": 63.8,
+        "components": {
+          "agreement": 0.0,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 1.0,
+          "confidence": 0.226
+        },
+        "coverage": 0.993,
+        "onset_distance": 0.0,
+        "density": 1.13,
+        "prob": 0.174,
+        "delta_start": 1.581,
+        "delta_end": 0.28,
+        "issues": [
+          "ctc disagrees by 1.58s at start"
+        ]
+      }
+    },
+    {
+      "index": 32,
+      "section": 8,
+      "text": "Gravity in motion... still in motion.",
+      "start": 264.64,
+      "end": 278.053,
+      "words": [
+        {
+          "text": "Gravity",
+          "start": 264.64,
+          "end": 275.282,
+          "prob": 0.0158
+        },
+        {
+          "text": "in",
+          "start": 275.282,
+          "end": 276.02,
+          "prob": 0.002
+        },
+        {
+          "text": "motion...",
+          "start": 276.02,
+          "end": 276.146,
+          "prob": 0.1317
+        },
+        {
+          "text": "still",
+          "start": 276.146,
+          "end": 276.272,
+          "prob": 0.0001
+        },
+        {
+          "text": "in",
+          "start": 276.272,
+          "end": 276.398,
+          "prob": 0.9386
+        },
+        {
+          "text": "motion.",
+          "start": 276.398,
+          "end": 278.053,
+          "prob": 0.6816
+        }
+      ],
+      "source": "manual",
+      "locked": false,
+      "flagged": false,
+      "score": {
+        "total": 78.7,
+        "components": {
+          "agreement": 0.635,
+          "roundtrip": 1.0,
+          "coverage": 1.0,
+          "onset": 1.0,
+          "density": 0.263,
+          "confidence": 0.445
+        },
+        "coverage": 0.797,
+        "onset_distance": 0.0,
+        "density": 0.45,
+        "prob": 0.295,
+        "delta_start": 0.533,
+        "delta_end": 3.98,
+        "issues": [
+          "slow: 0.4 words/s"
+        ]
+      }
+    }
+  ],
+  "scorecard": {
+    "n_lines": 33,
+    "n_aligned": 33,
+    "median_start_delta": 0.16,
+    "median_end_delta": 0.379,
+    "pct_within_150ms": 48.5,
+    "pct_within_300ms": 72.7,
+    "pct_within_500ms": 84.8,
+    "mean_coverage": 0.992,
+    "min_coverage": 0.797,
+    "mean_score": 94.5,
+    "n_corroborated": 33,
+    "n_flagged": 2,
+    "flagged": [
+      5,
+      31
+    ],
+    "overlaps": 0,
+    "out_of_order": 0,
+    "notes": []
+  },
+  "meta": {
+    "aligners": {
+      "ctc": {
+        "0": [
+          34.752,
+          38.273
+        ],
+        "1": [
+          38.572,
+          42.153
+        ],
+        "2": [
+          42.432,
+          45.553
+        ],
+        "3": [
+          45.992,
+          50.873
+        ],
+        "4": [
+          51.153,
+          54.413
+        ],
+        "5": [
+          54.653,
+          62.093
+        ],
+        "6": [
+          64.252,
+          67.672
+        ],
+        "7": [
+          67.972,
+          71.472
+        ],
+        "8": [
+          72.013,
+          75.353
+        ],
+        "9": [
+          75.812,
+          95.772
+        ],
+        "10": [
+          126.873,
+          129.933
+        ],
+        "11": [
+          130.732,
+          133.873
+        ],
+        "12": [
+          134.653,
+          137.572
+        ],
+        "13": [
+          138.173,
+          141.232
+        ],
+        "14": [
+          143.213,
+          146.653
+        ],
+        "15": [
+          150.873,
+          154.393
+        ],
+        "16": [
+          156.412,
+          159.912
+        ],
+        "17": [
+          160.113,
+          163.653
+        ],
+        "18": [
+          164.173,
+          167.493
+        ],
+        "19": [
+          167.972,
+          172.553
+        ],
+        "20": [
+          187.452,
+          190.752
+        ],
+        "21": [
+          190.812,
+          194.132
+        ],
+        "22": [
+          194.752,
+          198.032
+        ],
+        "23": [
+          198.713,
+          203.072
+        ],
+        "24": [
+          217.852,
+          221.352
+        ],
+        "25": [
+          221.553,
+          225.072
+        ],
+        "26": [
+          225.613,
+          228.933
+        ],
+        "27": [
+          229.393,
+          233.993
+        ],
+        "28": [
+          235.333,
+          238.333
+        ],
+        "29": [
+          239.153,
+          240.532
+        ],
+        "30": [
+          240.632,
+          248.972
+        ],
+        "31": [
+          249.273,
+          253.192
+        ],
+        "32": [
+          265.173,
+          282.033
+        ]
+      },
+      "whisper": {
+        "0": [
+          34.512,
+          38.272
+        ],
+        "1": [
+          38.572,
+          42.672
+        ],
+        "2": [
+          42.992,
+          45.692
+        ],
+        "3": [
+          46.233,
+          49.733
+        ],
+        "4": [
+          51.453,
+          54.513
+        ],
+        "5": [
+          58.693,
+          62.203
+        ],
+        "6": [
+          64.492,
+          67.733
+        ],
+        "7": [
+          67.733,
+          71.812
+        ],
+        "8": [
+          71.992,
+          75.672
+        ],
+        "9": [
+          75.792,
+          80.552
+        ],
+        "10": [
+          126.433,
+          130.312
+        ],
+        "11": [
+          130.312,
+          134.773
+        ],
+        "12": [
+          134.953,
+          138.292
+        ],
+        "13": [
+          138.292,
+          141.532
+        ],
+        "14": [
+          143.173,
+          150.252
+        ],
+        "15": [
+          150.812,
+          155.733
+        ],
+        "16": [
+          156.653,
+          159.993
+        ],
+        "17": [
+          159.993,
+          164.032
+        ],
+        "18": [
+          164.252,
+          167.832
+        ],
+        "19": [
+          167.972,
+          172.812
+        ],
+        "20": [
+          187.352,
+          190.652
+        ],
+        "21": [
+          190.652,
+          194.752
+        ],
+        "22": [
+          194.892,
+          198.732
+        ],
+        "23": [
+          198.932,
+          203.492
+        ],
+        "24": [
+          217.772,
+          221.352
+        ],
+        "25": [
+          221.352,
+          225.433
+        ],
+        "26": [
+          225.672,
+          229.212
+        ],
+        "27": [
+          229.352,
+          234.452
+        ],
+        "28": [
+          235.272,
+          239.012
+        ],
+        "29": [
+          239.132,
+          242.912
+        ],
+        "30": [
+          242.993,
+          246.512
+        ],
+        "31": [
+          247.692,
+          253.472
+        ],
+        "32": [
+          264.593,
+          278.053
+        ]
+      }
+    },
+    "roundtrip": {
+      "n_words": 183,
+      "lines_observed": 33,
+      "per_line": {
+        "0": {
+          "start": 33.9,
+          "end": 38.58,
+          "matched": 6,
+          "expected": 6
+        },
+        "1": {
+          "start": 38.58,
+          "end": 42.24,
+          "matched": 6,
+          "expected": 6
+        },
+        "2": {
+          "start": 42.24,
+          "end": 45.82,
+          "matched": 6,
+          "expected": 6
+        },
+        "3": {
+          "start": 45.82,
+          "end": 49.86,
+          "matched": 6,
+          "expected": 6
+        },
+        "4": {
+          "start": 49.86,
+          "end": 54.84,
+          "matched": 4,
+          "expected": 4
+        },
+        "5": {
+          "start": 54.84,
+          "end": 62.4,
+          "matched": 5,
+          "expected": 5
+        },
+        "6": {
+          "start": 62.4,
+          "end": 67.88,
+          "matched": 5,
+          "expected": 5
+        },
+        "7": {
+          "start": 67.88,
+          "end": 71.6,
+          "matched": 5,
+          "expected": 5
+        },
+        "8": {
+          "start": 71.6,
+          "end": 75.4,
+          "matched": 5,
+          "expected": 5
+        },
+        "9": {
+          "start": 75.4,
+          "end": 80.44,
+          "matched": 5,
+          "expected": 5
+        },
+        "10": {
+          "start": 126.18,
+          "end": 130.44,
+          "matched": 6,
+          "expected": 6
+        },
+        "11": {
+          "start": 130.44,
+          "end": 134.38,
+          "matched": 5,
+          "expected": 5
+        },
+        "12": {
+          "start": 134.38,
+          "end": 137.98,
+          "matched": 5,
+          "expected": 5
+        },
+        "13": {
+          "start": 137.98,
+          "end": 142.1,
+          "matched": 8,
+          "expected": 8
+        },
+        "14": {
+          "start": 142.1,
+          "end": 146.44,
+          "matched": 5,
+          "expected": 5
+        },
+        "15": {
+          "start": 150.18,
+          "end": 154.56,
+          "matched": 4,
+          "expected": 5
+        },
+        "16": {
+          "start": 154.56,
+          "end": 160.08,
+          "matched": 5,
+          "expected": 5
+        },
+        "17": {
+          "start": 160.08,
+          "end": 163.7,
+          "matched": 5,
+          "expected": 5
+        },
+        "18": {
+          "start": 163.7,
+          "end": 167.54,
+          "matched": 5,
+          "expected": 5
+        },
+        "19": {
+          "start": 167.54,
+          "end": 173.06,
+          "matched": 5,
+          "expected": 5
+        },
+        "20": {
+          "start": 187.02,
+          "end": 190.68,
+          "matched": 6,
+          "expected": 5
+        },
+        "21": {
+          "start": 190.68,
+          "end": 194.44,
+          "matched": 7,
+          "expected": 7
+        },
+        "22": {
+          "start": 194.44,
+          "end": 198.22,
+          "matched": 5,
+          "expected": 5
+        },
+        "23": {
+          "start": 198.22,
+          "end": 204.06,
+          "matched": 5,
+          "expected": 5
+        },
+        "24": {
+          "start": 216.94,
+          "end": 221.46,
+          "matched": 5,
+          "expected": 5
+        },
+        "25": {
+          "start": 221.46,
+          "end": 225.16,
+          "matched": 5,
+          "expected": 5
+        },
+        "26": {
+          "start": 225.16,
+          "end": 229,
+          "matched": 5,
+          "expected": 5
+        },
+        "27": {
+          "start": 229,
+          "end": 234.04,
+          "matched": 5,
+          "expected": 5
+        },
+        "28": {
+          "start": 234.96,
+          "end": 238.92,
+          "matched": 6,
+          "expected": 6
+        },
+        "29": {
+          "start": 238.92,
+          "end": 242.76,
+          "matched": 6,
+          "expected": 6
+        },
+        "30": {
+          "start": 242.76,
+          "end": 246.58,
+          "matched": 5,
+          "expected": 5
+        },
+        "31": {
+          "start": 246.58,
+          "end": 253.36,
+          "matched": 5,
+          "expected": 5
+        },
+        "32": {
+          "start": 264.96,
+          "end": 277.16,
+          "matched": 6,
+          "expected": 6
+        }
+      }
+    },
+    "iterations": 2,
+    "whisper_model": "medium",
+    "demucs_model": "htdemucs",
+    "roundtrip_model": "medium",
+    "elapsed_seconds": 323.8,
+    "gate_failures": []
+  }
+}

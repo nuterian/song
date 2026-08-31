@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>song — live demo</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230e1116'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%235b9dff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-left">
+    <span class="logo">
+      <svg class="mark" viewBox="0 0 26 20" aria-hidden="true">
+        <path d="M2 12 L2 8 M7 15 L7 5 M12 18 L12 2 M17 14 L17 6 M22 11 L22 9"
+              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+      </svg>song</span>
+    <button id="btn-tracks" class="track" title="Switch track or add a new one">
+      <span id="track-name"></span><span class="caret">▾</span>
+    </button>
+  </div>
+  <div id="scorecard" class="chips"></div>
+  <div class="bar-right">
+    <button id="btn-review" class="review-cta" title="Find and fix word timings that need checking">Check timings</button>
+    <span class="hist">
+      <button id="btn-undo" class="ghost" disabled aria-label="Undo">↶</button>
+      <button id="btn-redo" class="ghost" disabled aria-label="Redo">↷</button>
+    </span>
+    <button id="btn-help" class="ghost" title="Shortcuts">?</button>
+    <button id="btn-rescore" title="Re-run the benchmark against the current timings">Re-score</button>
+    <button id="btn-export">Export</button>
+    <button id="btn-save" class="primary">Save<span class="k">⌘S</span></button>
+  </div>
+</header>
+
+<!-- Shown until the project loads, and instead of it when there is nothing to
+     load or the load failed. The old behaviour was a 2.4s toast over an empty
+     grey page, which reads as a broken app rather than an empty one. -->
+<section id="curtain" class="curtain" hidden>
+  <div class="curtain-body">
+
+    <div id="cur-loading" class="cur-pane">
+      <div class="cur-spin"></div>
+      <p class="cur-msg">Loading the track…</p>
+    </div>
+
+    <div id="cur-error" class="cur-pane" hidden>
+      <h2>That track would not load</h2>
+      <p id="cur-error-msg" class="cur-msg"></p>
+      <div class="cur-actions">
+        <button id="cur-retry" class="rv-go">Try again</button>
+        <button id="cur-tracks" class="rv-keep">Open another track</button>
+      </div>
+    </div>
+
+    <div id="cur-welcome" class="cur-pane" hidden>
+      <span class="cur-mark">
+        <svg viewBox="0 0 26 20" aria-hidden="true">
+          <path d="M2 12 L2 8 M7 15 L7 5 M12 18 L12 2 M17 14 L17 6 M22 11 L22 9"
+                stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+        </svg>
+      </span>
+      <h2>Nothing aligned yet</h2>
+      <p class="cur-lede">
+        Drop in an audio file and its lyrics as plain text. Three models will
+        time every line against the isolated vocal, score each one, and hand you
+        only the handful that need an ear.
+      </p>
+      <ol class="cur-steps">
+        <li><b>Add a track.</b> An audio file and a <code>.txt</code> — one line
+            per lyric line, a blank line between sections.</li>
+        <li><b>Wait about five minutes.</b> The vocal is separated once and
+            cached; the progress log runs while it works.</li>
+        <li><b>Check the timings.</b> Every line gets a score, and the words two
+            models disagree about are queued for you to settle by ear.</li>
+      </ol>
+      <div class="cur-actions">
+        <button id="cur-add" class="rv-go">Add your first track</button>
+      </div>
+      <p class="cur-foot">
+        Everything runs on this machine. Nothing is uploaded, and the models
+        download once on the first run.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<section class="stage">
+  <div class="stage-head">
+    <div id="transport">
+      <button id="btn-play" class="play">Play<span class="k">space</span></button>
+      <span id="clock" class="clock">0:00.00 / 0:00.00</span>
+    </div>
+    <div class="stage-tools">
+      <button id="btn-solo" class="tgl" title="Hear exactly what the aligner heard">Solo vocals<span class="k">V</span></button>
+      <button id="btn-follow" class="tgl on" title="Keep the playhead in view">Follow<span class="k">F</span></button>
+      <button id="btn-rate" class="tgl" title="Playback speed — click to cycle, pitch preserved">1×<span class="k">[ ]</span></button>
+      <span class="zoom">
+        <button id="btn-zoom-out" title="Zoom out">−</button>
+        <button id="btn-zoom-in" title="Zoom in">+</button>
+        <button id="btn-zoom-fit" title="Fit whole track">Fit</button>
+      </span>
+    </div>
+  </div>
+  <canvas id="timeline"></canvas>
+  <div class="deck">
+    <span id="place-idx" class="place-idx">—</span>
+    <span id="place-text" class="place-text">select a line</span>
+    <span id="place-time" class="place-time"></span>
+    <span id="hint" class="hint"></span>
+    <button id="btn-place" class="place-go" disabled>
+      Place at playhead<span class="k">T</span>
+    </button>
+  </div>
+</section>
+
+<section class="lyrics">
+  <div class="lyrics-head">
+    <div class="filters">
+      <button class="filter active" data-filter="all">All lines</button>
+      <button class="filter" data-filter="flagged">Needs review</button>
+    </div>
+    <span id="line-count" class="line-count"></span>
+    <div class="legend">
+      <span><i class="sw good"></i>strong</span>
+      <span><i class="sw ok"></i>fair</span>
+      <span><i class="sw bad"></i>review</span>
+    </div>
+  </div>
+  <div id="line-list"></div>
+</section>
+
+<dialog id="tracks">
+  <div class="rv">
+
+    <div id="tk-list" class="rv-pane">
+      <div class="rv-top">
+        <span class="rv-count">Tracks</span>
+        <button id="tk-close" class="ghost">Close<span class="k">esc</span></button>
+      </div>
+      <div id="tk-rows" class="tk-rows"></div>
+      <div class="rv-actions">
+        <button id="tk-add" class="rv-go">Add a track…</button>
+      </div>
+    </div>
+
+    <div id="im-pick" class="rv-pane" hidden>
+      <div class="rv-top">
+        <span class="rv-count">Add a track</span>
+        <button id="im-back" class="ghost">Back</button>
+      </div>
+      <p class="rv-lede">
+        Drop an audio file and the lyrics as plain text. One line per lyric line;
+        <code>[Verse]</code>-style headers become sections.
+      </p>
+      <div class="drops">
+        <label class="drop" id="drop-audio">
+          <input type="file" id="file-audio" accept=".wav,.mp3,.m4a,.flac,.aif,.aiff,.ogg,audio/*" hidden>
+          <b>1 · Audio</b>
+          <span id="name-audio" class="drop-hint">drop a .wav or .mp3, or click to pick</span>
+        </label>
+        <label class="drop" id="drop-lyrics">
+          <input type="file" id="file-lyrics" accept=".txt,text/plain" hidden>
+          <b>2 · Lyrics</b>
+          <span id="name-lyrics" class="drop-hint">drop the .txt, or click to pick</span>
+        </label>
+      </div>
+      <div class="rv-actions">
+        <button id="im-start" class="rv-go" disabled>Align it</button>
+      </div>
+      <p class="rv-foot">Alignment runs on this machine and takes a few minutes for a full song.</p>
+    </div>
+
+    <div id="im-busy" class="rv-pane" hidden>
+      <h2>Aligning…</h2>
+      <div class="rv-bar"><i></i></div>
+      <pre id="im-log" class="im-log"></pre>
+      <p class="rv-foot">Separating the vocal, aligning, then scoring. Leave this open.</p>
+    </div>
+
+    <div id="im-done" class="rv-pane" hidden>
+      <h2 id="im-done-title">Ready</h2>
+      <p id="im-done-msg" class="rv-lede"></p>
+      <div class="rv-actions">
+        <button id="im-open" class="rv-go">Open it</button>
+        <button id="im-done-close" class="rv-keep">Close</button>
+      </div>
+    </div>
+
+  </div>
+</dialog>
+
+<dialog id="review">
+  <div class="rv">
+
+    <!-- 1. before an audit has been run -->
+    <div id="rv-intro" class="rv-pane">
+      <h2>Check the word timings</h2>
+      <p class="rv-lede">
+        Two different alignment models will each time every word. Where they
+        agree, the timing is right and you will never be shown it. Where they
+        disagree, you decide by ear — you listen to two versions and pick the one
+        that starts on the word.
+      </p>
+      <p class="rv-lede rv-dim">
+        Anything that could not possibly be right — a word lasting no time at all,
+        a word starting where nobody is singing — is repaired without asking.
+      </p>
+      <div class="rv-actions">
+        <button id="rv-start" class="rv-go">Start checking</button>
+      </div>
+      <p class="rv-foot">Takes about 15 seconds.</p>
+    </div>
+
+    <!-- 2. running -->
+    <div id="rv-busy" class="rv-pane" hidden>
+      <h2>Listening through the track…</h2>
+      <div class="rv-bar"><i></i></div>
+      <p class="rv-foot">Re-timing every line with the second model.</p>
+    </div>
+
+    <!-- 2b. a line the lyrics file does not have -->
+    <div id="rv-add" class="rv-pane" hidden>
+      <div class="rv-top">
+        <span id="ad-count" class="rv-count"></span>
+        <span id="ad-where" class="rv-where"></span>
+        <button id="ad-close" class="ghost">Close<span class="k">esc</span></button>
+      </div>
+      <div class="rv-progress"><i id="ad-progress-fill"></i></div>
+
+      <p class="rv-lede">
+        Something is sung here that your lyrics file does not have. It was
+        transcribed without being told the words, and what came back is a line
+        you already wrote — so this is a repeat you left out, not a guess.
+      </p>
+      <p id="ad-text" class="rv-context"></p>
+      <ul id="ad-why" class="rv-reasons"></ul>
+
+      <div class="rv-strip">
+        <canvas id="ad-wave"></canvas>
+        <div class="rv-legend">
+          <span class="rv-key"><i class="sw-add"></i>Heard here</span>
+          <span class="rv-key" id="ad-key-known" hidden><i class="sw-known"></i>Already timed</span>
+          <span class="rv-strip-hint">nothing in your lyrics covers the shaded gap</span>
+        </div>
+      </div>
+
+      <div class="rv-actions">
+        <button id="ad-play" class="rv-keep">▶ Hear it<span class="k">space</span></button>
+        <button id="ad-accept" class="rv-go">Add this line</button>
+        <button id="ad-skip" class="rv-keep">Not a line</button>
+      </div>
+      <p class="rv-foot">
+        Adding writes the line into the project and every export. Your
+        <code>lyrics.txt</code> is left alone — it is still missing this line.
+        Inserting renumbers everything after it, so this one is not covered by
+        <kbd>⌘Z</kbd>.
+      </p>
+    </div>
+
+    <!-- 3. one decision -->
+    <div id="rv-card" class="rv-pane" hidden>
+      <div class="rv-top">
+        <span id="rv-count" class="rv-count"></span>
+        <span id="rv-where" class="rv-where"></span>
+        <button id="rv-close" class="ghost">Close<span class="k">esc</span></button>
+      </div>
+      <div class="rv-progress"><i id="rv-progress-fill"></i></div>
+
+      <p id="rv-context" class="rv-context"></p>
+      <ul id="rv-reasons" class="rv-reasons"></ul>
+
+      <!-- Where the two candidates actually sit, and the third one you place
+           yourself. Its own canvas and its own window - see rvDrawStrip. -->
+      <div class="rv-strip">
+        <canvas id="rv-wave"></canvas>
+        <div class="rv-legend">
+          <span class="rv-key"><i class="sw-now"></i>Now</span>
+          <span class="rv-key"><i class="sw-new"></i>Suggested</span>
+          <span class="rv-key" id="rv-key-adj" hidden><i class="sw-adj"></i>Adjusted</span>
+          <span id="rv-strip-hint" class="rv-strip-hint">drag it anywhere · ← → to nudge</span>
+          <button id="rv-adj-reset" class="ghost" hidden>reset</button>
+        </div>
+      </div>
+
+      <div class="rv-ab" id="rv-ab">
+        <div class="rv-opt">
+          <div class="rv-opt-head">Now</div>
+          <div id="rv-cur-time" class="rv-time"></div>
+          <button id="rv-play-cur" class="rv-play">▶ Hear this<span class="k">1</span></button>
+        </div>
+        <div class="rv-opt rv-opt-alt">
+          <div class="rv-opt-head">Suggested</div>
+          <div id="rv-new-time" class="rv-time"></div>
+          <button id="rv-play-new" class="rv-play">▶ Hear this<span class="k">2</span></button>
+        </div>
+        <div class="rv-opt rv-opt-adj" id="rv-opt-adj" hidden>
+          <div class="rv-opt-head">Adjusted</div>
+          <div id="rv-adj-time" class="rv-time"></div>
+          <button id="rv-play-adj" class="rv-play">▶ Hear this<span class="k">3</span></button>
+        </div>
+      </div>
+      <p id="rv-hint" class="rv-hint">
+        Each button plays from the moment that version says the word begins.
+        The right one starts <em>on</em> the word.
+      </p>
+
+      <div class="rv-actions">
+        <button id="rv-accept" class="rv-go">Use suggested</button>
+        <button id="rv-keep" class="rv-keep">Keep as is</button>
+        <button id="rv-skip" class="ghost">Decide later</button>
+      </div>
+      <div class="rv-under">
+        <label class="rv-check"><input type="checkbox" id="rv-solo" checked> Vocals only — easier to hear</label>
+        <button id="rv-undo" class="ghost" disabled>Undo last</button>
+        <button id="rv-show" class="ghost">Show on timeline</button>
+      </div>
+    </div>
+
+    <!-- 4. done -->
+    <div id="rv-done" class="rv-pane" hidden>
+      <h2 id="rv-done-title">All checked</h2>
+      <p id="rv-summary" class="rv-lede"></p>
+      <div class="rv-actions">
+        <button id="rv-save" class="rv-go">Save changes</button>
+        <button id="rv-done-close" class="rv-keep">Close</button>
+      </div>
+    </div>
+
+  </div>
+</dialog>
+
+<dialog id="help">
+  <div class="help-body">
+    <div class="help-head">
+      <h2>Shortcuts</h2>
+      <button id="btn-help-close" class="ghost">Close<span class="k">esc</span></button>
+    </div>
+
+    <div class="help-grid">
+      <section>
+        <h3>Start here — Check timings</h3>
+        <dl>
+          <dt class="mouse">Check timings</dt>
+          <dd>the guided path — the machine repairs what is provably wrong, drops
+              every word both models agree on, and walks you through the rest as
+              listening choices. The card carries its own waveform, so the whole
+              song can be word-aligned without ever opening the timeline.</dd>
+          <dt class="mouse">drag the strip</dt>
+          <dd>place the word yourself when neither candidate is right — snaps to a
+              vocal onset (<kbd>alt</kbd> drags free)</dd>
+          <dt><kbd>←</kbd><kbd>→</kbd></dt>
+          <dd>nudge your adjusted timing ±50 ms (<kbd>shift</kbd> ±10 ms)</dd>
+          <dt><kbd>space</kbd></dt><dd>replay whichever version you heard last</dd>
+          <dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dt><dd>hear now / suggested / adjusted</dd>
+          <dt><kbd>enter</kbd></dt><dd>take the blue button — use suggested, or use adjusted</dd>
+        </dl>
+      </section>
+
+      <section>
+        <h3>Playback</h3>
+        <dl>
+          <dt><kbd>space</kbd></dt><dd>play / pause</dd>
+          <dt><kbd>enter</kbd></dt><dd>preview the selected line</dd>
+          <dt><kbd>[</kbd><kbd>]</kbd></dt><dd>slower / faster — pitch preserved</dd>
+          <dt><kbd>\</kbd></dt><dd>back to 1×</dd>
+          <dt><kbd>V</kbd></dt><dd>solo the isolated vocal</dd>
+          <dt><kbd>F</kbd></dt><dd>follow the playhead — pans the timeline and scrolls the lyrics</dd>
+        </dl>
+      </section>
+
+      <section>
+        <h3>Selecting</h3>
+        <dl>
+          <dt><kbd>↑</kbd><kbd>↓</kbd></dt><dd>previous / next line</dd>
+          <dt><kbd>tab</kbd></dt><dd>next word, rolling into the adjacent line</dd>
+          <dt><kbd>shift</kbd><kbd>tab</kbd></dt><dd>previous word</dd>
+          <dt><kbd>esc</kbd></dt><dd>deselect the word, back to line editing</dd>
+          <dt class="mouse">click a word</dt><dd>select it, focus the timeline, seek just before it</dd>
+        </dl>
+      </section>
+
+      <section>
+        <h3>Line timing</h3>
+        <dl>
+          <dt><kbd>←</kbd><kbd>→</kbd></dt><dd>nudge the line ±50 ms (<kbd>shift</kbd> ±10 ms)</dd>
+          <dt><kbd>S</kbd> <kbd>E</kbd></dt><dd>set start / end at the playhead</dd>
+          <dt><kbd>T</kbd></dt><dd>tap-along: stamp the start, advance a line</dd>
+          <dt class="mouse">drag a region</dt><dd>body moves it, edges resize it</dd>
+          <dt class="mouse">scrub bar</dt><dd>click or drag the ruler strip to seek — it always
+              seeks, even over a line (<kbd>shift</kbd>-drag for 6× fine control)</dd>
+        </dl>
+      </section>
+
+      <section>
+        <h3>Word timing</h3>
+        <dl>
+          <dt><kbd>←</kbd><kbd>→</kbd></dt><dd>nudge the selected word ±50 ms (<kbd>shift</kbd> ±10 ms)</dd>
+          <dt><kbd>W</kbd></dt><dd>tap-along: stamp the word's start, advance a word</dd>
+          <dt><kbd>R</kbd></dt><dd>redistribute the line's words evenly</dd>
+          <dt class="mouse">drag a divider</dt><dd>in the word cells along the bottom of the waveform:
+              moves a boundary, snapping to a vocal onset (<kbd>alt</kbd> free)</dd>
+        </dl>
+      </section>
+
+      <section>
+        <h3>File</h3>
+        <dl>
+          <dt><kbd>⌘Z</kbd></dt><dd>undo — a drag is one step, a burst of nudges folds into one</dd>
+          <dt><kbd>⇧⌘Z</kbd></dt><dd>redo</dd>
+          <dt><kbd>⌘S</kbd></dt><dd>save — rewrites every export format</dd>
+        </dl>
+      </section>
+    </div>
+
+    <p class="help-note">
+      Only word <em>starts</em> are editable: a word ends where the next begins, so
+      a line of N words has N−1 internal boundaries and gaps are impossible. Word 0's
+      start is the line start.
+    </p>
+  </div>
+</dialog>
+
+<div id="toast" class="toast"></div>
+
+<script>window.SONG_STATIC = './';</script>
+<script src="app.js"></script>
+</body>
+</html>
