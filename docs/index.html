@@ -4,139 +4,122 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>song — lyrics, timed to the word</title>
-<meta name="description" content="Turn an audio track and a plain-text lyrics file into accurate, time-synchronized lyrics — and a karaoke video — using only free, locally-run open-source models.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230e1116'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%235b9dff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<meta name="description" content="Turn an audio track and a plain-text lyrics file into word-accurate synced lyrics and a finished karaoke video, using only free models that run on your own machine.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%23ff7a3d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
 :root{
-  --bg:#0e1116; --panel:#151a22; --panel-2:#1b2230; --line:#232c3a;
-  --text:#e6edf7; --muted:#8b98ad; --dim:#6d7a90;
-  --accent:#5b9dff; --good:#3ecf8e; --adj:#b48cff;
+  --bg:#0b0d11; --ink:#f2f4f8; --dim:#98a2b3; --faint:#5d6879;
+  --line:#1e232c; --accent:#ff7a3d; --good:#4ade80;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
   --ease:cubic-bezier(.2,.8,.25,1);
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{
-  margin:0;background:var(--bg);color:var(--text);
+  margin:0;background:var(--bg);color:var(--ink);
   font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;overflow-x:hidden;
 }
-::selection{background:rgba(91,157,255,.35)}
-a{color:var(--accent);text-decoration:none}
-img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+img,video{max-width:100%;display:block}
+::selection{background:rgba(255,122,61,.3)}
 
-.wrap{max-width:660px;margin:0 auto;padding:0 24px}
-.wide{max-width:1180px;margin:0 auto;padding:0 24px}
+.wrap{max-width:720px;margin:0 auto;padding:0 24px}
+.wide{max-width:1240px;margin:0 auto;padding:0 24px}
 
 /* ---------- header ---------- */
-header.top{position:sticky;top:0;z-index:9;backdrop-filter:blur(14px);
-  background:rgba(14,17,22,.72);border-bottom:1px solid rgba(35,44,58,.7)}
-.top .wide{display:flex;align-items:center;gap:12px;height:52px}
-.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:16px;
-  letter-spacing:-.02em;color:var(--text)}
+header.top{position:sticky;top:0;z-index:9;backdrop-filter:blur(16px);
+  background:rgba(11,13,17,.7);border-bottom:1px solid rgba(30,35,44,.8)}
+.top .wide{display:flex;align-items:center;gap:12px;height:56px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;
+  letter-spacing:-.03em}
 .brand svg{width:20px;height:16px;color:var(--accent)}
-.top nav{margin-left:auto;display:flex;align-items:center;gap:8px}
-.top nav a{font-size:14px;color:var(--muted);padding:7px 14px;border-radius:999px}
-.top nav a:hover{color:var(--text)}
-.top nav a.cta{background:var(--accent);color:#06101f;font-weight:600}
-.top nav a.cta:hover{background:#79b0ff}
-@media (max-width:620px){ .top nav a.ghost{display:none} }
+.top nav{margin-left:auto;display:flex;align-items:center;gap:6px}
+.top nav a{font-size:14.5px;color:var(--dim);padding:8px 14px;border-radius:999px;
+  transition:color .15s var(--ease)}
+.top nav a:hover{color:var(--ink)}
+.top nav a.cta{background:var(--ink);color:#0b0d11;font-weight:650}
+.top nav a.cta:hover{background:#fff}
+@media (max-width:560px){ .top nav a.ghost{display:none} }
 
 /* ---------- type ---------- */
-h1{font-size:clamp(40px,7.5vw,72px);line-height:1.02;letter-spacing:-.035em;
-   margin:0 0 22px;font-weight:700;text-wrap:balance}
-h2{font-size:clamp(28px,4.4vw,44px);line-height:1.08;letter-spacing:-.03em;
-   margin:0 0 18px;font-weight:700;text-wrap:balance}
-.lede{font-size:clamp(18px,2.2vw,21px);line-height:1.55;color:#c3cddd;margin:0 0 32px;
-  text-wrap:pretty}
-.say{font-size:17px;line-height:1.65;color:var(--muted);margin:0 0 26px}
-.say b,.lede b{color:var(--text);font-weight:600}
-code{font:.86em var(--mono);background:var(--panel-2);border:1px solid var(--line);
-  border-radius:5px;padding:1px 5px;color:#cfe0ff}
+h1{font-size:clamp(46px,9vw,104px);line-height:.96;letter-spacing:-.045em;
+   margin:0 0 26px;font-weight:700;text-wrap:balance}
+h2{font-size:clamp(32px,5.6vw,60px);line-height:1.02;letter-spacing:-.04em;
+   margin:0 0 20px;font-weight:700;text-wrap:balance}
+.lede{font-size:clamp(19px,2.3vw,23px);line-height:1.5;color:var(--dim);
+  margin:0 0 36px;text-wrap:pretty}
+.say{font-size:18px;line-height:1.62;color:var(--dim);margin:0 0 28px;text-wrap:pretty}
+.say b,.lede b{color:var(--ink);font-weight:620}
+.kicker{font:600 12px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 18px}
+code{font:.87em var(--mono);background:#151a21;border:1px solid var(--line);
+  border-radius:5px;padding:1.5px 6px;color:#dbe4f0}
 
-/* ---------- sections ---------- */
-section.act{padding:clamp(72px,11vw,132px) 0 0}
-.eyebrow{font:11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
-  color:var(--accent);margin:0 0 16px}
+section{padding:clamp(84px,13vw,168px) 0 0}
+.hero{padding:clamp(64px,11vw,124px) 0 0;text-align:center}
+.hero .wrap{max-width:860px}
 
-/* ---------- shots ---------- */
-figure{margin:clamp(30px,5vw,48px) 0 0}
-figure img,figure video{border-radius:16px;border:1px solid var(--line);
-  box-shadow:0 24px 70px rgba(0,0,0,.6),0 2px 8px rgba(0,0,0,.4)}
-figure.plain img{border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.5)}
-figure video{width:100%;height:auto;display:block;background:#000}
-figcaption{margin:16px auto 0;max-width:620px;font-size:13.5px;line-height:1.6;
-  color:var(--dim);text-align:center}
-figcaption b{color:var(--muted);font-weight:600}
-
-/* ---------- hero ---------- */
-.hero{padding:clamp(56px,10vw,110px) 0 0;text-align:center}
-.hero .wrap{max-width:760px}
-.hero-cta{display:flex;gap:12px;justify-content:center;align-items:center;margin:0}
+/* ---------- buttons ---------- */
+.btns{display:flex;gap:12px;justify-content:center;align-items:center}
 .btn{display:inline-flex;align-items:center;justify-content:center;
-  min-height:50px;padding:0 26px;border-radius:999px;font-size:16px;
-  font-weight:600;border:1px solid var(--line);
-  background:linear-gradient(180deg,#1e2634,var(--panel-2));color:var(--text);
+  min-height:52px;padding:0 28px;border-radius:999px;font-size:16px;font-weight:620;
+  border:1px solid var(--line);background:#12161d;color:var(--ink);
   transition:border-color .15s var(--ease),background .15s var(--ease),transform .08s var(--ease)}
-.btn:hover{border-color:#3a4763;background:linear-gradient(180deg,#26303f,#1f2735)}
+.btn:hover{border-color:#333d4d;background:#171c24}
 .btn:active{transform:translateY(1px)}
-.btn.primary{background:linear-gradient(180deg,#6faaff,var(--accent));
-  border-color:var(--accent);color:#06101f;box-shadow:0 1px 12px rgba(91,157,255,.26)}
-.btn.primary:hover{background:linear-gradient(180deg,#83b6ff,#6aa6ff)}
-
-/* Stacked, they have to be one set: two pills of different widths each centred
-   on their own reads as a mistake rather than a pair. */
-@media (max-width:560px){
-  .hero-cta{flex-direction:column;align-items:stretch;gap:10px;
-    max-width:300px;margin-inline:auto}
+.btn.primary{background:var(--ink);color:#0b0d11;border-color:var(--ink)}
+.btn.primary:hover{background:#fff;border-color:#fff}
+@media (max-width:520px){
+  .btns{flex-direction:column;align-items:stretch;max-width:320px;margin-inline:auto}
   .btn{width:100%}
 }
-.under{font-size:13.5px;color:var(--dim);margin:22px 0 0;letter-spacing:.01em}
+.under{font:13px/1.5 var(--mono);color:var(--faint);margin:24px 0 0;letter-spacing:.02em}
+
+/* ---------- media ---------- */
+figure{margin:clamp(38px,6vw,64px) 0 0}
+figure img,figure video{width:100%;border-radius:14px;border:1px solid var(--line);
+  box-shadow:0 30px 90px rgba(0,0,0,.65)}
+figcaption{margin:18px auto 0;max-width:640px;font-size:14px;line-height:1.6;
+  color:var(--faint);text-align:center}
+figcaption b{color:var(--dim);font-weight:600}
 
 /* ---------- numbers ---------- */
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
-  background:var(--line);border:1px solid var(--line);border-radius:12px;
-  overflow:hidden;margin:clamp(30px,5vw,44px) 0 0}
-.stat{background:#12172099;padding:26px 10px;text-align:center}
-.stat b{display:block;font:600 clamp(26px,4vw,38px)/1 var(--mono);
-  letter-spacing:-.03em;color:var(--text);margin-bottom:9px}
-.stat span{font-size:12px;color:var(--dim);letter-spacing:.01em;white-space:nowrap}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  margin:clamp(40px,6vw,60px) 0 0}
+.stat{background:#0e1116;padding:32px 12px;text-align:center}
+.stat b{display:block;font:700 clamp(30px,4.6vw,46px)/1 var(--mono);
+  letter-spacing:-.04em;margin-bottom:10px}
+.stat span{font-size:12.5px;color:var(--faint);white-space:nowrap}
 .stat.win b{color:var(--good)}
-@media (max-width:640px){ .stats{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:660px){ .stats{grid-template-columns:repeat(2,1fr)} }
 
-/* ---------- progressive disclosure ---------- */
-details.more{margin:26px 0 0;border-top:1px solid var(--line)}
-details.more summary{
-  list-style:none;cursor:pointer;padding:15px 2px;display:flex;align-items:center;gap:9px;
-  font-size:14.5px;color:var(--muted);transition:color .15s var(--ease)}
-details.more summary::-webkit-details-marker{display:none}
-details.more summary:hover{color:var(--text)}
-details.more summary::after{content:"";width:7px;height:7px;margin-left:2px;
-  border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;
-  transform:rotate(45deg) translate(-2px,-2px);transition:transform .18s var(--ease)}
-details.more[open] summary::after{transform:rotate(-135deg) translate(-3px,-3px)}
-details.more[open] summary{color:var(--text)}
-.more-body{padding:2px 0 22px;font-size:15.5px;line-height:1.68;color:#b6c2d4}
-.more-body p{margin:0 0 15px}
-.more-body h3{font-size:15px;margin:26px 0 8px;color:var(--text);letter-spacing:-.01em}
-.more-body ul{padding-left:20px;margin:0 0 15px}
-.more-body li{margin:0 0 8px}
-.more-body b{color:var(--text)}
+/* ---------- disclosure ---------- */
+details{margin:32px 0 0;border-top:1px solid var(--line)}
+details summary{list-style:none;cursor:pointer;padding:17px 2px;display:flex;
+  align-items:center;gap:10px;font-size:15px;font-weight:560;color:var(--dim);
+  transition:color .15s var(--ease)}
+details summary::-webkit-details-marker{display:none}
+details summary:hover{color:var(--ink)}
+details summary::after{content:"";width:7px;height:7px;margin-left:2px;
+  border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;
+  transform:rotate(45deg) translate(-2px,-2px);transition:transform .2s var(--ease)}
+details[open] summary::after{transform:rotate(-135deg) translate(-3px,-3px)}
+details[open] summary{color:var(--ink)}
+.body{padding:4px 0 26px;font-size:16px;line-height:1.68;color:#aab4c4}
+.body p{margin:0 0 16px}
+.body h3{font-size:15px;margin:26px 0 8px;color:var(--ink);letter-spacing:-.01em}
+.body b{color:var(--ink)}
 
-pre{background:#0b0f16;border:1px solid var(--line);border-radius:10px;
-  padding:15px 17px;overflow-x:auto;margin:0 0 18px}
-pre code{background:none;border:0;padding:0;font-size:13px;color:#a9b6cb;line-height:1.75}
-.scroll{overflow-x:auto;margin:0 0 18px}
-table{width:100%;border-collapse:collapse;font-size:14px;min-width:440px}
-th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
-th{font:600 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
-.num{font-variant-numeric:tabular-nums;white-space:nowrap}
-.g{color:var(--good);font-weight:600}
+pre{background:#0e1116;border:1px solid var(--line);border-radius:12px;
+  padding:20px 22px;overflow-x:auto;margin:0 0 20px;text-align:left}
+pre code{background:none;border:0;padding:0;font-size:14px;color:#b9c4d4;line-height:1.85}
 
-footer{margin-top:clamp(56px,8vw,96px);border-top:1px solid var(--line);
-  padding:30px 0 70px;color:var(--dim);font-size:14px;text-align:center}
-footer a{color:var(--muted)}
-footer a:hover{color:var(--text)}
+footer{margin-top:clamp(80px,11vw,140px);border-top:1px solid var(--line);
+  padding:36px 0 80px;color:var(--faint);font-size:14px;text-align:center}
+footer a{color:var(--dim)}
+footer a:hover{color:var(--ink)}
 @media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto} *{transition:none!important} }
 </style>
 </head>
@@ -145,50 +128,123 @@ footer a:hover{color:var(--text)}
 <header class="top"><div class="wide">
   <a class="brand" href="#top">
     <svg viewBox="0 0 26 20" aria-hidden="true"><path d="M2 12 L2 8 M7 15 L7 5 M12 18 L12 2 M17 14 L17 6 M22 11 L22 9"
-      stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>song</a>
+      stroke="currentColor" stroke-width="2.3" stroke-linecap="round" fill="none"/></svg>song</a>
   <nav>
     <a class="ghost" href="https://github.com/nuterian/song">GitHub</a>
     <a class="cta" href="demo/">Try it</a>
   </nav>
 </div></header>
 
-<!-- ------------------------------------------------------------- hero -->
+<!-- ------------------------------------------------------------ hero -->
 <section class="hero" id="top">
   <div class="wrap">
-    <h1>Lyrics, timed to the word.</h1>
+    <h1>Lyrics, timed to the word. Then the video.</h1>
     <p class="lede">
-      Drop in a track and a text file. Everything runs on your own machine.
+      Drop in a track and a text file. Everything runs on your own machine —
+      no keys, no uploads, nothing per track.
     </p>
-    <div class="hero-cta">
+    <div class="btns">
       <a class="btn primary" href="demo/">Try it in your browser</a>
-      <a class="btn" href="https://github.com/nuterian/song">Get it on GitHub</a>
+      <a class="btn" href="https://github.com/nuterian/song">GitHub</a>
     </div>
-    <p class="under">.lrc · word-level .lrc · .srt · .vtt · .mp4</p>
+    <p class="under">.lrc · word .lrc · .srt · .vtt · .ass · .mp4</p>
   </div>
 
   <div class="wide">
     <figure>
-      <img src="img/app-full.png" alt="The song app: a waveform with every lyric line bracketed, and the lyrics listed below with per-line scores." width="1440" height="940">
+      <img src="img/app-full.png" width="1440" height="940" fetchpriority="high"
+           alt="The song app: a waveform with every lyric line bracketed, and the lyrics listed below with per-line scores.">
     </figure>
   </div>
 </section>
 
-<!-- ------------------------------------------------------- the premise -->
-<section class="act">
+<!-- ----------------------------------------------------------- video -->
+<section>
   <div class="wrap">
-    <p class="eyebrow">The premise</p>
+    <p class="kicker">One command</p>
+    <h2>It renders the video.</h2>
+    <p class="say">
+      Three lines at the bottom left, each word lighting up as it lands and the
+      stack rising when the line turns over. <b>Everything behind them is
+      generated from the track itself</b> — the section picks the palette, the
+      light answers the mix, one line traces the amplitude. No footage, no
+      template, nothing to supply.
+    </p>
+  </div>
+  <div class="wide">
+    <figure>
+      <video src="img/video-demo.mp4" poster="img/video-still.jpg"
+             controls muted autoplay loop playsinline preload="metadata"
+             width="1280" height="720"
+             aria-label="Forty-eight seconds of the karaoke video: three lyric lines at the bottom left, the middle one filling word by word in an accent colour, over a soft lit wash that changes with each section, with a thin waveform level with it on the right."></video>
+      <script>
+        /* The only script here. An autoplaying loop is motion, and the
+           stylesheet already honours the request not to have any. */
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          document.querySelectorAll('video[autoplay]').forEach(v => {
+            v.removeAttribute('autoplay'); v.pause();
+          });
+        }
+      </script>
+      <figcaption>
+        Forty-eight seconds, straight out of <code>python -m song video</code>.
+        Sound is on the controls. <b>1080p — about thirteen minutes for a
+        five-minute track</b>, or four at <code>--height 720</code>.
+      </figcaption>
+    </figure>
+  </div>
+  <div class="wrap">
+    <details>
+      <summary>Why there is no frame renderer in here</summary>
+      <div class="body">
+        <p>Because ASS subtitles have had karaoke tags since the VirtualDub era.
+        <code>\kf</code> sweeps a fill across a run of text over a given
+        duration, and this project already knows where every word starts and
+        ends. So the lyrics are a format conversion and a burn-in, and shaping,
+        wrapping and antialiasing come from libass rather than from code written
+        here to arrive somewhere worse.</p>
+        <h3>The arithmetic that matters</h3>
+        <p>ASS counts in centiseconds. Round each word on its own and you lose
+        half a centisecond a time — <b>13 across a 100-word line</b>, all of it
+        landing at the end, which is the half nobody checks. Every duration here
+        is the difference between two absolute positions instead.</p>
+        <h3>Sensitive, subtle and smooth are three different things</h3>
+        <p><b>Sensitive is timing</b>: the frame's brightness tracks the mix
+        with its best correlation at zero lag. <b>Subtle is amount</b>: the
+        whole frame moves through 6.9% of its range over ten seconds.
+        <b>Smooth is frequency</b> — and that one cost a round to learn. The
+        first version was sensitive and subtle and flickered, because a kick
+        swings a field 12 of 255 in three frames and a large area doing that is
+        read as a twitch, however smooth the curve driving it. The fields
+        average over 0.30 s now; the waveform keeps the unsmoothed copy, because
+        a thin stroke can show detail a field cannot.</p>
+        <h3>Everything eases, including the part that cannot</h3>
+        <p>A line does not slide between stops, it eases — but
+        <code>\move</code> is linear and has no easing of its own. So a slot
+        change is cut into three segments whose lengths follow a smoothstep, and
+        because each segment is its own event carrying its own share of the fade
+        and the scale, everything about a line eases on one curve.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ------------------------------------------------------- the premise -->
+<section>
+  <div class="wrap">
+    <p class="kicker">The premise</p>
     <h2>You already know the words.</h2>
     <p class="say">
       Transcribe-then-match falls apart on songs: a chorus that repeats four
-      times gives four identical transcripts, and nothing says which is which.
+      times gives four identical transcripts and nothing says which is which.
       Since the lyrics are known, this is <b>forced alignment</b> — the text is
       consumed in order, so repeats resolve by position for free.
     </p>
   </div>
-
   <div class="wide">
-    <figure class="plain">
-      <img src="img/app-stage.png" loading="lazy" alt="The timeline zoomed to one line, word cells along the bottom with dividers running the full height of the waveform." width="1420" height="300">
+    <figure>
+      <img src="img/app-stage.png" loading="lazy" width="1420" height="300"
+           alt="The timeline zoomed to one line, word cells along the bottom with dividers running the full height of the waveform.">
       <figcaption>
         Word boundaries are cut against the audio itself — <b>a divider that
         misses the syllable attack is visible</b> against the thing it is
@@ -196,49 +252,44 @@ footer a:hover{color:var(--text)}
       </figcaption>
     </figure>
   </div>
-
   <div class="wrap">
-    <details class="more">
+    <details>
       <summary>How three models cross-examine each other</summary>
-      <div class="more-body">
+      <div class="body">
         <p>One aligner is not enough, and an AI-generated song has no reference
-        timing file to check against. So three independent passes disagree in
+        timing to check against. So three independent passes disagree in
         public.</p>
         <h3>1 · Demucs isolates the vocal</h3>
         <p>Aligning against the stem rather than the mix is the single biggest
         accuracy win on dense productions — the aligners stop locking onto kick
-        drums. It also makes <i>is anyone singing right now?</i> a reliable
-        energy question, which the scorer and the UI both lean on.</p>
+        drums.</p>
         <h3>2 · wav2vec2 CTC anchors the structure</h3>
         <p>A Whisper pass over a whole song desynchronizes: a 4-bar instrumental
-        outruns its 30-second attention window and the rest of the track slides.
-        Measured here, a global Whisper pass put the closing line at 2:37 of a
-        4:46 song. CTC emits per-frame probabilities and finds one globally
-        optimal path, so instrumental stretches are absorbed as blanks.</p>
+        outruns its attention window and the rest slides. Measured here, that
+        put the closing line at 2:37 of a 4:46 song. CTC finds one globally
+        optimal path, so instrumentals are absorbed as blanks.</p>
         <h3>3 · Whisper refines inside each section</h3>
         <p>With structure anchored, each section is cropped to ~20 seconds and
-        re-aligned, where Whisper is both accurate and precise. Coarse-to-fine:
-        CTC for structure, Whisper for edges. That took median cross-aligner
-        disagreement to <b>140 ms</b>.</p>
+        re-aligned, where Whisper is both accurate and precise.</p>
         <h3>4 · A blind transcription adjudicates</h3>
         <p>Both aligners are <i>told</i> the lyrics, so both can be confidently
-        wrong in the same place. A third pass is told nothing and reports what it
-        hears. Where that lands is the tiebreaker, and the strongest single
-        signal in the merge.</p>
+        wrong in the same place. A third pass is told nothing and reports what
+        it hears. It is the strongest single signal in the merge — and it is
+        what finds the chorus repeat somebody forgot to type.</p>
       </div>
     </details>
   </div>
 </section>
 
-<!-- --------------------------------------------------------- the score -->
-<section class="act">
+<!-- ------------------------------------------------------------ proof -->
+<section>
   <div class="wrap">
-    <p class="eyebrow">Accuracy you can check</p>
-    <h2>Every line is scored, so review goes where it is needed.</h2>
+    <p class="kicker">Accuracy you can check</p>
+    <h2>Every line is scored.</h2>
     <p class="say">
       There is no ground truth, so accuracy is <b>estimated from evidence</b>:
-      six signals per line, rolled into a number. Lines that are fine carry no
-      mark at all.
+      six signals per line, rolled into a number. Review goes where the
+      benchmark says it should, and lines that are fine carry no mark at all.
     </p>
     <div class="stats">
       <div class="stat win"><b>94.5</b><span>mean line score</span></div>
@@ -246,33 +297,14 @@ footer a:hover{color:var(--text)}
       <div class="stat"><b>160<small>ms</small></b><span>median disagreement</span></div>
       <div class="stat"><b>99%</b><span>vocal coverage</span></div>
     </div>
-
-    <details class="more">
-      <summary>The six signals, and proof the score discriminates</summary>
-      <div class="more-body">
-        <div class="scroll"><table>
-          <thead><tr><th>Signal</th><th class="num">Weight</th><th>What it catches</th></tr></thead>
-          <tbody>
-            <tr><td>Cross-aligner agreement</td><td class="num">30</td><td>Two model families disagreeing means the line is uncertain</td></tr>
-            <tr><td>Blind corroboration</td><td class="num">22</td><td>Both aligners wrong together; whole sections misplaced</td></tr>
-            <tr><td>Vocal coverage</td><td class="num">20</td><td>A line parked over an instrumental break</td></tr>
-            <tr><td>Onset proximity</td><td class="num">12</td><td>Starts that don't land on a vocal attack</td></tr>
-            <tr><td>Word density</td><td class="num">8</td><td>Spans far too long or short for the words in them</td></tr>
-            <tr><td>Aligner confidence</td><td class="num">8</td><td>Low per-word probability</td></tr>
-          </tbody>
-        </table></div>
+    <details>
+      <summary>Proof the score discriminates</summary>
+      <div class="body">
         <p>A quality score that always says "fine" is worthless, so it was run
         against a deliberately degraded alignment — the same track aligned
-        against the full mix, skipping vocal isolation:</p>
-        <div class="scroll"><table>
-          <thead><tr><th></th><th class="num">normal</th><th class="num">degraded</th></tr></thead>
-          <tbody>
-            <tr><td>mean line score</td><td class="num g">94.5</td><td class="num">69.9</td></tr>
-            <tr><td>vocal coverage</td><td class="num">99%</td><td class="num">9%</td></tr>
-            <tr><td>lines needing review</td><td class="num">2 of 33</td><td class="num">11 of 33</td></tr>
-            <tr><td>quality gate</td><td class="num">passed</td><td class="num">failed on 3</td></tr>
-          </tbody>
-        </table></div>
+        against the full mix, skipping vocal isolation. Mean line score falls
+        from <b>94.5 to 69.9</b>, vocal coverage from 99% to 9%, and lines
+        needing review go from 2 of 33 to 11.</p>
         <p><b>Read the flags as "look here", not "this is wrong."</b> On this
         track both flagged lines are correctly placed — they are flagged because
         two model families disagree about them by seconds, which is the flags
@@ -282,21 +314,21 @@ footer a:hover{color:var(--text)}
   </div>
 </section>
 
-<!-- ---------------------------------------------------------- by ear -->
-<section class="act">
+<!-- ----------------------------------------------------------- by ear -->
+<section>
   <div class="wrap">
-    <p class="eyebrow">Where models disagree</p>
+    <p class="kicker">Where models disagree</p>
     <h2>You settle it by ear, in five seconds.</h2>
     <p class="say">
-      Of 177 words, two aligners agreed on 137 — you never see those. Two were
-      provably impossible and repaired without asking. The rest play you both
-      candidates from the moment each claims the word begins.
+      Of 177 words, two aligners agreed on 137 — you never see those. The rest
+      play you both candidates from the moment each claims the word begins.
       <b>If neither is right, drag a third onto the waveform.</b>
     </p>
   </div>
   <div class="wide">
     <figure>
-      <img src="img/app-review.png" loading="lazy" alt="The Check timings card: a waveform strip with blue, green and violet markers, and three options — Now, Suggested and Adjusted — each with its own play button." width="1180" height="860">
+      <img src="img/app-review.png" loading="lazy" width="1180" height="860"
+           alt="The Check timings card: a waveform strip with blue, green and violet markers, and three options — Now, Suggested and Adjusted — each with its own play button.">
       <figcaption>
         Blue is the timing now, green is what the second model wants, violet is
         where you dragged it. It <b>snaps to a vocal onset within 60 ms</b> and
@@ -305,296 +337,38 @@ footer a:hover{color:var(--text)}
     </figure>
   </div>
   <div class="wrap">
-    <details class="more">
+    <details>
       <summary>What is deliberately not automated</summary>
-      <div class="more-body">
-        <p>Snapping every word start to its nearest detected onset. It looks like
-        free accuracy, but on this track <b>41% of word starts have more than one
-        onset within ±150 ms</b> — snapping would be a coin flip wearing a lab
-        coat. Where two independent models disagree and both readings are
-        plausible, no heuristic settles it honestly, so a human ear does.</p>
-        <p>Accepting an adjustment is one undo step, exactly like accepting a
-        suggestion, so <code>⌘Z</code> after closing the sheet takes back the
-        timing and the queue mark together.</p>
-        <div class="scroll"><table>
-          <thead><tr><th>Key</th><th>While the sheet is open</th></tr></thead>
-          <tbody>
-            <tr><td class="num">← →</td><td>nudge your adjusted timing ±50 ms (shift ±10 ms)</td></tr>
-            <tr><td class="num">space</td><td>replay whichever version you heard last</td></tr>
-            <tr><td class="num">1 2 3</td><td>hear now / suggested / adjusted</td></tr>
-            <tr><td class="num">enter</td><td>take the highlighted button</td></tr>
-          </tbody>
-        </table></div>
-      </div>
-    </details>
-  </div>
-</section>
-
-<!-- -------------------------------------------------------- missing -->
-<section class="act">
-  <div class="wrap">
-    <p class="eyebrow">Something extra</p>
-    <h2>It found a chorus that isn't in the lyrics file.</h2>
-    <p class="say">
-      Lyrics get typed by hand, and hands drop things — usually a chorus repeat.
-      The aligner can't notice: it is told the lyrics and consumes them in order,
-      so the omission leaves <b>45 seconds nobody looks at</b>. The blind
-      transcription already heard it.
-    </p>
-  </div>
-  <div class="wide">
-    <figure>
-      <img src="img/app-missing.png" loading="lazy" alt="A card headed 'A line you did not write down', showing the heard text, the evidence for it, and the waveform with the heard span shaded green." width="1180" height="860">
-      <figcaption>
-        Proposed only when it matches <b>a line you already wrote</b> — so
-        approving is a listen, never proofreading a machine.
-      </figcaption>
-    </figure>
-  </div>
-  <div class="wrap">
-    <details class="more">
-      <summary>How the false positives get refused</summary>
-      <div class="more-body">
-        <p>Finding candidates is easy. Refusing bad ones is the work: a vocal
-        stem carries pads, "ooh"s and reverb tails, and Whisper will happily
-        hallucinate "Thank you." over a fade. A candidate must clear four tests
-        at once — at least three words, mean confidence ≥ 0.6, no overhang onto a
-        neighbouring line, and a ≥ 0.8 text match to a line the lyrics already
-        contain, covering ≥ 60% of it.</p>
-        <div class="scroll"><table>
-          <thead><tr><th>gap</th><th>heard</th><th class="num">conf</th><th>matches a line?</th></tr></thead>
-          <tbody>
-            <tr><td class="num g">1:20→2:06</td><td class="g">"You're my gravity in motion"</td><td class="num g">0.89</td><td class="g">1.00 — exact, 5/5</td></tr>
-            <tr><td class="num">1:02→1:04</td><td>"You're my"</td><td class="num">0.60</td><td>0.50 — 2/5, overhangs</td></tr>
-            <tr><td class="num">4:05→4:08</td><td>"Ocean"</td><td class="num">0.29</td><td>0.21 — one word</td></tr>
-            <tr><td class="num">4:38→end</td><td>"Thank you."</td><td class="num">0.50</td><td>0.30 — hallucinated</td></tr>
-            <tr><td class="num">five others</td><td><i>nothing transcribed</i></td><td class="num">—</td><td>—</td></tr>
-          </tbody>
-        </table></div>
-        <p>One survives, and it is the right one. Accepting it takes the
-        benchmark from 33/33 lines at 94.5 to <b>34/34 at 94.6, all 34 heard
-        independently.</b></p>
-      </div>
-    </details>
-  </div>
-</section>
-
-<!-- ---------------------------------------------------------- video -->
-<section class="act">
-  <div class="wrap">
-    <p class="eyebrow">The payoff</p>
-    <h2>One command turns it into a video.</h2>
-    <p class="say">
-      Three lines, bottom left: the one being sung, with the one before and the
-      one after smaller and faded either side. Each word <b>grows, thickens and
-      lights up</b> as it lands; when the line changes, the whole stack rises by
-      one, on a curve rather than a slide. Opposite them, one zigzag line,
-      drawn from the mix and carrying the bass in its weight and the air in its
-      tremor. There is nothing to supply.
-    </p>
-  </div>
-  <div class="wide">
-    <figure>
-      <video src="img/video-loop.mp4" poster="img/video-still.jpg"
-             autoplay muted loop playsinline preload="metadata"
-             width="1000" height="562"
-             aria-label="Twelve seconds of the karaoke video: three lines of lyrics at the bottom left, the middle one filling word by word in an accent colour as it is sung, over a soft lit wash, with a thin zigzag line tracking the amplitude at the bottom right."></video>
-      <script>
-        /* The only script on this page. It is here because an autoplaying loop
-           is motion, and the stylesheet already honours the request not to have
-           any - so the clip becomes a still with a play button instead. */
-        if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          document.querySelectorAll('video[autoplay]').forEach(v => {
-            v.removeAttribute('autoplay'); v.pause(); v.controls = true;
-          });
-        }
-      </script>
-      <figcaption>
-        Twelve seconds of the first chorus, straight out of
-        <code>python -m song video</code>. <b>Every pixel behind the words came
-        out of the audio</b> — no footage, no still image, no template.
-      </figcaption>
-    </figure>
-  </div>
-  <div class="wrap">
-    <details class="more">
-      <summary>Why there is no frame renderer in here</summary>
-      <div class="more-body">
-        <p>Because ASS subtitles have had karaoke tags since the VirtualDub era.
-        <code>\kf</code> sweeps a fill across a run of text over a given
-        duration — the classic per-syllable wipe — and this project already knows
-        where every word starts and ends. So the karaoke layer is a format
-        conversion and a burn-in, and font shaping, outline, shadow, wrapping and
-        antialiasing all come from libass rather than from code written here to
-        arrive somewhere worse.</p>
-        <h3>The arithmetic that actually matters</h3>
-        <p>ASS counts in centiseconds. Round each word's duration on its own and
-        you lose up to half a centisecond a time — <b>13 centiseconds across a
-        100-word line</b>, all of it landing at the end, which is the half nobody
-        checks. Every duration here is instead the difference between two
-        absolute positions on the timeline, so it cannot accumulate.</p>
-        <p>The space between two words is its own zero-length segment. Charge it
-        to the word before and the sweep spends the tail of that word crossing
-        whitespace, so the word finishes early; charge it to the word after and
-        the word starts late. Both show on a fast syllable run, and late is the
-        one that reads as broken.</p>
-        <h3>Where the picture comes from</h3>
-        <div class="scroll"><table>
-          <thead><tr><th>On screen</th><th>Driven by</th></tr></thead>
-          <tbody>
-            <tr><td>the colour</td><td>the section name in your lyrics file — every chorus is the same colour</td></tr>
-            <tr><td>four fields of light</td><td>a pool, a column, a band and a spot — each on its own part of the track</td></tr>
-            <tr><td>which of two palettes</td><td>the mix envelope, sliding between a quiet one and a loud one</td></tr>
-            <tr><td>how wide each opens</td><td>the mix, the vocal, the bass or the air, one each</td></tr>
-            <tr><td>a small kick</td><td>the tracked beat, harder on the first of the bar</td></tr>
-            <tr><td>a fast, tiny shiver</td><td>the mix again — a couple of pixels, sized by how loud it is now</td></tr>
-            <tr><td>the line's shape</td><td>the mix peaks; its weight the bass, its tremor the air</td></tr>
-            <tr><td>the sweep</td><td>the word timings in <code>project.json</code></td></tr>
-            <tr><td>the word growing and lit</td><td>the same timings, as an eased per-word transform</td></tr>
-          </tbody>
-        </table></div>
-        <p>Beats are tracked on the <b>mix</b>, not the isolated vocal — the stem
-        has had the drums taken out of it, which is the signal beat tracking
-        wants. And they are the beats librosa found, not a grid synthesized from
-        the tempo: a grid is right for eight bars and then slides, and by the last
-        chorus of a 4:46 song it is visibly ahead of the snare.</p>
-        <h3>Bass, mix and air, in one line</h3>
-        <p>A peak envelope cannot tell a kick from a hi-hat: both are one
-        number. So the beat cache carries a two-band split as well — everything
-        under 260 Hz, everything over 3.5 kHz.</p>
-        <p>Drawing all three as stacked lines was the honest thing and it looked
-        like a readout: <b>three objects where the picture wanted one</b>. So
-        the bands are felt in the single line instead. Bass sets how heavy the
-        stroke is, so a kick lands as weight rather than as height; air is added
-        to the teeth as a fine tremor, so cymbals and consonants arrive as
-        texture on the shape rather than as a shape of their own.</p>
-        <p>Teeth are spaced in <i>time</i> rather than in beats, so a faster
-        passage puts more of them in front of you. That is where the tempo
-        is.</p>
-        <p>Where the line sits is derived from where the text sits, not typed to
-        match it: it rests on the optical centre of the lyric being sung, and
-        stops the same distance from the right edge as the words start from the
-        left. Measured off a render, the two centres are <b>0.8 px apart</b> and
-        the margins 93 and 100. Written as their own constants, the two halves
-        of the composition would drift the first time either moved.</p>
-        <h3>Three lines, and three states in the middle one</h3>
-        <p>The neighbours share the sung line's window exactly, so no line is
-        ever on screen in two slots at once. Overlapping them by a few hundred
-        milliseconds to cross-dissolve a line upward as it advances was the
-        obvious idea and it looks like a fault: for the length of the overlap
-        the same sentence is legible twice.</p>
-        <p><code>\kf</code> gives two: a word not yet sung is dim, a word sung
-        is filled. So the style's primary is the <b>accent</b> rather than the
-        final colour, and one transform per word hands that word back to ink a
-        moment after it lands. One word is lit at a time, with a short trail
-        behind it.</p>
-        <p>Only the line being sung is swept. A neighbour drawn with the same
-        karaoke tags has every word either already over or not yet begun, so it
-        fills to the accent at once and the settle then walks it back — <b>a
-        line that has finished being sung relights in colour as it leaves</b>,
-        which reads as a fault. Caught by a test, after being caught by
-        looking.</p>
-        <p>Every word's override block opens with <code>\r</code>, because an
-        override applies to everything after it and a transform that has not
-        started does not cancel one that has — without the reset, <b>the whole
-        line inflates with the first word</b>. That looked correct until a frame
-        was pulled at the moment the first word was up, which is the argument
-        for checking a render by looking at it.</p>
-        <h3>Everything eases, including the part that cannot</h3>
-        <p>A line does not slide between stops, it eases between them — but
-        <code>\move</code> is linear and has no easing of its own. So a slot
-        change is cut into three segments whose lengths follow a smoothstep, and
-        because each segment is its own event carrying its own share of the fade
-        and the scale, <b>everything about a line eases on one curve</b> rather
-        than the size easing while the position runs at a constant speed. Three
-        segments is enough: the fastest is twice the slowest, which is a curve
-        and not a staircase.</p>
-        <p>Short words grow proportionally less. At full size on a 90 ms
-        syllable a swell is a flicker rather than an emphasis, and a fast run
-        strobes.</p>
-        <h3>Nothing is drawn around the words</h3>
-        <p>No border, no blur, no shadow. Each of those is a second shape made
-        from the letterforms, and at this size all three read as an outline
-        rather than as separation — <code>\blur</code> worst of all, since with
-        a border thick enough to see it bleeds into the fill and every word
-        comes <i>into focus</i> as it is sung.</p>
-        <p>The contrast comes from the picture instead: a wide, soft lift of
-        light under the corner the words sit in, built the same separable way as
-        the pools. It is large enough and soft enough that there is no edge
-        anywhere to find, so it reads as light falling on that corner rather
-        than as a panel put there to hold text.</p>
-        <p>Nothing darkens the corners either. A vignette is how you make a
-        frame look like a spotlight in a black room, and this wanted to look
-        like a lit room, so the floor is raised until the darkest corner still
-        has colour in it and the pools brighten from there.</p>
-        <h3>Sensitive, and quiet with it</h3>
-        <p>The two asks pull against each other, and the resolution is that
-        they are different properties. <b>Sensitive is about timing</b>:
-        measured over ten seconds of chorus, the frame's brightness tracks the
-        mix with its best correlation at <b>zero lag</b> — it answers a
-        transient in the frame the transient happens, not a beat later.
-        <b>Subtle is about amount</b>: over the same ten seconds the whole
-        frame moves through <b>6.9% of the available range</b>.</p>
-        <p>There is a third property, and it cost a round to learn: <b>smooth is
-        about frequency</b>. The first version drove the fields off envelopes
-        smoothed over 45 ms, which is sensitive and subtle and <i>flickered</i>,
-        because a kick swings a field 12 of 255 in three frames and a large area
-        doing that is read as a twitch. The fields average over 0.30 s now. The
-        line keeps the unsmoothed copies: a thin stroke can show detail a field
-        cannot, which is the whole reason for having both.</p>
-        <p>Colour works the same way. Each section carries two palettes a few
-        degrees of hue and a little brightness apart, and the mix slides between
-        them — so the colour is never quite still without ever announcing a
-        change.</p>
-        <h3>Why it is drawn at full size</h3>
-        <p>The first version generated 640×360 and let ffmpeg scale it up, on
-        the theory that every layer is a smooth field. The line is not — a
-        one-pixel stroke upscaled two-to-one is a two-pixel stroke that wobbles
-        between them, and it crawled.</p>
-        <p>Full size fixed that and cost nothing, because a pool of light is a
-        Gaussian and a Gaussian is separable: exp(−(dx²+dy²)) is exp(−dx²) times
-        exp(−dy²). So one costs two exponentials — over a row and over a column —
-        and an outer product, rather than an exponential at every pixel. Four of
-        them plus the line and the lift take <b>18 ms</b> a frame at 1280×720,
-        against 25 ms for a single squared-distance blob at a quarter of the
-        pixels. The stroke is computed over the 135 rows it can reach rather
-        than all 720, for the same reason.</p>
-        <p>The line is drawn the same way: its path is one y per column, so the
-        stroke is a distance from that path, divided by the slope so a steep
-        segment is not drawn thinner than a flat one.</p>
-        <p>One tooth per <i>analysis bucket</i> — the finest the data goes — was
-        tried and is worse. At 8 ms the peak level of a compressed master barely
-        changes, so ninety teeth of near-identical height fill in as a hatched
-        block. Three buckets a tooth, peak-held so neither of the two it skips
-        can be missed, puts about two seconds of the track across the span:
-        <b>long enough for the outline to have the song's shape in it, short
-        enough that every syllable moves it</b>.</p>
-        <p>Five minutes for a 4:46 track at 720p on an M4 CPU.
-        <code>--preview 1:04</code> renders 25 seconds instead, so trying
-        something is not five minutes a go.</p>
+      <div class="body">
+        <p>Snapping every word start to its nearest detected onset. It looks
+        like free accuracy, but on this track <b>41% of word starts have more
+        than one onset within ±150 ms</b> — snapping would be a coin flip
+        wearing a lab coat. Where two independent models disagree and both
+        readings are plausible, no heuristic settles it honestly, so a human ear
+        does.</p>
       </div>
     </details>
   </div>
 </section>
 
 <!-- ------------------------------------------------------------ close -->
-<section class="act">
+<section>
   <div class="wrap" style="text-align:center">
     <h2>Two commands.</h2>
-    <p class="say" style="max-width:520px;margin-inline:auto">
-      Roughly five minutes for a five-minute track. Models download once; re-runs
-      reuse the cached stem.
+    <p class="say" style="max-width:540px;margin-inline:auto">
+      Roughly five minutes to align a five-minute track, and thirteen more to
+      render it at 1080p. Models download once; re-runs reuse the cached stem.
     </p>
-    <pre style="text-align:left"><code>./setup.sh
+    <pre><code>./setup.sh
 ./.venv/bin/python -m song</code></pre>
-    <div class="hero-cta" style="margin-top:32px">
+    <div class="btns" style="margin-top:32px">
       <a class="btn primary" href="demo/">Try it in your browser</a>
-      <a class="btn" href="https://github.com/nuterian/song">Get it on GitHub</a>
+      <a class="btn" href="https://github.com/nuterian/song">GitHub</a>
     </div>
 
-    <details class="more" style="text-align:left">
-      <summary>Commands, output formats and notes</summary>
-      <div class="more-body">
+    <details style="text-align:left">
+      <summary>Every command, and what lands on disk</summary>
+      <div class="body">
         <pre><code>python -m song                          # open the app
 python -m song track.wav lyrics.txt     # align, then open it
 python -m song align track.wav lyrics.txt
@@ -603,18 +377,18 @@ python -m song score workdir/my-track   # re-run the benchmark on your edits
 python -m song export workdir/my-track
 python -m song video workdir/my-track   # render karaoke.mp4</code></pre>
         <p>Everything lands in <code>workdir/&lt;track&gt;/</code>:
-        <code>lyrics.lrc</code>, <code>lyrics.word.lrc</code> (per-word, for
-        karaoke), <code>lyrics.srt</code> and <code>.vtt</code> for
-        <code>ffmpeg -vf subtitles=</code>, plus <code>project.json</code> —
-        word timings, per-line scores and the scorecard. <code>song video</code>
-        adds <code>lyrics.ass</code> and <code>karaoke.mp4</code>.</p>
+        <code>lyrics.lrc</code>, <code>lyrics.word.lrc</code> (per-word),
+        <code>lyrics.srt</code> and <code>.vtt</code>, plus
+        <code>project.json</code> — word timings, per-line scores and the
+        scorecard. <code>song video</code> adds <code>lyrics.ass</code> and
+        <code>karaoke.mp4</code>, and caches the beat grid and a two-band split
+        as <code>beats.json</code>.</p>
         <p>Lyrics input is plain text: one line per lyric line, a blank line
         between sections, and a header naming each. <code>[Verse 1]</code>,
         <code>Chorus:</code>, <code>(Bridge)</code> and
         <code>Verse 1 (8 bars, pulsing bass)</code> all parse.</p>
-        <p>Demucs on Apple MPS is broken under torch 2.5, and Whisper hits
-        unimplemented sparse ops there, so it is CPU throughout. The timeline
-        still holds 60 fps: a full waveform rebuild measures ~1.1 ms.</p>
+        <p>Demucs on Apple MPS is broken under torch 2.5 and Whisper hits
+        unimplemented sparse ops there, so it is CPU throughout.</p>
       </div>
     </details>
   </div>
@@ -624,7 +398,7 @@ python -m song video workdir/my-track   # render karaoke.mp4</code></pre>
   <div class="wrap">
     <a href="https://github.com/nuterian/song">github.com/nuterian/song</a> ·
     <a href="demo/">live demo</a><br>
-    <span style="opacity:.7">Free, open-source models. Nothing leaves your machine.</span>
+    <span style="opacity:.65">Free, open-source models. Nothing leaves your machine.</span>
   </div>
 </footer>
 

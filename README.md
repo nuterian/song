@@ -149,8 +149,8 @@ Bring your own audio. `examples/lyrics.txt` is the full sample file.
 
 ## Notes
 
-Roughly 5 minutes end-to-end for a 5-minute track on an M4 CPU, and about 5 more
-to render the video. Models download once (~3 GB) to the usual torch/HF caches.
+Roughly 5 minutes end-to-end for a 5-minute track on an M4 CPU, and about 13
+more to render the video at 1080p (4 at `--height 720`). Models download once (~3 GB) to the usual torch/HF caches.
 Demucs on Apple MPS is broken under torch 2.5 and Whisper hits unimplemented
 sparse ops there, so it is CPU throughout.
 

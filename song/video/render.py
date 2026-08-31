@@ -23,7 +23,11 @@ from . import karaoke
 from .scene import Scene
 
 FPS = 30
-HEIGHT = 720
+# 1080 by default. The words are vector and libass draws them at whatever the
+# output is, so height is most of what "sharp" means here - and the picture
+# behind them costs about 40 ms a frame at 1920x1080 against 18 at 1280x720,
+# which is the encoder's time anyway.
+HEIGHT = 1080
 CRF = "18"          # a smooth gradient is the worst case for h264; cheap insurance
 Progress = Callable[[str], None]
 

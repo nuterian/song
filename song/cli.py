@@ -240,7 +240,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="render a short window instead of the whole track: 1:04, or 1:04-1:34",
     )
     p_video.add_argument(
-        "--height", type=int, default=720, help="output height in pixels (default 720)"
+        "--height", type=int, default=1080,
+        help="output height in pixels (default 1080; 720 renders faster)"
     )
     p_video.set_defaults(func=cmd_video)
 

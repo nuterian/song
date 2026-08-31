@@ -4,7 +4,7 @@ There is no frame renderer here, and none anywhere else either. ASS has carried
 karaoke tags since the VirtualDub era: `\\kf` sweeps a fill across a run of text
 over a given duration, which is exactly the classic per-syllable wipe, and
 libass draws it with real shaping, and with per-word transforms that grow the
-word being sung and hand it back to white afterwards. This project already knows
+word being sung and hand it back to ink afterwards. This project already knows
 where every word starts and ends, so the karaoke layer is a format conversion
 plus a burn-in - not a text renderer that would have to reimplement kerning,
 wrapping and antialiasing to arrive somewhere worse.
@@ -51,22 +51,22 @@ ACCENT = 0xC4490A
 SETTLE_HOLD = 130            # ms the accent holds after the word ends
 SETTLE = 320                 # ...then this long to fade to ink
 
-# The word being sung is larger and heavier than the rest of its line, and it
-# eases in and back out again. Weight is an animated border in the fill's own
-# colour rather than a bold toggle: \b snaps, and the thing that reads as
-# alive is that the weight arrives with the size instead of before it.
+# The word being sung is larger than the rest of its line, and eases in and back
+# out again. Size and colour carry it and nothing else does: weight was an
+# animated border in the fill's own colour, which is a real way to thicken a
+# glyph smoothly, but a border is a border and at this size it reads as an
+# outline drawn round the word rather than as weight in it.
 #
 # The line is anchored at its left edge, so a word growing pushes the words
 # after it to the right and leaves the ones before it alone. Centred, the whole
 # sentence would shuffle under the reader on every syllable.
-LIFT = 21.0        # percent larger, for a word long enough to show it
+LIFT = 26.0        # percent larger, for a word long enough to show it
 LIFT_FULL = 240    # ms of word length that earns the whole lift
 LIFT_LEAD = 70     # ms early, so the word is already up when it is sung
 LIFT_IN = 150      # ms to grow
 LIFT_OUT = 300     # ...and to settle back
 LIFT_EASE_IN = 0.55    # <1 moves early and arrives slowly
 LIFT_EASE_OUT = 1.7    # >1 leaves slowly and lands fast
-WEIGHT = 1.05      # px of border at full lift, in the fill's colour
 
 # Bottom left, three lines deep, and they move. A line rises from the next slot
 # to the sung slot to the previous slot as the song goes through it, growing and
@@ -94,10 +94,14 @@ NEAR_SCALE = 82              # percent, for the lines either side
 NEAR = (0xB2, 0xB2, 0xC2)    # their transparency: fill, unsung fill, edge
 GONE = (0xFF, 0xFF, 0xFF)    # ...and the two stops nobody sees
 
-# Only the two ends of the song fade. Everything in between arrives by moving,
-# because a line that fades in and out on every change makes the whole block
-# blink thirty-three times.
+# How long the block takes to leave when it has somewhere to leave from - the
+# ends of the song, and every instrumental long enough to empty the screen.
+# Between lines nothing fades: a block that faded in and out on every change
+# would blink thirty-three times.
 FADE = 700
+# Two windows this close are touching; anything more is an instrumental, and the
+# words go away and come back over it.
+SEAM = 0.02
 
 # Seconds a line sits on screen unsung before its first word. A karaoke line
 # that appears on the beat it is sung on is unsingable - the point is reading
@@ -242,7 +246,7 @@ def karaoke_text(line, start_cs: int, state: str = "") -> str:
         if w_start > at:
             out.append(f"{{\\k{w_start - at}}}")   # the lead-in, or a held rest
         out.append(
-            f"{{\\r{state}\\3c{tag_colour(ACCENT)}\\kf{w_end - w_start}"
+            f"{{\\r{state}\\kf{w_end - w_start}"
             f"{lift(w_start - start_cs, w_end - start_cs)}"
             f"{settle(w_end - start_cs)}}}{escape(token)}"
         )
@@ -251,7 +255,7 @@ def karaoke_text(line, start_cs: int, state: str = "") -> str:
     return "".join(out)
 
 
-def lift(start_cs: int, end_cs: int) -> str:
+def lift(start_cs: int, end_cs: int, size: int = FONT_SIZE) -> str:
     """`\\t` pair that grows and thickens one word as it is sung, then lets it go.
 
     Both transforms carry an acceleration, which is the whole difference between
@@ -266,8 +270,11 @@ def lift(start_cs: int, end_cs: int) -> str:
     """
     length = (end_cs - start_cs) * 10
     amount = LIFT * min(1.0, length / LIFT_FULL)
-    if amount < 1.0:
-        return ""       # below a percent it is invisible, and two tags cost more
+    # Below half a pixel of growth nobody can see it, and two transforms cost
+    # more than nothing. Expressed against the size rather than as a flat
+    # percentage, so it stays true when either the size or the lift changes.
+    if amount * size < 50.0:
+        return ""
 
     rise = max(0, start_cs * 10 - LIFT_LEAD)
     fall = end_cs * 10
@@ -275,10 +282,9 @@ def lift(start_cs: int, end_cs: int) -> str:
     # overruns into its own settling.
     peak = min(rise + LIFT_IN, max(rise + 40, fall))
     scale = round(100 + amount, 1)
-    bord = round(WEIGHT * amount / LIFT, 2)
     return (
-        f"\\t({rise},{peak},{LIFT_EASE_IN},\\fscx{scale}\\fscy{scale}\\bord{bord})"
-        f"\\t({fall},{fall + LIFT_OUT},{LIFT_EASE_OUT},\\fscx100\\fscy100\\bord0)"
+        f"\\t({rise},{peak},{LIFT_EASE_IN},\\fscx{scale}\\fscy{scale})"
+        f"\\t({fall},{fall + LIFT_OUT},{LIFT_EASE_OUT},\\fscx100\\fscy100)"
     )
 
 
@@ -293,10 +299,7 @@ def settle(end_cs: int) -> str:
     # Clamped, because a line is also drawn in the slot above while the next
     # one is sung, and there its words all ended before the event began.
     leave = max(0, end_cs * 10 + SETTLE_HOLD)
-    # The border is the word's weight, so it has to follow the fill exactly or
-    # a thickened word would be outlined in the colour it used to be.
-    return (f"\\t({leave},{leave + SETTLE},"
-            f"\\1c{tag_colour(INK)}\\3c{tag_colour(INK)})")
+    return f"\\t({leave},{leave + SETTLE},\\1c{tag_colour(INK)})"
 
 
 Look = tuple      # (fill alpha, unsung alpha, edge alpha, scale percent)
@@ -366,14 +369,17 @@ def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
             if not 0 <= window < len(lines):
                 continue
             opens, closes = spans[window]
-            # Every line arrives from the invisible stop below and leaves by
-            # the invisible one above, so it needs no fade of its own. The two
-            # ends of the song are the exception. The first line has no stop
-            # below to come from, so it starts invisible where it stands and
-            # opens by its own alpha - which is one fewer special case than a
-            # \fad, and the right one, because a \fad spread across the
-            # segments of a move restarts on each of them.
-            if window == 0 and offset == 0:
+            # Windows normally touch, and while they do the block never leaves
+            # the screen: every line arrives from the invisible stop below and
+            # departs by the invisible one above. Where they do not touch - the
+            # two ends of the song, and every instrumental, of which this track
+            # has ten - the whole block does leave, and it has to do that
+            # gently. It comes back from nothing rather than on a fade, because
+            # a \fad spread across the segments of a move restarts on each one.
+            starts_alone = window == 0 or spans[window][0] - spans[window - 1][1] > SEAM
+            ends_alone = (window == len(lines) - 1
+                          or spans[window + 1][0] - spans[window][1] > SEAM)
+            if starts_alone:
                 before = gone
 
             for step in range(MOVE_STEPS):
@@ -384,12 +390,11 @@ def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
                 # The last segment runs to the end of the window and holds
                 # there: \move stays put once its time is up.
                 end = closes if step == MOVE_STEPS - 1 else opens + MOVE * last / 1000.0
-                # ...and the last window has nowhere left to go, so whatever is
-                # still on screen when it ends fades out. Only on the segment
-                # that reaches the end; the others are minding the beginning.
-                fade = (f"\\fad(0,{FADE})"
-                        if window == len(lines) - 1 and step == MOVE_STEPS - 1
-                        else "")
+                # ...and going out is a fade, on the one segment that reaches
+                # the end of the window. The others are minding its beginning,
+                # and a fade measured from the end of a 157 ms segment is over
+                # before it starts.
+                fade = f"\\fad(0,{FADE})" if ends_alone and step == MOVE_STEPS - 1 else ""
                 start_cs = centis(max(0.0, start))
                 end_cs = max(start_cs + 1, centis(end))
                 y_from = PLAY_H - (leaving + (arriving - leaving) * from_)

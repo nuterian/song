@@ -319,19 +319,23 @@ class ThreeLinesThatMove(unittest.TestCase):
             if text != "line 2 here":
                 self.assertNotIn("\\kf", "".join(events))
 
-    def test_the_first_line_opens_from_nothing_rather_than_on_a_fade(self):
-        # A \\fad spread across the segments of a move restarts on each of
-        # them, so the opening is done with the line's own alpha instead.
-        first = self.during(0)["line 0 here"][0]
-        self.assertNotIn("\\fad", first)
-        self.assertIn(f"\\1a&H{karaoke.GONE[0]:02X}&", first)
-
-    def test_only_the_end_of_the_song_fades_out(self):
-        last = karaoke.ass_time(karaoke.centis(self.spans[-1][1]))
+    def test_the_block_fades_wherever_it_leaves_the_screen(self):
+        # Not only at the end of the song: an instrumental long enough to empty
+        # the screen has to be faded across too, or the words vanish and
+        # reappear on a cut. This track has ten of them.
+        leaves = {karaoke.ass_time(karaoke.centis(self.spans[i][1]))
+                  for i in range(len(self.spans))
+                  if i == len(self.spans) - 1
+                  or self.spans[i + 1][0] - self.spans[i][1] > karaoke.SEAM}
         faded = [e for e in self.text.splitlines() if "\\fad(" in e]
         self.assertTrue(faded)
         for event in faded:
-            self.assertEqual(event.split(",")[2], last)
+            self.assertIn(event.split(",")[2], leaves)
+
+    def test_a_window_the_block_is_absent_before_comes_back_from_nothing(self):
+        first = self.during(0)["line 0 here"][0]
+        self.assertNotIn("\\fad", first)
+        self.assertIn(f"\\1a&H{karaoke.GONE[0]:02X}&", first)
 
 
 class TheFile(unittest.TestCase):
@@ -367,17 +371,25 @@ if __name__ == "__main__":
 
 
 class TheLift(unittest.TestCase):
-    """The word being sung grows and thickens, and eases doing it."""
+    """The word being sung grows, and eases doing it."""
 
     def rises(self, tags):
         return re.findall(
-            r"\\t\((\d+),(\d+),([\d.]+),\\fscx([\d.]+)\\fscy[\d.]+\\bord([\d.]+)\)",
-            tags)
+            r"\\t\((\d+),(\d+),([\d.]+),\\fscx([\d.]+)\\fscy[\d.]+\)", tags)
 
-    def test_it_grows_and_thickens_together(self):
-        _, _, _, scale, bord = self.rises(karaoke.lift(0, 40))[0]
+    def test_it_grows_by_the_full_amount_when_the_word_is_long_enough(self):
+        _, _, _, scale = self.rises(karaoke.lift(0, 40))[0]
         self.assertEqual(float(scale), 100 + karaoke.LIFT)
-        self.assertEqual(float(bord), karaoke.WEIGHT)
+
+    def test_nothing_is_drawn_around_the_letterforms(self):
+        # Weight used to be an animated border in the fill's own colour. It is
+        # a real way to thicken a glyph, and at this size it reads as an
+        # outline round the word rather than as weight in it.
+        text = karaoke.build(project(line(0, "one two", 40.0, 43.0)))
+        self.assertNotIn("\\bord", text)
+        style = [ln for ln in text.splitlines() if ln.startswith("Style: Lyric")][0]
+        self.assertEqual(style.split(",")[16], str(karaoke.BORDER))
+        self.assertEqual(karaoke.BORDER, 0)
 
     def test_both_halves_carry_an_acceleration(self):
         # \t is linear without one, and a linear scale over 150 ms is a jump.
@@ -391,9 +403,10 @@ class TheLift(unittest.TestCase):
         self.assertGreater(long_word, short_word)
 
     def test_a_word_too_short_to_show_a_lift_gets_no_tags_for_one(self):
+        # The threshold is half a pixel of growth, so it stays honest whatever
+        # the size and the lift are set to.
         self.assertEqual(karaoke.lift(0, 1), "")
+        self.assertNotEqual(karaoke.lift(0, 1, size=400), "")
 
-    def test_the_border_follows_the_fill(self):
-        # It is the word's weight; outlined in the colour it used to be would
-        # leave a halo of the accent around an inked word.
-        self.assertEqual(karaoke.settle(100).count(karaoke.tag_colour(karaoke.INK)), 2)
+    def test_the_accent_settles_to_ink(self):
+        self.assertIn(karaoke.tag_colour(karaoke.INK), karaoke.settle(100))

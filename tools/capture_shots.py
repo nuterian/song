@@ -57,19 +57,19 @@ SHOTS = [
         S.review.adj = { t: rvClampT(it, it.proposed + 1.15) };
         rvSyncAdj(); rvDrawStrip();
     """),
-    ("app-missing", (1180, 860), 2, """
-        document.getElementById('btn-review').click();
-        adRender();
-    """),
 ]
 
 # The first chorus: four lines back to back, no instrumental to sit through,
 # and the section colour has already arrived. Twelve seconds loops without a
 # seam because nothing on screen is trying to get anywhere.
-CLIP = "1:04-1:16"
-CLIP_WIDTH = 1160
-CLIP_CRF = "28"       # a soft gradient hides it, and docs/ already ships the demo audio
-STILL_AT = 7.0        # seconds in: mid-sweep across a long word, so the swell shows
+# The page's demo. Starts on the first lyric and ends as the first chorus does,
+# so it passes through three sections and one instrumental - which is the only
+# way to show that the colour is the song's structure and not a slideshow.
+DEMO_CLIP = "0:34-1:22"
+DEMO_WIDTH = 1280
+DEMO_CRF = "30"
+DEMO_AUDIO = "112k"   # it is a music video; muting it would be a strange demo
+STILL_AT = 36.0       # seconds into the clip: mid-word, mid-chorus
 
 BOOT = """
 <script>
@@ -116,38 +116,35 @@ def capture(name: str, size: tuple[int, int], scale: int, setup: str) -> Path:
     return out
 
 
-def capture_clip(workdir: Path) -> list[Path]:
-    """A loop and a poster frame out of an actual render.
+def capture_demo(workdir: Path) -> list[Path]:
+    """The excerpt the page plays, and the frame it rests on before you press it.
 
-    Shelling out to the CLI rather than importing song.video, so what the page
-    shows is what the documented command produces - including the .ass, the
-    beat cache and the scaling, none of which this file gets to reimplement.
+    Rendered at the full default height and scaled down here rather than
+    rendered small, so what ships is a downsample of the real thing. One render
+    feeds both: a poster cut from a different clip than the video it posters is
+    a poster of something else.
     """
     subprocess.run(
-        [sys.executable, "-m", "song", "video", str(workdir), "--preview", CLIP],
+        [sys.executable, "-m", "song", "video", str(workdir), "--preview", DEMO_CLIP],
         cwd=ROOT, check=True,
     )
     source = workdir / "karaoke-preview.mp4"
-    loop, still = IMG / "video-loop.mp4", IMG / "video-still.jpg"
-
-    # Muted on the page, so the audio is dead weight in the download.
+    video, still = IMG / "video-demo.mp4", IMG / "video-still.jpg"
     subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(source), "-an",
-         "-vf", f"scale={CLIP_WIDTH}:-2", "-c:v", "libx264", "-preset", "slow",
-         "-crf", CLIP_CRF, "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-         str(loop)],
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(source),
+         "-vf", f"scale={DEMO_WIDTH}:-2", "-c:v", "libx264", "-preset", "slow",
+         "-crf", DEMO_CRF, "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+         "-c:a", "aac", "-b:a", DEMO_AUDIO, str(video)],
         check=True,
     )
-    # The poster comes off the full-size render, not the shrunk loop - it is
-    # also the README's picture, and JPEG because the frame is a photograph of
-    # a gradient with film grain in it, which is the one thing PNG is bad at.
+    # JPEG, because the frame is a photograph of a gradient with film grain in
+    # it, which is the one thing PNG is bad at.
     subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-ss", str(STILL_AT),
-         "-i", str(source), "-frames:v", "1", "-update", "1", "-q:v", "3",
-         str(still)],
+        ["ffmpeg", "-y", "-loglevel", "error", "-ss", str(STILL_AT), "-i", str(source),
+         "-frames:v", "1", "-update", "1", "-q:v", "3", str(still)],
         check=True,
     )
-    return [loop, still]
+    return [video, still]
 
 
 if __name__ == "__main__":
@@ -174,5 +171,5 @@ if __name__ == "__main__":
     workdir = Path(args.workdir)
     if not (workdir / "project.json").exists():
         raise SystemExit(f"no aligned track at {workdir}; the video clip is unchanged")
-    for out in capture_clip(workdir):
+    for out in capture_demo(workdir):
         print(f"  {out.relative_to(ROOT)!s:34} {out.stat().st_size / 1024:6.0f} KB")
