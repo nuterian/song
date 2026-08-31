@@ -323,3 +323,36 @@ class TheFile(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheLift(unittest.TestCase):
+    """The word being sung grows and thickens, and eases doing it."""
+
+    def rises(self, tags):
+        return re.findall(
+            r"\\t\((\d+),(\d+),([\d.]+),\\fscx([\d.]+)\\fscy[\d.]+\\bord([\d.]+)\)",
+            tags)
+
+    def test_it_grows_and_thickens_together(self):
+        _, _, _, scale, bord = self.rises(karaoke.lift(0, 40))[0]
+        self.assertEqual(float(scale), 100 + karaoke.LIFT)
+        self.assertEqual(float(bord), karaoke.WEIGHT)
+
+    def test_both_halves_carry_an_acceleration(self):
+        # \t is linear without one, and a linear scale over 150 ms is a jump.
+        tags = karaoke.lift(0, 40)
+        self.assertIn(f",{karaoke.LIFT_EASE_IN},", tags)
+        self.assertIn(f",{karaoke.LIFT_EASE_OUT},", tags)
+
+    def test_a_short_word_lifts_less_so_a_fast_run_does_not_strobe(self):
+        long_word = float(self.rises(karaoke.lift(0, 40))[0][3])
+        short_word = float(self.rises(karaoke.lift(0, 8))[0][3])
+        self.assertGreater(long_word, short_word)
+
+    def test_a_word_too_short_to_show_a_lift_gets_no_tags_for_one(self):
+        self.assertEqual(karaoke.lift(0, 1), "")
+
+    def test_the_border_follows_the_fill(self):
+        # It is the word's weight; outlined in the colour it used to be would
+        # leave a halo of the accent around an inked word.
+        self.assertEqual(karaoke.settle(100).count(karaoke.tag_colour(karaoke.INK)), 2)

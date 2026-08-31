@@ -30,8 +30,8 @@ PLAY_W, PLAY_H = 1280, 720
 # asking libass for "Avenir Next" *bold* picks the Bold **Italic** face out of
 # the macOS .ttc collection and the whole song renders oblique with nothing
 # anywhere saying italic.
-FONT = "Avenir Next"
-FONT_SIZE = 34
+FONT = "Avenir Next Demi Bold"
+FONT_SIZE = 35
 
 # Nothing at all around the letterforms: no border, no blur, no shadow. Every
 # one of those is a second shape drawn from the text, and at this size they read
@@ -45,11 +45,28 @@ EDGE = (0xFFFFFF, 0xFF)
 # the same ink at low opacity, the word being sung fills in the accent, and a
 # word already sung settles to full ink. \kf gives the first two - it sweeps the
 # fill from Secondary to Primary - and the third is one transform per word.
-INK = 0x1B1520
-UNSUNG = (INK, 0x9E)
-ACCENT = 0x9C3F14
+INK = 0x140F18
+UNSUNG = (INK, 0xA6)
+ACCENT = 0x8E320C
 SETTLE_HOLD = 130            # ms the accent holds after the word ends
 SETTLE = 320                 # ...then this long to fade to ink
+
+# The word being sung is larger and heavier than the rest of its line, and it
+# eases in and back out again. Weight is an animated border in the fill's own
+# colour rather than a bold toggle: \b snaps, and the thing that reads as
+# alive is that the weight arrives with the size instead of before it.
+#
+# The line is anchored at its left edge, so a word growing pushes the words
+# after it to the right and leaves the ones before it alone. Centred, the whole
+# sentence would shuffle under the reader on every syllable.
+LIFT = 16.0        # percent larger, for a word long enough to show it
+LIFT_FULL = 240    # ms of word length that earns the whole lift
+LIFT_LEAD = 70     # ms early, so the word is already up when it is sung
+LIFT_IN = 150      # ms to grow
+LIFT_OUT = 300     # ...and to settle back
+LIFT_EASE_IN = 0.55    # <1 moves early and arrives slowly
+LIFT_EASE_OUT = 1.7    # >1 leaves slowly and lands fast
+WEIGHT = 0.85      # px of border at full lift, in the fill's colour
 
 # Bottom left, three lines deep, and they move. A line rises from the next slot
 # to the sung slot to the previous slot as the song goes through it, growing and
@@ -219,12 +236,44 @@ def karaoke_text(line, start_cs: int, state: str = "") -> str:
         if w_start > at:
             out.append(f"{{\\k{w_start - at}}}")   # the lead-in, or a held rest
         out.append(
-            f"{{\\r{state}\\kf{w_end - w_start}{settle(w_end - start_cs)}}}"
-            f"{escape(token)}"
+            f"{{\\r{state}\\3c{tag_colour(ACCENT)}\\kf{w_end - w_start}"
+            f"{lift(w_start - start_cs, w_end - start_cs)}"
+            f"{settle(w_end - start_cs)}}}{escape(token)}"
         )
         at = w_end
 
     return "".join(out)
+
+
+def lift(start_cs: int, end_cs: int) -> str:
+    """`\\t` pair that grows and thickens one word as it is sung, then lets it go.
+
+    Both transforms carry an acceleration, which is the whole difference between
+    a word that arrives and one that appears: `\\t` is linear without it, and a
+    linear scale over 150 ms reads as a jump.
+
+    Every word's block opens with `\\r` because of this. An override applies to
+    all the text after it, and a `\\t` that has not started yet does not cancel
+    one that has: without the reset, word one's lift is still in force when word
+    two is drawn and the whole line inflates instead of one word in it. That
+    looked like it worked until a frame was pulled at the moment word one was up.
+    """
+    length = (end_cs - start_cs) * 10
+    amount = LIFT * min(1.0, length / LIFT_FULL)
+    if amount < 1.0:
+        return ""       # below a percent it is invisible, and two tags cost more
+
+    rise = max(0, start_cs * 10 - LIFT_LEAD)
+    fall = end_cs * 10
+    # A word shorter than the lift itself gets a shorter one, not a lift that
+    # overruns into its own settling.
+    peak = min(rise + LIFT_IN, max(rise + 40, fall))
+    scale = round(100 + amount, 1)
+    bord = round(WEIGHT * amount / LIFT, 2)
+    return (
+        f"\\t({rise},{peak},{LIFT_EASE_IN},\\fscx{scale}\\fscy{scale}\\bord{bord})"
+        f"\\t({fall},{fall + LIFT_OUT},{LIFT_EASE_OUT},\\fscx100\\fscy100\\bord0)"
+    )
 
 
 def settle(end_cs: int) -> str:
@@ -238,7 +287,10 @@ def settle(end_cs: int) -> str:
     # Clamped, because a line is also drawn in the slot above while the next
     # one is sung, and there its words all ended before the event began.
     leave = max(0, end_cs * 10 + SETTLE_HOLD)
-    return f"\\t({leave},{leave + SETTLE},\\1c{tag_colour(INK)})"
+    # The border is the word's weight, so it has to follow the fill exactly or
+    # a thickened word would be outlined in the colour it used to be.
+    return (f"\\t({leave},{leave + SETTLE},"
+            f"\\1c{tag_colour(INK)}\\3c{tag_colour(INK)})")
 
 
 def slot_state(alpha: tuple[int, int, int], scale: int) -> str:
@@ -271,7 +323,10 @@ def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
 
     gone = slot_state(GONE, NEAR_SCALE)
     near = slot_state(NEAR, NEAR_SCALE)
-    now = slot_state((0x00, UNSUNG[1], EDGE[1]), 100)
+    # The border alpha is opaque in the sung slot and only there. Nothing has a
+    # border at rest - it is the weight of the word being lifted, and if it were
+    # transparent the lift would change size without changing weight.
+    now = slot_state((0x00, UNSUNG[1], 0x00), 100)
     # Which stop a line is at while the window `offset` windows away is sung,
     # and how it looks there. -1 is the window before its own.
     stops = {

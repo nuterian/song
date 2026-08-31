@@ -91,15 +91,17 @@ python -m song video workdir/my-track --preview 1:04 # 25 seconds, to see it
 ```
 
 Three lines sit at the bottom left — the one being sung, with the one before and
-the one after smaller and faded either side of it. Each word fills with an
-accent colour as it lands and settles back to ink behind you; when the line
-changes, the whole stack rises by one. That is ASS `\kf` karaoke drawn by
-libass, off the same timings the UI edits, so there is no second renderer to
-keep in agreement with the first. Opposite it, one thin line zigzags with the
-amplitude in as much detail as the analysis holds. Behind both, the picture is
-generated from the track and kept quiet: colour comes from the section you are
-in, keyed on its *name*, so every chorus looks the same, and three soft pools of
-light drift across a frame that is lit throughout. Everything answers the mix
+the one after smaller and faded either side of it. Each word grows, thickens and
+fills with an accent colour as it lands, then settles back to ink behind you;
+when the line changes, the whole stack rises by one. That is ASS `\kf` karaoke
+drawn by libass, off the same timings the UI edits, so there is no second
+renderer to keep in agreement with the first.
+
+Opposite it, three zigzag lines — bass, mix and air — because a peak envelope
+cannot tell a kick from a hi-hat and the difference is most of what a song
+sounds like. Behind both, four fields of light drift and answer different parts
+of the track, over a frame lit throughout and tinted by the section you are in,
+keyed on its *name*, so every chorus looks the same. Everything answers the mix
 within a frame, and everything it does is small. Nothing to supply, no stock
 footage, no still image.
 
@@ -155,7 +157,7 @@ sparse ops there, so it is CPU throughout.
 python -m unittest discover -s tests
 ```
 
-108 tests over the logic that carries the claims — lyrics parsing, the
+106 tests over the logic that carries the claims — lyrics parsing, the
 word-timing invariants, word-to-line mapping, the export formats, the
 missing-line thresholds and the karaoke arithmetic — plus a guard that those
 modules stay importable with no third-party package present at all, which is

@@ -386,11 +386,10 @@ footer a:hover{color:var(--text)}
     <h2>One command turns it into a video.</h2>
     <p class="say">
       Three lines, bottom left: the one being sung, with the one before and the
-      one after smaller and faded either side. When the line changes,
-      <b>the whole stack rises by one.</b> The picture behind it is generated
-      from the same track and kept quiet — soft light that answers the mix
-      within a frame, and one thin line opposite the words, zigzagging with the
-      amplitude. There is nothing to supply.
+      one after smaller and faded either side. Each word <b>grows, thickens and
+      lights up</b> as it lands; when the line changes, the whole stack rises by
+      one. Opposite them, three zigzag lines — bass, mix and air. There is
+      nothing to supply.
     </p>
   </div>
   <div class="wide">
@@ -443,15 +442,14 @@ footer a:hover{color:var(--text)}
           <thead><tr><th>On screen</th><th>Driven by</th></tr></thead>
           <tbody>
             <tr><td>the colour</td><td>the section name in your lyrics file — every chorus is the same colour</td></tr>
-            <tr><td>three pools of light</td><td>hues spread around the section's, drifting on periods that share no multiple</td></tr>
+            <tr><td>four fields of light</td><td>a pool, a column, a band and a spot — each on its own part of the track</td></tr>
             <tr><td>which of two palettes</td><td>the mix envelope, sliding between a quiet one and a loud one</td></tr>
-            <tr><td>how wide they open</td><td>the mix envelope again</td></tr>
-            <tr><td>how bright they burn</td><td>the isolated vocal envelope</td></tr>
+            <tr><td>how wide each opens</td><td>the mix, the vocal, the bass or the air, one each</td></tr>
             <tr><td>a small kick</td><td>the tracked beat, harder on the first of the bar</td></tr>
             <tr><td>a fast, tiny shiver</td><td>the mix again — a couple of pixels, sized by how loud it is now</td></tr>
-            <tr><td>the line's deflection</td><td>the peaks themselves, one tooth per three analysis buckets, peak-held</td></tr>
+            <tr><td>the three lines</td><td>bass under 260 Hz, the mix, and air over 3.5 kHz</td></tr>
             <tr><td>the sweep</td><td>the word timings in <code>project.json</code></td></tr>
-            <tr><td>the word lit in colour</td><td>the same timings, as a per-word transform</td></tr>
+            <tr><td>the word growing and lit</td><td>the same timings, as an eased per-word transform</td></tr>
           </tbody>
         </table></div>
         <p>Beats are tracked on the <b>mix</b>, not the isolated vocal — the stem
@@ -459,6 +457,16 @@ footer a:hover{color:var(--text)}
         wants. And they are the beats librosa found, not a grid synthesized from
         the tempo: a grid is right for eight bars and then slides, and by the last
         chorus of a 4:46 song it is visibly ahead of the snare.</p>
+        <h3>Bass, mix and air</h3>
+        <p>A peak envelope cannot tell a kick from a hi-hat: both are one
+        number. So the beat cache carries a two-band split as well — everything
+        under 260 Hz, everything over 3.5 kHz — and the corner draws three
+        stacked lines off them, with the mix between. On one shared baseline
+        they were a tangle: three zigzags of similar height through each other,
+        legible as none of them.</p>
+        <p>Teeth are spaced in <i>time</i> rather than in beats, so a faster
+        passage puts more of them in front of you. That is where the tempo
+        is.</p>
         <h3>Three lines, and three states in the middle one</h3>
         <p>The neighbours share the sung line's window exactly, so no line is
         ever on screen in two slots at once. Overlapping them by a few hundred
