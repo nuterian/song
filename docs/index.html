@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>lyricsync — how it works</title>
+<title>song — how it works</title>
 <meta name="description" content="Turn an audio track plus a plain-text lyrics file into accurate, time-synchronized lyrics using only free, locally-run open-source models.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230e1116'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%235b9dff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
@@ -95,14 +95,14 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
 <header class="top"><div class="bleed"><div class="brand">
   <svg viewBox="0 0 26 20" aria-hidden="true"><path d="M2 12 L2 8 M7 15 L7 5 M12 18 L12 2 M17 14 L17 6 M22 11 L22 9"
     stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>
-  lyricsync
+  song
   <span class="sep"><a href="https://github.com/nuterian/song">source on GitHub →</a></span>
 </div></div></header>
 
 <div class="wrap">
 <h1>Synchronized lyrics, aligned locally, checked by ear.</h1>
 <p class="lede">
-  <strong>lyricsync</strong> turns an audio track plus a plain-text lyrics file into accurate
+  <strong>song</strong> turns an audio track plus a plain-text lyrics file into accurate
   time-synchronized lyrics — <code>.lrc</code>, word-level <code>.lrc</code>, <code>.srt</code>,
   <code>.vtt</code> — using only free, locally-run open-source models. Built for AI-generated
   songs, where the lyrics are known exactly but the timing is not.
@@ -110,7 +110,7 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
 <p>Everything runs on your machine. No API keys, no uploads, no per-track cost.</p>
 
 <pre><code>./setup.sh                                   # one-time, ~5 min
-./.venv/bin/python -m lyricsync song.wav lyrics.txt</code></pre>
+./.venv/bin/python -m song song.wav lyrics.txt</code></pre>
 <p>That aligns the track and opens the review UI at <code>http://127.0.0.1:8420</code>.</p>
 
 <div class="cta">
@@ -122,7 +122,7 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
 
 <div class="bleed">
 <figure>
-  <img src="img/timeline-track.png" alt="The lyricsync timeline showing a whole 4:45 track: a minimap, a ruler, and the isolated vocal waveform with green line regions marking every aligned lyric.">
+  <img src="img/timeline-track.png" alt="The song timeline showing a whole 4:45 track: a minimap, a ruler, and the isolated vocal waveform with green line regions marking every aligned lyric.">
   <figcaption>
     The whole track at a glance. Sung stretches are drawn with a lit core; everything else drops
     to a dim blue and reads as ground. Green brackets are aligned lines, red and amber are lines
@@ -398,19 +398,19 @@ footer{margin-top:72px;border-top:1px solid var(--line);padding:26px 0 60px;
 
 <h2 id="commands">Commands</h2>
 <pre><code># align + open the review UI (the default)
-python -m lyricsync song.wav lyrics.txt
+python -m song song.wav lyrics.txt
 
 # align and export, no UI
-python -m lyricsync align song.wav lyrics.txt
+python -m song align song.wav lyrics.txt
 
 # repair impossible word timings, list what needs an ear
-python -m lyricsync audit workdir/song
+python -m song audit workdir/my-track
 
 # re-run the benchmark against edited timings
-python -m lyricsync score workdir/song
+python -m song score workdir/my-track
 
 # rewrite lrc/srt/vtt from project.json
-python -m lyricsync export workdir/song</code></pre>
+python -m song export workdir/my-track</code></pre>
 <p>
   Useful flags: <code>--model large-v3-turbo</code> (better refinement, slower),
   <code>--no-roundtrip</code> (skip the blind transcription, ~90 s faster),

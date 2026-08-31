@@ -13,9 +13,9 @@ from pathlib import Path
 
 import numpy as np
 
-from .audio import TARGET_SR, load_mono
+from ..audio import TARGET_SR, load_mono
 from .mapping import group_by_line
-from .project import Word
+from ..project import Word
 
 DEFAULT_MODEL = "medium"
 _MODEL_CACHE: dict[tuple[str, str], object] = {}

@@ -13,13 +13,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
-from . import analysis, exports, gaps, pipeline, refine, roundtrip, vad
+from . import analysis, exports, vad
+from .align import gaps, pipeline, refine, roundtrip
 from .audio import TARGET_SR, load_mono
 from .project import Project, slugify
 
 AUDIO_SUFFIXES = {".wav", ".mp3", ".m4a", ".flac", ".aif", ".aiff", ".ogg"}
 
-UI_DIR = Path(__file__).resolve().parent.parent / "ui"
+UI_DIR = Path(__file__).resolve().parent / "ui"
 
 
 def _preview(source: Path, target: Path, stereo: bool = True) -> Path:

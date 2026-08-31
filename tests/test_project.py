@@ -8,8 +8,8 @@ and plays wrong.
 
 import unittest
 
-from lyricsync.project import Project, TimedLine, Word
-from lyricsync.parse_lyrics import Section
+from song.project import Project, TimedLine, Word
+from song.parse_lyrics import Section
 
 
 def line(index=0, section=0, text="a b c", start=1.0, end=4.0, starts=(1.0, 2.0, 3.0)):

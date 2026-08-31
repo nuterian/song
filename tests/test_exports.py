@@ -8,9 +8,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from lyricsync import exports
-from lyricsync.parse_lyrics import Section
-from lyricsync.project import Project, TimedLine, Word
+from song import exports
+from song.parse_lyrics import Section
+from song.project import Project, TimedLine, Word
 
 
 def sample():

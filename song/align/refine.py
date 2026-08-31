@@ -22,8 +22,8 @@ from pathlib import Path
 
 import numpy as np
 
-from .audio import TARGET_SR, load_mono
-from .project import Project, TimedLine
+from ..audio import TARGET_SR, load_mono
+from ..project import Project, TimedLine
 
 # A sung word shorter than this is a degenerate timestamp, not a word.
 MIN_REAL_WORD = 0.05
@@ -127,7 +127,7 @@ def propose_words(
     audio and a handful of known words, so it cannot drift the way a whole-track
     pass can. Returns None when the aligner cannot place the words.
     """
-    from .align_ctc import align_lines_ctc
+    from .ctc import align_lines_ctc
 
     if line.end <= line.start or not line.words:
         return None

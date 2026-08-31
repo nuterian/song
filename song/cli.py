@@ -7,9 +7,10 @@ import json
 import sys
 from pathlib import Path
 
-from . import exports, pipeline
+from . import exports
+from .align import pipeline
 from .project import Project, slugify
-from .score import format_report
+from .align.score import format_report
 
 
 def _workdir_for(audio: Path, explicit: str | None) -> Path:
@@ -89,7 +90,8 @@ def cmd_score(args) -> int:
 
 
 def cmd_audit(args) -> int:
-    from . import analysis, refine, vad
+    from . import analysis, vad
+    from .align import refine
     from .audio import TARGET_SR, load_mono
 
     workdir = Path(args.workdir)
@@ -138,7 +140,7 @@ def cmd_export(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="lyricsync",
+        prog="song",
         description="Time-synchronize a lyrics file against an audio track.",
     )
     sub = parser.add_subparsers(dest="command")

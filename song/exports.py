@@ -42,7 +42,7 @@ def write_lrc(project: Project, path: Path | str, title: str = "", artist: str =
         out.append(f"[ti:{title}]")
     if artist:
         out.append(f"[ar:{artist}]")
-    out.append("[re:lyricsync]")
+    out.append("[re:song]")
 
     lines = _timed(project)
     for i, line in enumerate(lines):
@@ -68,7 +68,7 @@ def write_enhanced_lrc(
         out.append(f"[ti:{title}]")
     if artist:
         out.append(f"[ar:{artist}]")
-    out.append("[re:lyricsync]")
+    out.append("[re:song]")
 
     lines = _timed(project)
     for i, line in enumerate(lines):

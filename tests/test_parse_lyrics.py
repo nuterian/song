@@ -7,7 +7,7 @@ line the aligner hunts for in the audio and never hears.
 
 import unittest
 
-from lyricsync.parse_lyrics import Section, parse, tokenize
+from song.parse_lyrics import Section, parse, tokenize
 
 
 LYRICS = """Verse 1 (8 bars, pulsing bass)

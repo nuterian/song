@@ -26,9 +26,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .align import LineTiming
-from .project import Project
-from .vad import VocalActivity
+from .whisper import LineTiming
+from ..project import Project
+from ..vad import VocalActivity
 
 # Component weights, summing to 100.
 WEIGHTS = {

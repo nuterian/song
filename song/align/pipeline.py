@@ -44,11 +44,12 @@ from typing import Callable
 
 import numpy as np
 
-from . import parse_lyrics, roundtrip, vad
-from .align import DEFAULT_MODEL, LineTiming, align_lines, load_aligner
-from .align_ctc import align_lines_ctc
-from .audio import TARGET_SR, load_mono, probe_duration
-from .project import Project, slugify
+from .. import parse_lyrics, vad
+from . import roundtrip
+from .whisper import DEFAULT_MODEL, LineTiming, align_lines, load_aligner
+from .ctc import align_lines_ctc
+from ..audio import TARGET_SR, load_mono, probe_duration
+from ..project import Project, slugify
 from .score import GATE, Scorecard, format_report, gate_failures, score_project
 from .separate import separate_vocals
 
@@ -483,7 +484,7 @@ def run(
         progress("      gate passed, no lines flagged")
 
     project.scorecard = card.to_dict()
-    # Keep the independent evidence with the project so `lyricsync score` can
+    # Keep the independent evidence with the project so `song score` can
     # re-benchmark manual edits without re-running any model.
     project.meta["aligners"] = {
         name: {

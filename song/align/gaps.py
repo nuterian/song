@@ -29,8 +29,8 @@ from __future__ import annotations
 import difflib
 from dataclasses import dataclass, field
 
-from .parse_lyrics import tokenize
-from .project import Project, TimedLine, Word
+from ..parse_lyrics import tokenize
+from ..project import Project, TimedLine, Word
 
 # A gap needs this much vocal-active audio in it before it is worth listening to.
 MIN_VOCAL = 2.0
@@ -256,7 +256,7 @@ def transcribe_gaps(
     track. Projects aligned after this feature landed carry the words already
     and never reach here.
     """
-    from .audio import TARGET_SR
+    from ..audio import TARGET_SR
     from .roundtrip import transcribe
 
     say = progress or (lambda *_: None)

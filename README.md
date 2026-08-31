@@ -1,4 +1,4 @@
-# lyricsync
+# song
 
 [![tests](https://github.com/nuterian/song/actions/workflows/tests.yml/badge.svg)](https://github.com/nuterian/song/actions/workflows/tests.yml)
 
@@ -11,18 +11,18 @@ not, and the end goal is burning synchronized captions into a video.
 
 **[How it works, in full →](https://jugalm.com/song/)**
 
-![The lyricsync timeline showing a whole track](docs/img/timeline-track.png)
+![The song timeline showing a whole track](docs/img/timeline-track.png)
 
 ```bash
 ./setup.sh                       # one-time, ~5 min
-./.venv/bin/python -m lyricsync  # opens the app at http://127.0.0.1:8420
+./.venv/bin/python -m song  # opens the app at http://127.0.0.1:8420
 ```
 
 Add your first track by dropping an audio file and a `.txt` into the app, or
 align one straight from the command line:
 
 ```bash
-./.venv/bin/python -m lyricsync song.wav lyrics.txt
+./.venv/bin/python -m song song.wav lyrics.txt
 ```
 
 ## Why it is accurate
@@ -78,11 +78,11 @@ here* and nothing else. Two guided paths sit on top of it:
 ## Commands
 
 ```bash
-python -m lyricsync song.wav lyrics.txt     # align + open the UI (default)
-python -m lyricsync align song.wav lyrics.txt   # align and export, no UI
-python -m lyricsync audit workdir/song      # repair + list what needs an ear
-python -m lyricsync score workdir/song      # re-run the benchmark on your edits
-python -m lyricsync export workdir/song     # rewrite lrc/srt/vtt
+python -m song song.wav lyrics.txt     # align + open the UI (default)
+python -m song align song.wav lyrics.txt   # align and export, no UI
+python -m song audit workdir/my-track      # repair + list what needs an ear
+python -m song score workdir/my-track      # re-run the benchmark on your edits
+python -m song export workdir/my-track     # rewrite lrc/srt/vtt
 ```
 
 Flags: `--model large-v3-turbo`, `--no-roundtrip`, `--no-separate`, `--force`,

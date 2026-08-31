@@ -18,9 +18,9 @@ from pathlib import Path
 
 import numpy as np
 
-from .align import LineTiming, _assemble
-from .audio import TARGET_SR, load_mono
-from .project import Word
+from .whisper import LineTiming, _assemble
+from ..audio import TARGET_SR, load_mono
+from ..project import Word
 
 # wav2vec2 feature extractor stride: one frame per 320 samples (20 ms at 16 kHz).
 FRAME_STRIDE = 320
@@ -97,7 +97,7 @@ def align_lines_ctc(
     import torch
     import torchaudio.functional as AF
 
-    from .parse_lyrics import tokenize
+    from ..parse_lyrics import tokenize
 
     if not line_texts:
         return []

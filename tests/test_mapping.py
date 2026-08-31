@@ -7,7 +7,7 @@ the fourth occurrence rather than the first.
 
 import unittest
 
-from lyricsync.mapping import map_words_to_lines
+from song.align.mapping import map_words_to_lines
 
 
 LINES = ["You're my gravity in motion",

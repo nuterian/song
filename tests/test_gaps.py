@@ -8,9 +8,9 @@ as a lyric.
 
 import unittest
 
-from lyricsync import gaps
-from lyricsync.parse_lyrics import Section
-from lyricsync.project import Project, TimedLine, Word
+from song.align import gaps
+from song.parse_lyrics import Section
+from song.project import Project, TimedLine, Word
 
 
 CHORUS = "You're my gravity in motion,"
