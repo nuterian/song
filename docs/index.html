@@ -386,9 +386,10 @@ footer a:hover{color:var(--text)}
     <h2>One command turns it into a video.</h2>
     <p class="say">
       Three lines, bottom left: the one being sung, with the one before and the
-      one after faded either side of it. <b>The picture is generated from the
-      same track</b> and kept quiet — soft light that answers the mix within a
-      frame, and one thin line opposite the words, zigzagging with the
+      one after smaller and faded either side. When the line changes,
+      <b>the whole stack rises by one.</b> The picture behind it is generated
+      from the same track and kept quiet — soft light that answers the mix
+      within a frame, and one thin line opposite the words, zigzagging with the
       amplitude. There is nothing to supply.
     </p>
   </div>
@@ -397,7 +398,7 @@ footer a:hover{color:var(--text)}
       <video src="img/video-loop.mp4" poster="img/video-still.jpg"
              autoplay muted loop playsinline preload="metadata"
              width="1000" height="562"
-             aria-label="Twelve seconds of the karaoke video: each word of the chorus filling white as it is sung, over a magenta wash that pulses on the beat, with the mix waveform scrolling along the bottom."></video>
+             aria-label="Twelve seconds of the karaoke video: three lines of lyrics at the bottom left, the middle one filling word by word in an accent colour as it is sung, over a soft lit wash, with a thin zigzag line tracking the amplitude at the bottom right."></video>
       <script>
         /* The only script on this page. It is here because an autoplaying loop
            is motion, and the stylesheet already honours the request not to have
@@ -448,7 +449,7 @@ footer a:hover{color:var(--text)}
             <tr><td>how bright they burn</td><td>the isolated vocal envelope</td></tr>
             <tr><td>a small kick</td><td>the tracked beat, harder on the first of the bar</td></tr>
             <tr><td>a fast, tiny shiver</td><td>the mix again — a couple of pixels, sized by how loud it is now</td></tr>
-            <tr><td>the line's deflection</td><td>the amplitude now, not a scrolling history of it</td></tr>
+            <tr><td>the line's deflection</td><td>the amplitude now, one tooth per two analysis buckets</td></tr>
             <tr><td>the sweep</td><td>the word timings in <code>project.json</code></td></tr>
             <tr><td>the word lit in colour</td><td>the same timings, as a per-word transform</td></tr>
           </tbody>
@@ -466,9 +467,15 @@ footer a:hover{color:var(--text)}
         the same sentence is legible twice.</p>
         <p><code>\kf</code> gives two: a word not yet sung is dim, a word sung
         is filled. So the style's primary is the <b>accent</b> rather than the
-        final colour, and one transform per word hands that word back to white a
+        final colour, and one transform per word hands that word back to ink a
         moment after it lands. One word is lit at a time, with a short trail
-        behind it. It grows 12% at the same moment.</p>
+        behind it.</p>
+        <p>Only the line being sung is swept. A neighbour drawn with the same
+        karaoke tags has every word either already over or not yet begun, so it
+        fills to the accent at once and the settle then walks it back — <b>a
+        line that has finished being sung relights in colour as it leaves</b>,
+        which reads as a fault. Caught by a test, after being caught by
+        looking.</p>
         <p>Every word's override block opens with <code>\r</code>, because an
         override applies to everything after it and a transform that has not
         started does not cancel one that has — without the reset, <b>the whole

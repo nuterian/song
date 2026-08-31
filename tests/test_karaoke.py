@@ -145,9 +145,10 @@ class AwkwardLines(unittest.TestCase):
         sweeps = [d for kind, d in durations(karaoke.karaoke_text(ln, 500)) if kind == "kf"]
         self.assertEqual(sweeps, [40, 0, 60])
 
-    def test_a_line_with_no_words_is_plain_text_with_no_tags(self):
+    def test_a_line_with_no_words_is_plain_text_with_no_karaoke(self):
         ln = TimedLine(index=0, section=0, text="hummed", start=5.0, end=7.0)
-        self.assertEqual(karaoke.karaoke_text(ln, 500), "hummed")
+        self.assertEqual(spoken("x,x,x,x,x,x,x,x,x," + karaoke.karaoke_text(ln, 500)),
+                         "hummed")
 
     def test_word_starts_that_run_backwards_never_emit_a_negative_wait(self):
         # libass reads a negative \k as an enormous positive one, so the line
@@ -189,21 +190,11 @@ class WhatIsOnScreen(unittest.TestCase):
 
 
 class TheWordBeingSung(unittest.TestCase):
-    """It swells, and only it does."""
-
-    def swells(self, event):
-        """The growing half of each word's pair; the other half settles back."""
-        return [(int(a), int(b), float(c))
-                for a, b, c in re.findall(r"\\t\((\d+),(\d+),\\fscx([\d.]+)", event)
-                if float(c) > 100.0]
-
-    def test_each_word_carries_its_own_swell(self):
-        ln = line(0, "one two three", 10.0, 13.0)
-        self.assertEqual(len(self.swells(karaoke.karaoke_text(ln, 1000))), 3)
+    """It fills in the accent, then hands itself back to ink."""
 
     def test_every_word_resets_first(self):
-        # Without \r the swell on word one is still in force when word two is
-        # drawn and the whole line inflates. This is the regression.
+        # Without \r a transform on word one is still in force when word two is
+        # drawn, and word two sweeps in the colour word one settled to.
         ln = line(0, "one two three", 10.0, 13.0)
         text = karaoke.karaoke_text(ln, 1000)
         self.assertEqual(text.count("\\r"), 3)
@@ -211,121 +202,95 @@ class TheWordBeingSung(unittest.TestCase):
             if "\\kf" in chunk:
                 self.assertTrue(chunk.startswith("\\r"), chunk)
 
-    def test_the_swell_peaks_while_the_word_is_being_sung(self):
-        ln = line(0, "alpha bravo", 10.0, 12.0)
-        rise, peak, _ = self.swells(karaoke.karaoke_text(ln, karaoke.centis(10.0)))[0]
-        self.assertLessEqual(rise, 0)
-        self.assertLess(peak, 1000)          # the word runs 0..1000 ms
-
-    def test_a_short_word_swells_less_so_a_fast_run_does_not_strobe(self):
-        long_word = self.swells(karaoke.grow(0, 40))[0][2]      # a 400 ms word
-        short_word = self.swells(karaoke.grow(0, 8))[0][2]      # an 80 ms one
-        self.assertGreater(long_word, short_word)
-        self.assertEqual(long_word, 100 + karaoke.GROW)
-
-    def test_a_word_too_short_to_show_a_swell_gets_no_tags_for_one(self):
-        self.assertEqual(karaoke.grow(0, 1), "")
-
-    def test_it_fills_in_the_accent_and_settles_to_white(self):
+    def test_the_sweep_goes_to_the_accent_and_the_settle_takes_it_to_ink(self):
         # \kf only has two states. The third - already sung - is one transform
         # per word, and it is the one that leaves a single word lit.
         style = [ln for ln in karaoke.build(project(line(0, "one two", 40.0, 43.0)))
                  .splitlines() if ln.startswith("Style: Lyric")][0]
         self.assertEqual(style.split(",")[3], karaoke.colour(karaoke.ACCENT))
-        self.assertIn(karaoke.tag_colour(karaoke.SUNG), karaoke.settle(100))
+        self.assertIn(karaoke.tag_colour(karaoke.INK), karaoke.settle(100))
 
     def test_the_accent_leaves_after_the_word_ends_not_before(self):
         ln = line(0, "alpha", 10.0, 11.0)
-        start, _ = re.findall(r"\\t\((\d+),(\d+),\\1c", karaoke.karaoke_text(ln, 1000))[0]
+        start, _ = re.findall(r"\\t\((\d+),(\d+),\\1c",
+                             karaoke.karaoke_text(ln, 1000))[0]
         self.assertGreaterEqual(int(start), 100)     # the word runs 0..100 ms in
 
+    def test_the_settle_never_starts_before_its_own_event(self):
+        # A line is drawn again in the slot above while the next one is sung,
+        # and there every word ended before the event began.
+        self.assertNotIn("(-", karaoke.settle(-400))
 
-class Windows(unittest.TestCase):
-    def test_a_line_appears_before_it_is_sung(self):
-        appear, _ = karaoke.windows(project(line(0, "one two", 40.0, 43.0)))[0]
-        self.assertAlmostEqual(appear, 40.0 - karaoke.LEAD_IN)
-
-    def test_a_line_holds_after_its_last_word(self):
-        _, vanish = karaoke.windows(project(line(0, "one two", 40.0, 43.0)))[0]
-        self.assertAlmostEqual(vanish, 43.0 + karaoke.HOLD)
-
-    def test_a_lead_in_never_runs_before_the_track_starts(self):
-        appear, _ = karaoke.windows(project(line(0, "one two", 0.4, 2.0)))[0]
-        self.assertEqual(appear, 0.0)
-
-    def test_two_lines_are_never_on_screen_at_once(self):
-        spans = karaoke.windows(project(
-            line(0, "one two", 40.0, 43.0),
-            line(1, "three four", 43.2, 46.0),
-        ))
-        self.assertLessEqual(spans[0][1], spans[1][0])
-
-    def test_back_to_back_lines_hand_over_with_no_blank_between_them(self):
-        # A gap here reads as a blink, and lines in a chorus are 80 ms apart.
-        spans = karaoke.windows(project(
-            line(0, "one two", 40.0, 43.0),
-            line(1, "three four", 43.0, 46.0),
-        ))
-        self.assertEqual(spans[0][1], spans[1][0])
-
-    def test_a_clamped_line_still_covers_every_word_it_has(self):
-        spans = karaoke.windows(project(
-            line(0, "one two", 40.0, 43.0),
-            line(1, "three four", 43.1, 46.0),
-        ))
-        self.assertLessEqual(spans[0][0], 40.0)
-        self.assertGreaterEqual(spans[0][1], 43.0)
-        self.assertLessEqual(spans[1][0], 43.1)
+    def test_the_slot_state_is_repeated_in_every_word(self):
+        # \r drops it, so each block has to say it again or only the first word
+        # is the size and opacity of the slot it is in.
+        ln = line(0, "one two three", 10.0, 13.0)
+        text = karaoke.karaoke_text(ln, 1000, "\\fscx82\\fscy82")
+        self.assertEqual(text.count("\\fscx82"), 3)
 
 
-class ThreeLinesAtOnce(unittest.TestCase):
+class ThreeLinesThatMove(unittest.TestCase):
     """The one being sung, with the one before and the one after either side."""
 
     def setUp(self):
         self.lines = [line(i, f"line {i} here", 10.0 + i * 5, 13.0 + i * 5)
-                      for i in range(4)]
+                      for i in range(5)]
         self.text = karaoke.build(project(*self.lines))
-
-    def slots(self, event):
-        return int(event.split(",")[7])   # Layer,Start,End,Style,Name,L,R,V
+        self.spans = karaoke.windows(project(*self.lines))
 
     def during(self, index):
-        """Every event whose window is the one where line `index` is sung."""
-        sung = [e for e in events(self.text)][index]
-        span = sung.split(",")[1:3]
+        """Every event drawn while line `index` is the one being sung."""
+        start = karaoke.ass_time(karaoke.centis(self.spans[index][0]))
         return [e for e in self.text.splitlines()
-                if e.startswith("Dialogue:") and e.split(",")[1:3] == span]
+                if e.startswith("Dialogue:") and e.split(",")[1] == start]
 
-    def test_the_middle_of_a_song_shows_three(self):
-        shown = self.during(1)
-        self.assertEqual(len(shown), 3)
-        self.assertEqual(sorted(self.slots(e) for e in shown),
-                         sorted([karaoke.SLOT_PREV, karaoke.SLOT_NOW, karaoke.SLOT_NEXT]))
+    def arrives_at(self, event):
+        r"""The y the event's \move ends at."""
+        return int(re.search(r"\\move\(\d+,\d+,\d+,(\d+),", event).group(1))
+
+    def test_the_middle_of_a_song_draws_four_lines_and_shows_three(self):
+        # Four arrive; the fourth arrives at the stop above the frame's own,
+        # which is how the line that has been read leaves.
+        shown = self.during(2)
+        self.assertEqual(len(shown), 4)
+        arrivals = sorted(self.arrives_at(e) for e in shown)
+        self.assertEqual(arrivals, sorted(karaoke.PLAY_H - slot for slot in (
+            karaoke.SLOT_NEXT, karaoke.SLOT_NOW,
+            karaoke.SLOT_PREV, karaoke.SLOT_OUT)))
 
     def test_the_neighbours_are_the_neighbours(self):
-        shown = {self.slots(e): spoken(e) for e in self.during(1)}
-        self.assertEqual(shown[karaoke.SLOT_PREV], "line 0 here")
-        self.assertEqual(shown[karaoke.SLOT_NOW], "line 1 here")
-        self.assertEqual(shown[karaoke.SLOT_NEXT], "line 2 here")
+        shown = {self.arrives_at(e): spoken(e) for e in self.during(2)}
+        for slot, text in ((karaoke.SLOT_PREV, "line 1 here"),
+                           (karaoke.SLOT_NOW, "line 2 here"),
+                           (karaoke.SLOT_NEXT, "line 3 here")):
+            self.assertEqual(shown[karaoke.PLAY_H - slot], text)
 
-    def test_the_first_line_has_nothing_above_it_and_the_last_nothing_below(self):
-        self.assertEqual(sorted(self.slots(e) for e in self.during(0)),
-                         sorted([karaoke.SLOT_NOW, karaoke.SLOT_NEXT]))
-        self.assertEqual(sorted(self.slots(e) for e in self.during(3)),
-                         sorted([karaoke.SLOT_PREV, karaoke.SLOT_NOW]))
+    def test_every_line_on_screen_moves_at_every_change(self):
+        # Moving only the ones that change slot leaves two of them sitting
+        # almost on top of each other for the length of the move.
+        for event in self.during(2):
+            leaving, arriving = re.search(
+                r"\\move\(\d+,(\d+),\d+,(\d+),", event).groups()
+            self.assertNotEqual(leaving, arriving)
 
-    def test_no_line_is_ever_on_screen_in_two_slots_at_once(self):
-        # Overlapping the slots to cross-dissolve between them reads as a
-        # duplicate: the same sentence legible twice, which looks like a fault.
-        for index in range(4):
-            texts = [spoken(e) for e in self.during(index)]
-            self.assertEqual(len(texts), len(set(texts)))
+    def test_only_the_line_being_sung_is_swept(self):
+        # A neighbour drawn with karaoke tags has every word already over or
+        # not yet begun, so it fills to the accent and walks back to ink - a
+        # line that has finished being sung relights as it leaves.
+        for event in self.during(2):
+            if spoken(event) != "line 2 here":
+                self.assertNotIn("\\kf", event)
 
-    def test_the_neighbours_carry_no_karaoke(self):
-        # They are there to be read ahead and remembered, not followed.
+    def test_nothing_fades_except_the_two_ends_of_the_song(self):
+        # Everything in between arrives from the invisible stop below and
+        # leaves by the invisible one above, so it needs no fade of its own.
+        faded = [e for e in self.text.splitlines() if "\\fad(" in e]
+        self.assertIn("line 0 here", spoken(faded[0]))
+        self.assertIn("line 4 here", spoken(faded[-1]))
+        last = karaoke.ass_time(karaoke.centis(self.spans[-1][1]))
         for event in self.text.splitlines():
-            if event.startswith("Dialogue:") and ",Near," in event:
-                self.assertNotIn("\\k", event.split(",", 9)[9].replace("\\fad", ""))
+            if event.startswith("Dialogue:") and "\\fad(" not in event:
+                self.assertNotEqual(event.split(",")[2], last)
 
 
 class TheFile(unittest.TestCase):
@@ -345,8 +310,10 @@ class TheFile(unittest.TestCase):
         self.assertIn(f"PlayResY: {karaoke.PLAY_H}", self.text)
 
     def test_unaligned_lines_are_left_out(self):
-        self.assertEqual(len(events(self.text)), 2)
         self.assertNotIn("never aligned", self.text)
+        self.assertEqual(
+            len({spoken(e) for e in self.text.splitlines()
+                 if e.startswith("Dialogue:")}), 2)
 
     def test_secondary_is_the_unsung_colour_and_differs_from_primary(self):
         style = [ln for ln in self.text.splitlines() if ln.startswith("Style:")][0]

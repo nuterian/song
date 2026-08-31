@@ -33,56 +33,50 @@ PLAY_W, PLAY_H = 1280, 720
 FONT = "Avenir Next"
 FONT_SIZE = 34
 
-# No blur on the words, and no shadow under them. libass's \blur is described as
-# softening the border, but with a border thick enough to read it bleeds into
-# the fill, and every word came *into focus* as it was sung. A drop shadow, hard
-# or soft, is a second copy of the text lying underneath the first, which is
-# exactly the thing this is trying not to look like. What is left is a hairline
-# edge at low opacity - enough to hold the letterform against a light frame,
-# not enough to read as an outline.
-BORDER = 0.9
-EDGE = (0x14060E, 0x84)
+# No blur on the words, and nothing lying under them. libass's \blur is
+# described as softening the border, but with a border thick enough to read it
+# bleeds into the fill, and every word came *into focus* as it was sung. A drop
+# shadow, hard or soft, is a second copy of the text underneath the first, which
+# is the thing this is trying not to look like. What is left is a hairline of
+# the ground's own colour: on a light picture that means a pale edge, which
+# separates dark type from a mid tone without ever reading as an outline.
+BORDER = 1.1
+EDGE = (0xFFFFFF, 0x9C)
 
-# Bottom left, three lines deep: the one being sung, with the one before and the
-# one after faded either side of it. Margins are from the frame edge, and the
-# right one keeps the block clear of the trace in the opposite corner.
-MARGIN_L = 86
-MARGIN_R = 540
-# Spaced so that a line long enough to wrap - none on the sample track, but
-# somebody's will - grows upward into its own slot without reaching the one
-# above it.
-SLOT_NEXT = 70               # distance from the bottom of the frame
-SLOT_NOW = 128
-SLOT_PREV = 186
-
-# Lines arrive and leave rather than cutting. \fad measures its out-fade from
-# the *end* of the event, and consecutive lines here touch rather than overlap,
-# so one line has finished fading out on the exact frame the next starts fading
-# in - no dissolve between two different sentences, and no gap either.
-FADE_IN = 260
-FADE_OUT = 300
-
-
-# Three states, and the middle one is the point. A word not yet sung is dim
-# white; the word being sung fills in the accent; a word already sung settles to
-# plain white. \kf gives the first two - it sweeps the fill from Secondary to
-# Primary - and the third is one transform per word, turning that word's primary
-# white a beat after it is done.
-UNSUNG = (0xFFFFFF, 0x76)
-NEAR = (0xFFFFFF, 0x96)      # the line before and the line after
-ACCENT = 0xFFC64D
-SUNG = 0xFFFFFF
+# Dark type, because the picture is light. Three states: a word not yet sung is
+# the same ink at low opacity, the word being sung fills in the accent, and a
+# word already sung settles to full ink. \kf gives the first two - it sweeps the
+# fill from Secondary to Primary - and the third is one transform per word.
+INK = 0x1B1520
+UNSUNG = (INK, 0x9E)
+ACCENT = 0x9C3F14
 SETTLE_HOLD = 130            # ms the accent holds after the word ends
-SETTLE = 320                 # ...then this long to fade to white
+SETTLE = 320                 # ...then this long to fade to ink
 
-# The word being sung swells. Capped by how long the word lasts: at full size on
-# a 90 ms syllable it is a flicker rather than an emphasis, so short words grow
-# proportionally less and a fast run reads as a ripple instead of a strobe.
-GROW = 5.0         # percent, for a word long enough to see it
-GROW_FULL = 220    # ms of word length that earns the full swell
-GROW_LEAD = 90     # ms early, so the word is already up when it is sung
-GROW_IN = 130      # ms to swell
-GROW_OUT = 260     # ms to settle back
+# Bottom left, three lines deep, and they move. A line rises from the next slot
+# to the sung slot to the previous slot as the song goes through it, growing and
+# then shrinking again - so the progression is something you watch rather than
+# something you infer from which line happens to be brightest.
+MARGIN_L = 92
+MARGIN_R = 500
+# Five stops, of which two are never seen. A line rises through all of them, so
+# every line on screen moves at every change and the spacing between them never
+# alters. Moving only the ones that change slot was the first attempt, and for
+# the length of the move two of them sit almost on top of each other.
+SLOT_IN = 18                 # distance from the bottom of the frame
+SLOT_NEXT = 74
+SLOT_NOW = 132
+SLOT_PREV = 192
+SLOT_OUT = 248
+MOVE = 430                   # ms to travel between stops
+NEAR_SCALE = 82              # percent, for the lines either side
+NEAR = (0xB2, 0xB2, 0xC2)    # their transparency: fill, unsung fill, edge
+GONE = (0xFF, 0xFF, 0xFF)    # ...and the two stops nobody sees
+
+# Only the two ends of the song fade. Everything in between arrives by moving,
+# because a line that fades in and out on every change makes the whole block
+# blink thirty-three times.
+FADE = 700
 
 # Seconds a line sits on screen unsung before its first word. A karaoke line
 # that appears on the beat it is sung on is unsingable - the point is reading
@@ -181,7 +175,7 @@ def windows(project: Project) -> list[tuple[float, float]]:
     return spans
 
 
-def karaoke_text(line, start_cs: int, shade: bool = False) -> str:
+def karaoke_text(line, start_cs: int, state: str = "") -> str:
     """One dialogue line's text, with a `\\kf` run per word.
 
     Every duration is a difference of absolute centisecond positions on the
@@ -193,9 +187,14 @@ def karaoke_text(line, start_cs: int, shade: bool = False) -> str:
     spends the tail of that word's duration crossing whitespace, so the word
     finishes early; hang it on the word after and the word starts late. Both
     show on a fast syllable run, and late is the one that reads as broken.
+
+    `state` is the slot the line is in - its size and how far it is faded, and
+    the transform that carries it to the next slot. It has to be repeated in
+    every word's block because every block opens with `\\r`, which is itself
+    unavoidable: see settle().
     """
     if not line.words:
-        return escape(line.text)
+        return f"{{\\r{state}}}{escape(line.text)}"
 
     # The words carry the timing; line.text carries the lyric. They are the same
     # tokens in the same order, but the aligner strips trailing punctuation off
@@ -217,25 +216,14 @@ def karaoke_text(line, start_cs: int, shade: bool = False) -> str:
         # otherwise emit a negative \k, which libass reads as an enormous one.
         w_start = min(max(centis(word.start), at), end_cs)
         w_end = min(max(centis(word.end), w_start), end_cs)
-        rise, fall = w_start - start_cs, w_end - start_cs
-        if shade:
-            # Nothing sweeps here - the fill is off and only the blurred border
-            # is drawn - so the karaoke tags are left out entirely. The swell is
-            # not: without it the shadow keeps the width of a word the layer
-            # above has already grown, and slides out from under it.
-            out.append(
-                f"{' ' if i else ''}"
-                f"{{\\r\\1a&HFF&\\blur{SHADE_BLUR}{grow(rise, fall)}}}{escape(token)}"
-            )
-        else:
-            if i:
-                out.append("{\\k0} ")
-            if w_start > at:
-                out.append(f"{{\\k{w_start - at}}}")   # the lead-in, or a held rest
-            out.append(
-                f"{{\\r\\kf{w_end - w_start}{grow(rise, fall)}{settle(fall)}}}"
-                f"{escape(token)}"
-            )
+        if i:
+            out.append("{\\k0} ")
+        if w_start > at:
+            out.append(f"{{\\k{w_start - at}}}")   # the lead-in, or a held rest
+        out.append(
+            f"{{\\r{state}\\kf{w_end - w_start}{settle(w_end - start_cs)}}}"
+            f"{escape(token)}"
+        )
         at = w_end
 
     return "".join(out)
@@ -246,63 +234,91 @@ def settle(end_cs: int) -> str:
 
     `\\kf` gives two states, and the useful one is a third. The style's primary
     is the accent, so the sweep fills the word being sung in colour; this hands
-    that word back to white a moment later, leaving exactly one word lit at a
-    time with a short trail behind it.
+    that word back to ink a moment later, leaving exactly one word lit at a time
+    with a short trail behind it.
     """
-    leave = end_cs * 10 + SETTLE_HOLD
-    return f"\\t({leave},{leave + SETTLE},\\1c{tag_colour(SUNG)})"
+    # Clamped, because a line is also drawn in the slot above while the next
+    # one is sung, and there its words all ended before the event began.
+    leave = max(0, end_cs * 10 + SETTLE_HOLD)
+    return f"\\t({leave},{leave + SETTLE},\\1c{tag_colour(INK)})"
 
 
-def grow(start_cs: int, end_cs: int) -> str:
-    """`\\t` pair that swells one word as it is sung and lets it back down.
-
-    Every word's block opens with `\\r` because of this. An override applies to
-    all the text after it, and a `\\t` that has not started yet does not cancel
-    one that has: without the reset, word one's swell is still in force when
-    word two is drawn, and the whole line inflates instead of one word in it.
-    That looked like it worked until a frame was pulled at the moment word one
-    was up, where the entire line was 40% larger.
-
-    `\\r` does not disturb the karaoke clock, which keeps accumulating across
-    the resets - checked, not assumed, since the whole sweep would be wrong if
-    it did.
-
-    The line re-centres as a word grows, which is the effect rather than a flaw
-    in it: the row breathes around the word being sung.
-    """
-    length = (end_cs - start_cs) * 10
-    amount = GROW * min(1.0, length / GROW_FULL)
-    if amount < 1.0:
-        return ""       # below a percent it is invisible, and two tags cost more
-
-    rise = max(0, start_cs * 10 - GROW_LEAD)
-    fall = end_cs * 10
-    # A word shorter than the swell itself gets a shorter swell, not one that
-    # overruns into its own settling.
-    peak = min(rise + GROW_IN, max(rise + 40, fall))
-    scale = round(100 + amount, 1)
+def slot_state(alpha: tuple[int, int, int], scale: int) -> str:
+    """How a line looks in one slot: how faded, and how large."""
+    fill, unsung, edge = alpha
     return (
-        f"\\t({rise},{peak},\\fscx{scale}\\fscy{scale})"
-        f"\\t({fall},{fall + GROW_OUT},\\fscx100\\fscy100)"
+        f"\\1a&H{fill:02X}&\\2a&H{unsung:02X}&\\3a&H{edge:02X}&"
+        f"\\fscx{scale}\\fscy{scale}"
     )
+
+
+def travel(here: str, there: str, at: int) -> str:
+    """The transform that carries a line from one slot's look to the next.
+
+    `\\alpha` would be one tag instead of three, but it sets every alpha
+    channel at once - including the unsung one, which is the whole difference
+    between a word that has been sung and a word that has not. So the channels
+    move separately.
+    """
+    return f"{here}\\t({at},{at + MOVE},{there})"
 
 
 def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
     """The whole .ass file, as text."""
     lines = [ln for ln in project.lines if ln.end > ln.start]
     spans = windows(project)
-    fade = f"{{\\fad({FADE_IN},{FADE_OUT})}}"
+    out = [_header(font, size)]
+    if not lines:
+        return "\n".join(out) + "\n"
 
-    def style(name: str, primary: str, secondary: str) -> str:
-        # Alignment 1 anchors each slot to its own bottom-left corner, so a line
-        # that wraps grows upward inside its slot instead of pushing the others.
-        return (
-            f"Style: {name},{font},{size},{primary},{secondary},"
-            f"{colour(*EDGE)},{colour(0x000000, 0xFF)},"
-            f"0,0,0,0,100,100,0,0,1,{BORDER},0,1,{MARGIN_L},{MARGIN_R},{SLOT_NOW},1"
-        )
+    gone = slot_state(GONE, NEAR_SCALE)
+    near = slot_state(NEAR, NEAR_SCALE)
+    now = slot_state((0x00, UNSUNG[1], EDGE[1]), 100)
+    # Which stop a line is at while the window `offset` windows away is sung,
+    # and how it looks there. -1 is the window before its own.
+    stops = {
+        -1: (SLOT_IN, SLOT_NEXT, gone, near),
+        0: (SLOT_NEXT, SLOT_NOW, near, now),
+        1: (SLOT_NOW, SLOT_PREV, now, near),
+        2: (SLOT_PREV, SLOT_OUT, near, gone),
+    }
 
-    out = [
+    for i, line in enumerate(lines):
+        for offset, (leaving, arriving, before, after) in stops.items():
+            window = i + offset
+            if not 0 <= window < len(lines):
+                continue
+            start_cs = centis(spans[window][0])
+            end_cs = max(start_cs + 1, centis(spans[window][1]))
+            # The song has to start and stop somewhere. Every other line
+            # arrives from the invisible stop below and leaves by the invisible
+            # one above, so it needs no fade of its own - but the very first
+            # line starts already at a visible stop, and everything drawn
+            # during the last window has nowhere left to go.
+            fade = ""
+            if window == 0 and offset == 0:
+                fade = f"\\fad({FADE},0)"
+            elif window == len(lines) - 1:
+                fade = f"\\fad(0,{FADE})"
+            state = travel(before, after, 0)
+            # Only the line being sung is swept. A neighbour drawn with karaoke
+            # tags has every word already over or not yet begun, so `\kf0`
+            # fills the whole line to the accent and the settle then walks it
+            # back to ink - a line that has finished being sung relights in
+            # colour as it leaves, which reads as a fault.
+            body = (karaoke_text(line, start_cs, state) if offset == 0 else
+                    f"{{\\r{state}\\1c{tag_colour(INK)}}}{escape(line.text)}")
+            out.append(
+                f"Dialogue: 0,{ass_time(start_cs)},{ass_time(end_cs)},Lyric,,0,0,0,,"
+                f"{{\\move({MARGIN_L},{PLAY_H - leaving},{MARGIN_L},"
+                f"{PLAY_H - arriving},0,{MOVE}){fade}}}{body}"
+            )
+
+    return "\n".join(out) + "\n"
+
+
+def _header(font: str, size: int) -> str:
+    return "\n".join([
         "[Script Info]",
         "; Generated by song - https://github.com/nuterian/song",
         "ScriptType: v4.00+",
@@ -320,38 +336,17 @@ def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
         " ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow,"
         " Alignment, MarginL, MarginR, MarginV, Encoding",
         # Primary is what \kf sweeps *to*, so it is the accent rather than the
-        # final colour - each word turns itself white afterwards.
-        style("Lyric", colour(ACCENT), colour(*UNSUNG)),
-        # The line before and the line after. One flat colour, no sweep: they
-        # are there to be read ahead and remembered, not followed.
-        style("Near", colour(*NEAR), colour(*NEAR)),
+        # final colour - each word settles to ink on its own afterwards.
+        # Alignment 1 anchors to the bottom left, which is where \move's
+        # coordinates are measured from too.
+        f"Style: Lyric,{font},{size},{colour(ACCENT)},{colour(*UNSUNG)},"
+        f"{colour(*EDGE)},{colour(0x000000, 0xFF)},"
+        f"0,0,0,0,100,100,0,0,1,{BORDER},0,1,{MARGIN_L},{MARGIN_R},{SLOT_NOW},1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV,"
         " Effect, Text",
-    ]
-
-    def event(style_name: str, span: tuple[float, float], slot: int, body: str) -> str:
-        start_cs = centis(max(0.0, span[0]))
-        end_cs = max(start_cs + 1, centis(span[1]))
-        return (
-            f"Dialogue: 0,{ass_time(start_cs)},{ass_time(end_cs)},{style_name},,"
-            f"0,0,{slot},,{fade}{body}"
-        )
-
-    for i, (line, span) in enumerate(zip(lines, spans)):
-        out.append(event("Lyric", span, SLOT_NOW, karaoke_text(line, centis(span[0]))))
-        # The neighbours share the window exactly, so no line is ever on screen
-        # in two slots at once. Overlapping them by a few hundred milliseconds
-        # to cross-dissolve between slots was the obvious idea and it looks like
-        # a duplicate: for the length of the overlap the same sentence is
-        # legible twice, and the eye reads that as a fault rather than a move.
-        if i + 1 < len(lines):
-            out.append(event("Near", span, SLOT_NEXT, escape(lines[i + 1].text)))
-        if i:
-            out.append(event("Near", span, SLOT_PREV, escape(lines[i - 1].text)))
-
-    return "\n".join(out) + "\n"
+    ])
 
 
 def write(project: Project, path: Path | str, **kwargs) -> Path:

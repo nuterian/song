@@ -12,11 +12,10 @@ Four layers, back to front:
     trace    one thin zigzag line low on the right, deflecting with the amplitude
     grain    a few thousandths of noise, which is what stops the gradient banding
 
-Lit to the corners. There is no vignette: darkening the edges is how you make a
-frame look like a spotlight in a black room, and the picture wanted to look like
-a lit room instead. The floor is raised far enough that the darkest corner still
-has colour in it, and the pools brighten from there rather than rescuing the
-middle of a black frame.
+Lit to the corners, and lit throughout. There is no vignette and no dark floor:
+both are how you make a frame look like a spotlight in a black room, and this
+wants to look like daylight through frosted glass. The base is already a colour
+you could read against; the pools shade and warm it rather than rescuing it.
 
 Sensitive, and quiet with it. The envelopes are barely smoothed, so the picture
 answers the track within a frame or two of a transient - but every depth it
@@ -73,9 +72,9 @@ HUES = {
 #
 #   hue offset, saturation, value, half-width, half-height, x drift, y drift
 LOBES = (
-    (  0.0, 0.56, 0.52, 0.46, 0.36, (0.041, 0.017), (0.029, 0.011)),
-    ( 46.0, 0.64, 0.38, 0.32, 0.24, (0.023, 0.053), (0.037, 0.019)),
-    (-40.0, 0.60, 0.30, 0.70, 0.16, (0.013, 0.031), (0.007, 0.023)),
+    (  0.0, 0.34, 0.26, 0.50, 0.40, (0.041, 0.017), (0.029, 0.011)),
+    ( 46.0, 0.44, 0.19, 0.34, 0.26, (0.023, 0.053), (0.037, 0.019)),
+    (-40.0, 0.40, 0.15, 0.74, 0.18, (0.013, 0.031), (0.007, 0.023)),
 )
 
 # A fast, tiny wobble on top of the slow drift, its size set by how loud the
@@ -92,15 +91,19 @@ VALUE_LIFT = 1.30
 # One line, low and to the right, opposite the words. It has no ends: the stroke
 # fades out into the picture well before it would reach an edge, so it reads as
 # an instrument sitting in the frame rather than as a rule drawn across it.
-TRACE_X = 0.775          # its centre, in fractions of frame width
-TRACE_BASE = 0.868       # its rest height, in fractions of frame height
-TRACE_HEIGHT = 0.055     # deflection at full amplitude
-TRACE_REACH = 0.190      # half-length of the visible stroke
-TRACE_FADE = 0.062       # how much of each end is spent fading out
-TRACE_SPAN = 0.140       # half-width of the part that actually zigzags
-TRACE_TEETH = 28         # zigzag vertices across it
-TRACE_LAG = 0.055        # seconds between one tooth's sample and the next
-TRACE_WEIGHT = 1.8       # stroke, in pixels
+TRACE_X = 0.752          # its centre, in fractions of frame width
+TRACE_BASE = 0.866       # its rest height, in fractions of frame height
+TRACE_HEIGHT = 0.062     # deflection at full amplitude
+TRACE_REACH = 0.222      # half-length of the visible stroke
+TRACE_FADE = 0.070       # how much of each end is spent fading out
+TRACE_SPAN = 0.176       # half-width of the part that actually zigzags
+# One tooth per two analysis buckets, off an envelope smoothed at 12 ms - close
+# enough to the peaks themselves that the line has the track's texture in it and
+# not a rolling average of it. Coarser teeth over a wider lag made a spindle:
+# regular, symmetrical and the same shape in every loud passage.
+TRACE_TEETH = 62
+TRACE_LAG = 0.0166       # seconds between one tooth's sample and the next
+TRACE_WEIGHT = 1.7       # stroke, in pixels
 
 GRAIN = 0.010            # dither amplitude
 GRAIN_FIELDS = 8         # cycled so the noise moves instead of sitting still
@@ -128,9 +131,9 @@ def _palette(hue: float) -> np.ndarray:
     All of them dark. The words are white and they have to win, so the picture
     is lit from behind them rather than in front.
     """
-    rows = [_rgb(hue + 12, 0.76, 0.105), _rgb(hue - 8, 0.62, 0.250)]
+    rows = [_rgb(hue + 12, 0.50, 0.360), _rgb(hue - 8, 0.36, 0.545)]
     rows += [_rgb(hue + off, sat, val) for off, sat, val, *_ in LOBES]
-    rows.append(_rgb(hue - 20, 0.30, 0.95))      # the trace
+    rows.append(_rgb(hue + 6, 0.55, 0.22))       # the trace, darker than its ground
     return np.stack(rows)
 
 
@@ -182,6 +185,9 @@ class Scene:
         # the responsiveness costs no calm.
         self.mix = _envelope(analysis.get("mix_peaks", []), self.rate, 0.05)
         self.voice = _envelope(analysis.get("vocal_peaks", []), self.rate, 0.045)
+        # The trace reads its own, barely-smoothed copy: the field wants an
+        # envelope, the line wants the detail.
+        self.detail = _envelope(analysis.get("mix_peaks", []), self.rate, 0.012)
 
         self._load_beats(beats)
         self._load_sections(project)
@@ -255,7 +261,7 @@ class Scene:
         # the whole frame is meant to read as lit. Kept as a column and broadcast
         # at use: the gradient is constant across a row, so storing it width
         # times over would be h*w floats of the same number.
-        self.wash = ((1.0 - ys) ** 1.1)[:, None].astype(np.float32)
+        self.wash = ((1.0 - ys) ** 0.85)[:, None].astype(np.float32)
 
         # --- the trace
         self.pixel_y = (ys * h)[:, None].astype(np.float32)
@@ -284,7 +290,7 @@ class Scene:
         self.teeth_lag = (np.arange(TRACE_TEETH, dtype=np.float32)
                           - TRACE_TEETH / 2.0) * TRACE_LAG
         self.teeth_pixels = self.teeth_x * w
-        self.env_index = np.arange(self.mix.size, dtype=np.float32)
+        self.env_index = np.arange(self.detail.size, dtype=np.float32)
 
         # Reused every frame. At output resolution these are 2.6 MB apiece and
         # allocating them 8574 times is pure garbage-collector work.
@@ -337,7 +343,7 @@ class Scene:
         six seconds of its history sliding past.
         """
         teeth = np.interp(
-            (t + self.teeth_lag) * self.rate, self.env_index, self.mix
+            (t + self.teeth_lag) * self.rate, self.env_index, self.detail
         ).astype(np.float32)
         deflection = teeth * self.teeth_shape * (TRACE_HEIGHT * self.h)
         # The path, one y per pixel column, straight between teeth.
@@ -396,10 +402,14 @@ class Scene:
                 np.multiply(field, colour[channel] * light, out=tint)
                 img[:, :, channel] += tint
 
+        # Composited, not added. The line is darker than the picture it sits on
+        # and adding a dark colour to a light one lightens it: the trace was
+        # drawn correctly and invisibly for a while on that mistake.
         stroke = self._trace(t)
+        stroke *= 0.55 + 0.45 * energy
         for channel in range(3):
-            np.multiply(stroke, trace[channel] * (0.55 + 0.38 * energy), out=tint)
-            img[:, :, channel] += tint
+            np.multiply(stroke, img[:, :, channel] - trace[channel], out=tint)
+            img[:, :, channel] -= tint
 
         self._grain = (self._grain + 1) % GRAIN_FIELDS
         img += self.grain[self._grain][:, :, None]

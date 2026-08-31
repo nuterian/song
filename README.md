@@ -91,16 +91,17 @@ python -m song video workdir/my-track --preview 1:04 # 25 seconds, to see it
 ```
 
 Three lines sit at the bottom left — the one being sung, with the one before and
-the one after faded either side of it — and each word lights up in an accent
-colour as it lands, settling back to white behind you. That is ASS `\kf`
-karaoke drawn by libass, off the same timings the UI edits, so there is no
-second renderer to keep in agreement with the first. Opposite it, one thin line
-zigzags with the amplitude. Behind both, the picture is generated from the track
-and kept quiet: colour comes from the section you are in, keyed on its *name*,
-so every chorus looks the same, and three soft pools of light drift across a
-frame that is lit to its corners. Everything answers the mix within a frame, and
-everything it does is small. Nothing to supply, no stock footage, no still
-image.
+the one after smaller and faded either side of it. Each word fills with an
+accent colour as it lands and settles back to ink behind you; when the line
+changes, the whole stack rises by one. That is ASS `\kf` karaoke drawn by
+libass, off the same timings the UI edits, so there is no second renderer to
+keep in agreement with the first. Opposite it, one thin line zigzags with the
+amplitude in as much detail as the analysis holds. Behind both, the picture is
+generated from the track and kept quiet: colour comes from the section you are
+in, keyed on its *name*, so every chorus looks the same, and three soft pools of
+light drift across a frame that is lit throughout. Everything answers the mix
+within a frame, and everything it does is small. Nothing to supply, no stock
+footage, no still image.
 
 ![A frame of the karaoke video: a lyric line half-filled by the karaoke sweep over a generated wash, with the mix waveform scrolling along the bottom](docs/img/video-still.jpg)
 
