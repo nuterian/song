@@ -31,7 +31,7 @@ PLAY_W, PLAY_H = 1280, 720
 # the macOS .ttc collection and the whole song renders oblique with nothing
 # anywhere saying italic.
 FONT = "Avenir Next Demi Bold"
-FONT_SIZE = 35
+FONT_SIZE = 39
 
 # Nothing at all around the letterforms: no border, no blur, no shadow. Every
 # one of those is a second shape drawn from the text, and at this size they read
@@ -45,9 +45,9 @@ EDGE = (0xFFFFFF, 0xFF)
 # the same ink at low opacity, the word being sung fills in the accent, and a
 # word already sung settles to full ink. \kf gives the first two - it sweeps the
 # fill from Secondary to Primary - and the third is one transform per word.
-INK = 0x140F18
+INK = 0x100B14
 UNSUNG = (INK, 0xA6)
-ACCENT = 0x8E320C
+ACCENT = 0xC4490A
 SETTLE_HOLD = 130            # ms the accent holds after the word ends
 SETTLE = 320                 # ...then this long to fade to ink
 
@@ -59,14 +59,14 @@ SETTLE = 320                 # ...then this long to fade to ink
 # The line is anchored at its left edge, so a word growing pushes the words
 # after it to the right and leaves the ones before it alone. Centred, the whole
 # sentence would shuffle under the reader on every syllable.
-LIFT = 16.0        # percent larger, for a word long enough to show it
+LIFT = 21.0        # percent larger, for a word long enough to show it
 LIFT_FULL = 240    # ms of word length that earns the whole lift
 LIFT_LEAD = 70     # ms early, so the word is already up when it is sung
 LIFT_IN = 150      # ms to grow
 LIFT_OUT = 300     # ...and to settle back
 LIFT_EASE_IN = 0.55    # <1 moves early and arrives slowly
 LIFT_EASE_OUT = 1.7    # >1 leaves slowly and lands fast
-WEIGHT = 0.85      # px of border at full lift, in the fill's colour
+WEIGHT = 1.05      # px of border at full lift, in the fill's colour
 
 # Bottom left, three lines deep, and they move. A line rises from the next slot
 # to the sung slot to the previous slot as the song goes through it, growing and
@@ -78,12 +78,18 @@ MARGIN_R = 500
 # every line on screen moves at every change and the spacing between them never
 # alters. Moving only the ones that change slot was the first attempt, and for
 # the length of the move two of them sit almost on top of each other.
-SLOT_IN = 18                 # distance from the bottom of the frame
-SLOT_NEXT = 74
-SLOT_NOW = 132
-SLOT_PREV = 192
-SLOT_OUT = 248
-MOVE = 430                   # ms to travel between stops
+SLOT_IN = 14                 # distance from the bottom of the frame
+SLOT_NEXT = 76
+SLOT_NOW = 140
+SLOT_PREV = 206
+SLOT_OUT = 268
+MOVE = 470                   # ms to travel between stops
+# \move is linear and has no easing of its own, so the travel is cut into this
+# many segments whose lengths follow a smoothstep. Three is enough: the fastest
+# segment is only twice the slowest, which is a curve rather than a staircase,
+# and each one is its own event carrying its own share of the fade and the
+# scale, so everything about a line eases on the same curve.
+MOVE_STEPS = 3
 NEAR_SCALE = 82              # percent, for the lines either side
 NEAR = (0xB2, 0xB2, 0xC2)    # their transparency: fill, unsung fill, edge
 GONE = (0xFF, 0xFF, 0xFF)    # ...and the two stops nobody sees
@@ -293,24 +299,42 @@ def settle(end_cs: int) -> str:
             f"\\1c{tag_colour(INK)}\\3c{tag_colour(INK)})")
 
 
-def slot_state(alpha: tuple[int, int, int], scale: int) -> str:
-    """How a line looks in one slot: how faded, and how large."""
-    fill, unsung, edge = alpha
+Look = tuple      # (fill alpha, unsung alpha, edge alpha, scale percent)
+
+AT_REST: Look = (0x00, UNSUNG[1], 0x00, 100)
+
+
+def look_at(slot_alpha: tuple[int, int, int], scale: int) -> Look:
+    return (*slot_alpha, scale)
+
+
+def between(here: Look, there: Look, how_far: float) -> Look:
+    """One point on the way from one slot's look to the next."""
+    return tuple(round(a + (b - a) * how_far) for a, b in zip(here, there))
+
+
+def state(look: Look) -> str:
+    """How a line looks right now: how faded, and how large.
+
+    The three alpha channels move separately because `\\alpha` sets all of them
+    at once - including the unsung one, which is the whole difference between a
+    word that has been sung and a word that has not.
+    """
+    fill, unsung, edge, scale = look
     return (
         f"\\1a&H{fill:02X}&\\2a&H{unsung:02X}&\\3a&H{edge:02X}&"
         f"\\fscx{scale}\\fscy{scale}"
     )
 
 
-def travel(here: str, there: str, at: int) -> str:
-    """The transform that carries a line from one slot's look to the next.
+def travel(here: Look, there: Look, over: int) -> str:
+    """The look now, and the transform that carries it to the next look."""
+    return f"{state(here)}\\t(0,{over},{state(there)})"
 
-    `\\alpha` would be one tag instead of three, but it sets every alpha
-    channel at once - including the unsung one, which is the whole difference
-    between a word that has been sung and a word that has not. So the channels
-    move separately.
-    """
-    return f"{here}\\t({at},{at + MOVE},{there})"
+
+def smoothstep(u: float) -> float:
+    """Slow at both ends, quick through the middle."""
+    return u * u * (3.0 - 2.0 * u)
 
 
 def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
@@ -321,12 +345,12 @@ def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
     if not lines:
         return "\n".join(out) + "\n"
 
-    gone = slot_state(GONE, NEAR_SCALE)
-    near = slot_state(NEAR, NEAR_SCALE)
+    gone = look_at(GONE, NEAR_SCALE)
+    near = look_at(NEAR, NEAR_SCALE)
     # The border alpha is opaque in the sung slot and only there. Nothing has a
-    # border at rest - it is the weight of the word being lifted, and if it were
-    # transparent the lift would change size without changing weight.
-    now = slot_state((0x00, UNSUNG[1], 0x00), 100)
+    # border at rest - it is the weight of the word being lifted - and if it
+    # were transparent the lift would change size without changing weight.
+    now = AT_REST
     # Which stop a line is at while the window `offset` windows away is sung,
     # and how it looks there. -1 is the window before its own.
     stops = {
@@ -341,31 +365,49 @@ def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
             window = i + offset
             if not 0 <= window < len(lines):
                 continue
-            start_cs = centis(spans[window][0])
-            end_cs = max(start_cs + 1, centis(spans[window][1]))
-            # The song has to start and stop somewhere. Every other line
-            # arrives from the invisible stop below and leaves by the invisible
-            # one above, so it needs no fade of its own - but the very first
-            # line starts already at a visible stop, and everything drawn
-            # during the last window has nowhere left to go.
-            fade = ""
+            opens, closes = spans[window]
+            # Every line arrives from the invisible stop below and leaves by
+            # the invisible one above, so it needs no fade of its own. The two
+            # ends of the song are the exception. The first line has no stop
+            # below to come from, so it starts invisible where it stands and
+            # opens by its own alpha - which is one fewer special case than a
+            # \fad, and the right one, because a \fad spread across the
+            # segments of a move restarts on each of them.
             if window == 0 and offset == 0:
-                fade = f"\\fad({FADE},0)"
-            elif window == len(lines) - 1:
-                fade = f"\\fad(0,{FADE})"
-            state = travel(before, after, 0)
-            # Only the line being sung is swept. A neighbour drawn with karaoke
-            # tags has every word already over or not yet begun, so `\kf0`
-            # fills the whole line to the accent and the settle then walks it
-            # back to ink - a line that has finished being sung relights in
-            # colour as it leaves, which reads as a fault.
-            body = (karaoke_text(line, start_cs, state) if offset == 0 else
-                    f"{{\\r{state}\\1c{tag_colour(INK)}}}{escape(line.text)}")
-            out.append(
-                f"Dialogue: 0,{ass_time(start_cs)},{ass_time(end_cs)},Lyric,,0,0,0,,"
-                f"{{\\move({MARGIN_L},{PLAY_H - leaving},{MARGIN_L},"
-                f"{PLAY_H - arriving},0,{MOVE}){fade}}}{body}"
-            )
+                before = gone
+
+            for step in range(MOVE_STEPS):
+                first, last = step / MOVE_STEPS, (step + 1) / MOVE_STEPS
+                from_, to = smoothstep(first), smoothstep(last)
+                over = round(MOVE * (last - first))
+                start = opens + MOVE * first / 1000.0
+                # The last segment runs to the end of the window and holds
+                # there: \move stays put once its time is up.
+                end = closes if step == MOVE_STEPS - 1 else opens + MOVE * last / 1000.0
+                # ...and the last window has nowhere left to go, so whatever is
+                # still on screen when it ends fades out. Only on the segment
+                # that reaches the end; the others are minding the beginning.
+                fade = (f"\\fad(0,{FADE})"
+                        if window == len(lines) - 1 and step == MOVE_STEPS - 1
+                        else "")
+                start_cs = centis(max(0.0, start))
+                end_cs = max(start_cs + 1, centis(end))
+                y_from = PLAY_H - (leaving + (arriving - leaving) * from_)
+                y_to = PLAY_H - (leaving + (arriving - leaving) * to)
+                carry = travel(between(before, after, from_),
+                               between(before, after, to), over)
+                # Only the line being sung is swept. A neighbour drawn with
+                # karaoke tags has every word already over or not yet begun, so
+                # `\kf0` fills the whole line to the accent and the settle then
+                # walks it back to ink - a line that has finished being sung
+                # relights in colour as it leaves, which reads as a fault.
+                body = (karaoke_text(line, start_cs, carry) if offset == 0 else
+                        f"{{\\r{carry}\\1c{tag_colour(INK)}}}{escape(line.text)}")
+                out.append(
+                    f"Dialogue: 0,{ass_time(start_cs)},{ass_time(end_cs)},Lyric,,"
+                    f"0,0,0,,{{\\move({MARGIN_L},{y_from:.0f},{MARGIN_L},"
+                    f"{y_to:.0f},0,{over}){fade}}}{body}"
+                )
 
     return "\n".join(out) + "\n"
 

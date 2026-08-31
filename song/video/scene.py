@@ -136,7 +136,10 @@ VALUE_LIFT = 1.30
 # rule drawn across it.
 TRACE_BASE = (PLAY_H - SLOT_NOW - FONT_SIZE * 0.50) / PLAY_H
 TRACE_REACH = 0.158      # half-length of the stroke
-TRACE_FADE = 0.052       # how much of each end is spent fading out
+# A long fade. The line has to stop somewhere and there is no good place to put
+# an end, so it spends a third of its own length dissolving at each side and
+# never has one.
+TRACE_FADE = 0.098       # how much of each end is spent fading out
 # The stroke is already invisible some way before its geometric end, so the
 # geometry has to run past where the ink should stop or the right margin comes
 # out wider than the left. Measured off a render rather than reasoned about:

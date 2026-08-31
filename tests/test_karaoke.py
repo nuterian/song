@@ -45,6 +45,12 @@ def durations(event: str) -> list[tuple[str, int]]:
             for sweep, value in re.findall(r"\\k(f?)(\d+)", event)]
 
 
+def _seconds(stamp: str) -> float:
+    """`H:MM:SS.cc` back to seconds."""
+    hours, minutes, rest = stamp.split(":")
+    return int(hours) * 3600 + int(minutes) * 60 + float(rest)
+
+
 def spoken(event: str) -> str:
     """An event's text with every override block taken out.
 
@@ -239,58 +245,93 @@ class ThreeLinesThatMove(unittest.TestCase):
         self.spans = karaoke.windows(project(*self.lines))
 
     def during(self, index):
-        """Every event drawn while line `index` is the one being sung."""
-        start = karaoke.ass_time(karaoke.centis(self.spans[index][0]))
-        return [e for e in self.text.splitlines()
-                if e.startswith("Dialogue:") and e.split(",")[1] == start]
+        """Every event drawn during the window where line `index` is sung.
 
-    def arrives_at(self, event):
-        r"""The y the event's \move ends at."""
-        return int(re.search(r"\\move\(\d+,\d+,\d+,(\d+),", event).group(1))
+        A slot change is cut into segments - \\move has no easing of its own -
+        so one line contributes several events to one window, and they are
+        grouped back together here by what they say.
+        """
+        opens = karaoke.centis(self.spans[index][0])
+        closes = karaoke.centis(self.spans[index][1])
+        by_line = {}
+        for e in self.text.splitlines():
+            if not e.startswith("Dialogue:"):
+                continue
+            at = karaoke.centis(_seconds(e.split(",")[1]))
+            if opens <= at < closes:
+                by_line.setdefault(spoken(e), []).append(e)
+        return by_line
+
+    def travel(self, events):
+        """Where this line's move starts, and where it ends up."""
+        first = re.search(r"\\move\(\d+,(\d+),", events[0]).group(1)
+        last = re.search(r"\\move\(\d+,\d+,\d+,(\d+),", events[-1]).group(1)
+        return int(first), int(last)
 
     def test_the_middle_of_a_song_draws_four_lines_and_shows_three(self):
         # Four arrive; the fourth arrives at the stop above the frame's own,
         # which is how the line that has been read leaves.
         shown = self.during(2)
         self.assertEqual(len(shown), 4)
-        arrivals = sorted(self.arrives_at(e) for e in shown)
+        arrivals = sorted(self.travel(e)[1] for e in shown.values())
         self.assertEqual(arrivals, sorted(karaoke.PLAY_H - slot for slot in (
             karaoke.SLOT_NEXT, karaoke.SLOT_NOW,
             karaoke.SLOT_PREV, karaoke.SLOT_OUT)))
 
     def test_the_neighbours_are_the_neighbours(self):
-        shown = {self.arrives_at(e): spoken(e) for e in self.during(2)}
+        shown = self.during(2)
+        arrived = {self.travel(e)[1]: text for text, e in shown.items()}
         for slot, text in ((karaoke.SLOT_PREV, "line 1 here"),
                            (karaoke.SLOT_NOW, "line 2 here"),
                            (karaoke.SLOT_NEXT, "line 3 here")):
-            self.assertEqual(shown[karaoke.PLAY_H - slot], text)
+            self.assertEqual(arrived[karaoke.PLAY_H - slot], text)
 
     def test_every_line_on_screen_moves_at_every_change(self):
         # Moving only the ones that change slot leaves two of them sitting
         # almost on top of each other for the length of the move.
-        for event in self.during(2):
-            leaving, arriving = re.search(
-                r"\\move\(\d+,(\d+),\d+,(\d+),", event).groups()
+        for events in self.during(2).values():
+            leaving, arriving = self.travel(events)
             self.assertNotEqual(leaving, arriving)
+
+    def test_the_move_is_cut_into_segments_that_join_up(self):
+        # \\move is linear, so the easing is in how the segments are cut. Each
+        # one has to start where the last one stopped or the line jumps.
+        for events in self.during(2).values():
+            self.assertEqual(len(events), karaoke.MOVE_STEPS)
+            for before, after in zip(events, events[1:]):
+                ends = re.search(r"\\move\(\d+,\d+,\d+,(\d+),", before).group(1)
+                starts = re.search(r"\\move\(\d+,(\d+),", after).group(1)
+                self.assertEqual(ends, starts)
+
+    def test_the_segments_ease_rather_than_run_at_one_speed(self):
+        steps = [karaoke.smoothstep((k + 1) / karaoke.MOVE_STEPS)
+                 - karaoke.smoothstep(k / karaoke.MOVE_STEPS)
+                 for k in range(karaoke.MOVE_STEPS)]
+        self.assertGreater(max(steps), min(steps) * 1.4)   # it is a curve
+        self.assertLess(max(steps), min(steps) * 3.0)      # not a staircase
+        self.assertAlmostEqual(sum(steps), 1.0)
 
     def test_only_the_line_being_sung_is_swept(self):
         # A neighbour drawn with karaoke tags has every word already over or
         # not yet begun, so it fills to the accent and walks back to ink - a
         # line that has finished being sung relights as it leaves.
-        for event in self.during(2):
-            if spoken(event) != "line 2 here":
-                self.assertNotIn("\\kf", event)
+        for text, events in self.during(2).items():
+            if text != "line 2 here":
+                self.assertNotIn("\\kf", "".join(events))
 
-    def test_nothing_fades_except_the_two_ends_of_the_song(self):
-        # Everything in between arrives from the invisible stop below and
-        # leaves by the invisible one above, so it needs no fade of its own.
-        faded = [e for e in self.text.splitlines() if "\\fad(" in e]
-        self.assertIn("line 0 here", spoken(faded[0]))
-        self.assertIn("line 4 here", spoken(faded[-1]))
+    def test_the_first_line_opens_from_nothing_rather_than_on_a_fade(self):
+        # A \\fad spread across the segments of a move restarts on each of
+        # them, so the opening is done with the line's own alpha instead.
+        first = self.during(0)["line 0 here"][0]
+        self.assertNotIn("\\fad", first)
+        self.assertIn(f"\\1a&H{karaoke.GONE[0]:02X}&", first)
+
+    def test_only_the_end_of_the_song_fades_out(self):
         last = karaoke.ass_time(karaoke.centis(self.spans[-1][1]))
-        for event in self.text.splitlines():
-            if event.startswith("Dialogue:") and "\\fad(" not in event:
-                self.assertNotEqual(event.split(",")[2], last)
+        faded = [e for e in self.text.splitlines() if "\\fad(" in e]
+        self.assertTrue(faded)
+        for event in faded:
+            self.assertEqual(event.split(",")[2], last)
 
 
 class TheFile(unittest.TestCase):

@@ -388,9 +388,9 @@ footer a:hover{color:var(--text)}
       Three lines, bottom left: the one being sung, with the one before and the
       one after smaller and faded either side. Each word <b>grows, thickens and
       lights up</b> as it lands; when the line changes, the whole stack rises by
-      one. Opposite them, one zigzag line, drawn from the mix and carrying the
-      bass in its weight and the air in its tremor. There is nothing to
-      supply.
+      one, on a curve rather than a slide. Opposite them, one zigzag line,
+      drawn from the mix and carrying the bass in its weight and the air in its
+      tremor. There is nothing to supply.
     </p>
   </div>
   <div class="wide">
@@ -474,9 +474,9 @@ footer a:hover{color:var(--text)}
         <p>Where the line sits is derived from where the text sits, not typed to
         match it: it rests on the optical centre of the lyric being sung, and
         stops the same distance from the right edge as the words start from the
-        left. Measured off a render, the two centres are <b>0.3 px apart</b> and
-        the margins 93 and 98. Written as their own constants, the two halves of
-        the composition would drift the first time either moved.</p>
+        left. Measured off a render, the two centres are <b>0.8 px apart</b> and
+        the margins 93 and 100. Written as their own constants, the two halves
+        of the composition would drift the first time either moved.</p>
         <h3>Three lines, and three states in the middle one</h3>
         <p>The neighbours share the sung line's window exactly, so no line is
         ever on screen in two slots at once. Overlapping them by a few hundred
@@ -500,6 +500,15 @@ footer a:hover{color:var(--text)}
         line inflates with the first word</b>. That looked correct until a frame
         was pulled at the moment the first word was up, which is the argument
         for checking a render by looking at it.</p>
+        <h3>Everything eases, including the part that cannot</h3>
+        <p>A line does not slide between stops, it eases between them — but
+        <code>\move</code> is linear and has no easing of its own. So a slot
+        change is cut into three segments whose lengths follow a smoothstep, and
+        because each segment is its own event carrying its own share of the fade
+        and the scale, <b>everything about a line eases on one curve</b> rather
+        than the size easing while the position runs at a constant speed. Three
+        segments is enough: the fastest is twice the slowest, which is a curve
+        and not a staircase.</p>
         <p>Short words grow proportionally less. At full size on a 90 ms
         syllable a swell is a flicker rather than an emphasis, and a fast run
         strobes.</p>
@@ -519,15 +528,20 @@ footer a:hover{color:var(--text)}
         like a lit room, so the floor is raised until the darkest corner still
         has colour in it and the pools brighten from there.</p>
         <h3>Sensitive, and quiet with it</h3>
-        <p>The two asks pull against each other, so they are answered
-        separately. The envelopes are smoothed over 45–50 ms rather than a
-        sixth of a second, which puts the picture's response to a transient
-        within a frame of the transient — measured against the mix over ten
-        seconds of chorus, brightness correlates at <b>r = 0.89 with no lag at
-        all</b>. Every depth those envelopes drive is then small: over the same
-        ten seconds the whole frame moves through <b>8% of the available
-        range</b>. Sensitive is a property of the timing; subtle is a property
-        of the amount.</p>
+        <p>The two asks pull against each other, and the resolution is that
+        they are different properties. <b>Sensitive is about timing</b>:
+        measured over ten seconds of chorus, the frame's brightness tracks the
+        mix with its best correlation at <b>zero lag</b> — it answers a
+        transient in the frame the transient happens, not a beat later.
+        <b>Subtle is about amount</b>: over the same ten seconds the whole
+        frame moves through <b>6.9% of the available range</b>.</p>
+        <p>There is a third property, and it cost a round to learn: <b>smooth is
+        about frequency</b>. The first version drove the fields off envelopes
+        smoothed over 45 ms, which is sensitive and subtle and <i>flickered</i>,
+        because a kick swings a field 12 of 255 in three frames and a large area
+        doing that is read as a twitch. The fields average over 0.30 s now. The
+        line keeps the unsmoothed copies: a thin stroke can show detail a field
+        cannot, which is the whole reason for having both.</p>
         <p>Colour works the same way. Each section carries two palettes a few
         degrees of hue and a little brightness apart, and the mix slides between
         them — so the colour is never quite still without ever announcing a
@@ -540,9 +554,11 @@ footer a:hover{color:var(--text)}
         <p>Full size fixed that and cost nothing, because a pool of light is a
         Gaussian and a Gaussian is separable: exp(−(dx²+dy²)) is exp(−dx²) times
         exp(−dy²). So one costs two exponentials — over a row and over a column —
-        and an outer product, rather than an exponential at every pixel. The
-        whole frame at 1280×720 takes <b>13 ms</b>, half what a single
-        squared-distance blob cost at a quarter of the pixels.</p>
+        and an outer product, rather than an exponential at every pixel. Four of
+        them plus the line and the lift take <b>18 ms</b> a frame at 1280×720,
+        against 25 ms for a single squared-distance blob at a quarter of the
+        pixels. The stroke is computed over the 135 rows it can reach rather
+        than all 720, for the same reason.</p>
         <p>The line is drawn the same way: its path is one y per column, so the
         stroke is a distance from that path, divided by the slope so a steep
         segment is not drawn thinner than a flat one.</p>
@@ -553,7 +569,7 @@ footer a:hover{color:var(--text)}
         can be missed, puts about two seconds of the track across the span:
         <b>long enough for the outline to have the song's shape in it, short
         enough that every syllable moves it</b>.</p>
-        <p>About five minutes for a 4:46 track at 720p on an M4 CPU.
+        <p>Five minutes for a 4:46 track at 720p on an M4 CPU.
         <code>--preview 1:04</code> renders 25 seconds instead, so trying
         something is not five minutes a go.</p>
       </div>
