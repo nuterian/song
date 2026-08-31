@@ -7,7 +7,7 @@ lyrics — `.lrc`, word-level `.lrc`, `.srt`, `.vtt` — using only free, locall
 open-source models. No API keys, no uploads, no per-track cost.
 
 Built for AI-generated songs, where the lyrics are known exactly but the timing is
-not, and the end goal is burning synchronized captions into a video.
+not. Then it renders the finished track to a karaoke video.
 
 **[Try it in your browser →](https://jugalm.com/song/demo/)** · **[How it works, in full →](https://jugalm.com/song/)**
 
@@ -80,6 +80,26 @@ here* and nothing else. Two guided paths sit on top of it:
 
 ![The Check timings card: a waveform strip with three candidate markers](docs/img/app-review.png)
 
+## The video
+
+Exact word timings are worth having because of what you can burn them into. One
+command turns a reviewed track into an `.mp4`:
+
+```bash
+python -m song video workdir/my-track                # the whole track
+python -m song video workdir/my-track --preview 1:04 # 25 seconds, to see it
+```
+
+The lyrics sweep word by word — ASS `\kf` karaoke drawn by libass, off the same
+timings the UI edits, so there is no second renderer to keep in agreement with
+the first. Underneath, the picture is generated from the track: the wash takes
+its hue from the section you are in, keyed on the section's *name*, so every
+chorus is the same colour; a bloom kicks on each tracked beat and opens with the
+vocal envelope; the mix waveform scrolls along the bottom. Nothing to supply, no
+stock footage, no still image.
+
+![A frame of the karaoke video: a lyric line half-filled by the karaoke sweep over a generated wash, with the mix waveform scrolling along the bottom](docs/img/video-still.jpg)
+
 ## Commands
 
 ```bash
@@ -88,6 +108,7 @@ python -m song align song.wav lyrics.txt   # align and export, no UI
 python -m song audit workdir/my-track      # repair + list what needs an ear
 python -m song score workdir/my-track      # re-run the benchmark on your edits
 python -m song export workdir/my-track     # rewrite lrc/srt/vtt
+python -m song video workdir/my-track      # render karaoke.mp4
 ```
 
 Flags: `--model large-v3-turbo`, `--no-roundtrip`, `--no-separate`, `--force`,
@@ -97,8 +118,8 @@ Flags: `--model large-v3-turbo`, `--no-roundtrip`, `--no-separate`, `--force`,
 
 Everything lands in `workdir/<track-slug>/`: `lyrics.lrc`, `lyrics.word.lrc`
 (per-word, for karaoke), `lyrics.srt` / `.vtt` for `ffmpeg -vf subtitles=`, plus
-`project.json` — word timings, per-line scores and the scorecard, the richest
-source for a video generator.
+`project.json` — word timings, per-line scores and the scorecard. `song video`
+adds `lyrics.ass` and `karaoke.mp4`, and caches the beat grid as `beats.json`.
 
 Lyrics input is plain text — one line per lyric line, a blank line between
 sections, and a header naming each one. `[Verse 1]`, `Chorus:`, `(Bridge)` and
@@ -118,9 +139,10 @@ Bring your own audio. `examples/lyrics.txt` is the full sample file.
 
 ## Notes
 
-Roughly 5 minutes end-to-end for a 5-minute track on an M4 CPU. Models download
-once (~3 GB) to the usual torch/HF caches. Demucs on Apple MPS is broken under
-torch 2.5 and Whisper hits unimplemented sparse ops there, so it is CPU throughout.
+Roughly 5 minutes end-to-end for a 5-minute track on an M4 CPU, and about 4 more
+to render the video. Models download once (~3 GB) to the usual torch/HF caches.
+Demucs on Apple MPS is broken under torch 2.5 and Whisper hits unimplemented
+sparse ops there, so it is CPU throughout.
 
 ## Tests
 
@@ -128,11 +150,11 @@ torch 2.5 and Whisper hits unimplemented sparse ops there, so it is CPU througho
 python -m unittest discover -s tests
 ```
 
-68 tests over the logic that carries the claims — lyrics parsing, the
-word-timing invariants, word-to-line mapping, the export formats, and the
-missing-line thresholds — plus a guard that those modules stay importable with
-no third-party package present at all, which is what lets CI run them in
-seconds without installing anything.
+98 tests over the logic that carries the claims — lyrics parsing, the
+word-timing invariants, word-to-line mapping, the export formats, the
+missing-line thresholds and the karaoke arithmetic — plus a guard that those
+modules stay importable with no third-party package present at all, which is
+what lets CI run them in seconds without installing anything.
 
 ## The hosted demo
 

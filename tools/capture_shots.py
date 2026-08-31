@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Capture the product-page screenshots from the app itself.
+"""Capture the product-page pictures from the product itself.
 
 The landing page is mostly pictures, so the pictures had better be the real
 thing. Each shot below is the actual UI, driven into a particular state and
 photographed by headless Chrome - not a mockup, and not hand-cropped. Re-run it
 after a UI change and the page catches up.
 
-It works against docs/demo, which build_demo.py already froze, so no server and
-no audio decoding is involved. The demo's read-only chrome is taken off first:
-these are pictures of the product, and the product can save.
+The UI shots work against docs/demo, which build_demo.py already froze, so no
+server and no audio decoding is involved. The demo's read-only chrome is taken
+off first: these are pictures of the product, and the product can save.
+
+The video section's claim is motion, so it cannot be carried by a screenshot.
+The last step runs the real `song video` against a real workdir and cuts the
+clip and its poster frame out of the result.
 
     python tools/build_demo.py workdir/my-track   # first
     python tools/capture_shots.py
@@ -16,9 +20,11 @@ these are pictures of the product, and the product can save.
 
 from __future__ import annotations
 
+import argparse
 import http.server
 import shutil
 import subprocess
+import sys
 import threading
 from functools import partial
 from pathlib import Path
@@ -56,6 +62,14 @@ SHOTS = [
         adRender();
     """),
 ]
+
+# The first chorus: four lines back to back, no instrumental to sit through,
+# and the section colour has already arrived. Twelve seconds loops without a
+# seam because nothing on screen is trying to get anywhere.
+CLIP = "1:04-1:16"
+CLIP_WIDTH = 1160
+CLIP_CRF = "28"       # a soft gradient hides it, and docs/ already ships the demo audio
+STILL_AT = 5.6        # seconds in: mid-sweep, halfway across a line
 
 BOOT = """
 <script>
@@ -102,7 +116,46 @@ def capture(name: str, size: tuple[int, int], scale: int, setup: str) -> Path:
     return out
 
 
+def capture_clip(workdir: Path) -> list[Path]:
+    """A loop and a poster frame out of an actual render.
+
+    Shelling out to the CLI rather than importing song.video, so what the page
+    shows is what the documented command produces - including the .ass, the
+    beat cache and the scaling, none of which this file gets to reimplement.
+    """
+    subprocess.run(
+        [sys.executable, "-m", "song", "video", str(workdir), "--preview", CLIP],
+        cwd=ROOT, check=True,
+    )
+    source = workdir / "karaoke-preview.mp4"
+    loop, still = IMG / "video-loop.mp4", IMG / "video-still.jpg"
+
+    # Muted on the page, so the audio is dead weight in the download.
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(source), "-an",
+         "-vf", f"scale={CLIP_WIDTH}:-2", "-c:v", "libx264", "-preset", "slow",
+         "-crf", CLIP_CRF, "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+         str(loop)],
+        check=True,
+    )
+    # The poster comes off the full-size render, not the shrunk loop - it is
+    # also the README's picture, and JPEG because the frame is a photograph of
+    # a gradient with film grain in it, which is the one thing PNG is bad at.
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-ss", str(STILL_AT),
+         "-i", str(source), "-frames:v", "1", "-update", "1", "-q:v", "3",
+         str(still)],
+        check=True,
+    )
+    return [loop, still]
+
+
 if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("workdir", nargs="?", default="workdir/gravity-in-motion",
+                    help="the aligned track the video clip is cut from")
+    args = ap.parse_args()
+
     if not Path(CHROME).exists():
         raise SystemExit(f"need Chrome at {CHROME}")
     if not (DEMO / "index.html").exists():
@@ -117,3 +170,9 @@ if __name__ == "__main__":
     finally:
         httpd.shutdown()
         shutil.rmtree(DEMO / "_shot.html", ignore_errors=True)
+
+    workdir = Path(args.workdir)
+    if not (workdir / "project.json").exists():
+        raise SystemExit(f"no aligned track at {workdir}; the video clip is unchanged")
+    for out in capture_clip(workdir):
+        print(f"  {out.relative_to(ROOT)!s:34} {out.stat().st_size / 1024:6.0f} KB")

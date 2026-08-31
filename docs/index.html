@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>song — lyrics, timed to the word</title>
-<meta name="description" content="Turn an audio track and a plain-text lyrics file into accurate, time-synchronized lyrics using only free, locally-run open-source models.">
+<meta name="description" content="Turn an audio track and a plain-text lyrics file into accurate, time-synchronized lyrics — and a karaoke video — using only free, locally-run open-source models.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230e1116'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%235b9dff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
 :root{
@@ -61,9 +61,10 @@ section.act{padding:clamp(72px,11vw,132px) 0 0}
 
 /* ---------- shots ---------- */
 figure{margin:clamp(30px,5vw,48px) 0 0}
-figure img{border-radius:16px;border:1px solid var(--line);
+figure img,figure video{border-radius:16px;border:1px solid var(--line);
   box-shadow:0 24px 70px rgba(0,0,0,.6),0 2px 8px rgba(0,0,0,.4)}
 figure.plain img{border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.5)}
+figure video{width:100%;height:auto;display:block;background:#000}
 figcaption{margin:16px auto 0;max-width:620px;font-size:13.5px;line-height:1.6;
   color:var(--dim);text-align:center}
 figcaption b{color:var(--muted);font-weight:600}
@@ -162,7 +163,7 @@ footer a:hover{color:var(--text)}
       <a class="btn primary" href="demo/">Try it in your browser</a>
       <a class="btn" href="https://github.com/nuterian/song">Get it on GitHub</a>
     </div>
-    <p class="under">.lrc · word-level .lrc · .srt · .vtt</p>
+    <p class="under">.lrc · word-level .lrc · .srt · .vtt · .mp4</p>
   </div>
 
   <div class="wide">
@@ -378,6 +379,94 @@ footer a:hover{color:var(--text)}
   </div>
 </section>
 
+<!-- ---------------------------------------------------------- video -->
+<section class="act">
+  <div class="wrap">
+    <p class="eyebrow">The payoff</p>
+    <h2>One command turns it into a video.</h2>
+    <p class="say">
+      The words fill in time with the vocal, off the timings you just checked.
+      Behind them, <b>the picture is generated from the same track</b> — the
+      section picks the colour, the beat drives the light, the mix scrolls
+      along the bottom. There is nothing to supply.
+    </p>
+  </div>
+  <div class="wide">
+    <figure>
+      <video src="img/video-loop.mp4" poster="img/video-still.jpg"
+             autoplay muted loop playsinline preload="metadata"
+             width="1000" height="562"
+             aria-label="Twelve seconds of the karaoke video: each word of the chorus filling white as it is sung, over a magenta wash that pulses on the beat, with the mix waveform scrolling along the bottom."></video>
+      <script>
+        /* The only script on this page. It is here because an autoplaying loop
+           is motion, and the stylesheet already honours the request not to have
+           any - so the clip becomes a still with a play button instead. */
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          document.querySelectorAll('video[autoplay]').forEach(v => {
+            v.removeAttribute('autoplay'); v.pause(); v.controls = true;
+          });
+        }
+      </script>
+      <figcaption>
+        Twelve seconds of the first chorus, straight out of
+        <code>python -m song video</code>. <b>Every pixel behind the words came
+        out of the audio</b> — no footage, no still image, no template.
+      </figcaption>
+    </figure>
+  </div>
+  <div class="wrap">
+    <details class="more">
+      <summary>Why there is no frame renderer in here</summary>
+      <div class="more-body">
+        <p>Because ASS subtitles have had karaoke tags since the VirtualDub era.
+        <code>\kf</code> sweeps a fill across a run of text over a given
+        duration — the classic per-syllable wipe — and this project already knows
+        where every word starts and ends. So the karaoke layer is a format
+        conversion and a burn-in, and font shaping, outline, shadow, wrapping and
+        antialiasing all come from libass rather than from code written here to
+        arrive somewhere worse.</p>
+        <h3>The arithmetic that actually matters</h3>
+        <p>ASS counts in centiseconds. Round each word's duration on its own and
+        you lose up to half a centisecond a time — <b>13 centiseconds across a
+        100-word line</b>, all of it landing at the end, which is the half nobody
+        checks. Every duration here is instead the difference between two
+        absolute positions on the timeline, so it cannot accumulate.</p>
+        <p>The space between two words is its own zero-length segment. Charge it
+        to the word before and the sweep spends the tail of that word crossing
+        whitespace, so the word finishes early; charge it to the word after and
+        the word starts late. Both show on a fast syllable run, and late is the
+        one that reads as broken.</p>
+        <h3>Where the picture comes from</h3>
+        <div class="scroll"><table>
+          <thead><tr><th>On screen</th><th>Driven by</th></tr></thead>
+          <tbody>
+            <tr><td>the wash's hue</td><td>the section name in your lyrics file — every chorus is the same colour</td></tr>
+            <tr><td>the light's kick</td><td>the tracked beat, harder on the first of the bar</td></tr>
+            <tr><td>how wide it opens</td><td>the mix envelope</td></tr>
+            <tr><td>how bright it burns</td><td>the isolated vocal envelope</td></tr>
+            <tr><td>the ribbon</td><td>±6 seconds of the mix waveform, scrolling</td></tr>
+            <tr><td>the sweep</td><td>the word timings in <code>project.json</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Beats are tracked on the <b>mix</b>, not the isolated vocal — the stem
+        has had the drums taken out of it, which is the signal beat tracking
+        wants. And they are the beats librosa found, not a grid synthesized from
+        the tempo: a grid is right for eight bars and then slides, and by the last
+        chorus of a 4:46 song it is visibly ahead of the snare.</p>
+        <h3>Half the pixels, all of the text</h3>
+        <p>The generated frames are 640×360 and ffmpeg scales them to 1280×720
+        before libass touches them. Every layer down there is a smooth field, so
+        the upscale costs nothing you can see, while rendering a quarter of the
+        pixels costs a quarter of the time — and the words, burned after the
+        scale, are still drawn at output resolution.</p>
+        <p>About four minutes for a 4:46 track at 720p on an M4 CPU.
+        <code>--preview 1:04</code> renders 25 seconds instead, so trying
+        something is not five minutes a go.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
 <!-- ------------------------------------------------------------ close -->
 <section class="act">
   <div class="wrap" style="text-align:center">
@@ -401,12 +490,14 @@ python -m song track.wav lyrics.txt     # align, then open it
 python -m song align track.wav lyrics.txt
 python -m song audit workdir/my-track   # repair + list what needs an ear
 python -m song score workdir/my-track   # re-run the benchmark on your edits
-python -m song export workdir/my-track</code></pre>
+python -m song export workdir/my-track
+python -m song video workdir/my-track   # render karaoke.mp4</code></pre>
         <p>Everything lands in <code>workdir/&lt;track&gt;/</code>:
         <code>lyrics.lrc</code>, <code>lyrics.word.lrc</code> (per-word, for
         karaoke), <code>lyrics.srt</code> and <code>.vtt</code> for
         <code>ffmpeg -vf subtitles=</code>, plus <code>project.json</code> —
-        word timings, per-line scores and the scorecard.</p>
+        word timings, per-line scores and the scorecard. <code>song video</code>
+        adds <code>lyrics.ass</code> and <code>karaoke.mp4</code>.</p>
         <p>Lyrics input is plain text: one line per lyric line, a blank line
         between sections, and a header naming each. <code>[Verse 1]</code>,
         <code>Chorus:</code>, <code>(Bridge)</code> and
