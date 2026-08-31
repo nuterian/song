@@ -45,8 +45,11 @@ def durations(event: str) -> list[tuple[str, int]]:
             for sweep, value in re.findall(r"\\k(f?)(\d+)", event)]
 
 
-def events(text: str) -> list[str]:
-    return [ln for ln in text.splitlines() if ln.startswith("Dialogue:")]
+def events(text: str, style: str = "Lyric") -> list[str]:
+    """The dialogue lines for one layer. Every lyric line writes two: the words,
+    and the soft shadow underneath them."""
+    return [ln for ln in text.splitlines()
+            if ln.startswith("Dialogue:") and f",{style}," in ln]
 
 
 class Timestamps(unittest.TestCase):
@@ -206,20 +209,26 @@ class TheWordBeingSung(unittest.TestCase):
         self.assertLess(peak, 1000)          # the word runs 0..1000 ms
 
     def test_a_short_word_swells_less_so_a_fast_run_does_not_strobe(self):
-        long_word = self.swells(karaoke.swell(0, 40))[0][2]      # a 400 ms word
-        short_word = self.swells(karaoke.swell(0, 8))[0][2]      # an 80 ms one
+        long_word = self.swells(karaoke.grow(0, 40))[0][2]      # a 400 ms word
+        short_word = self.swells(karaoke.grow(0, 8))[0][2]      # an 80 ms one
         self.assertGreater(long_word, short_word)
         self.assertEqual(long_word, 100 + karaoke.GROW)
 
     def test_a_word_too_short_to_show_a_swell_gets_no_tags_for_one(self):
-        self.assertEqual(karaoke.swell(0, 1), "")
+        self.assertEqual(karaoke.grow(0, 1), "")
 
-    def test_the_blur_survives_the_reset_on_every_word(self):
-        # \r drops it, so each block has to say it again or only the first word
-        # keeps its halo.
-        ln = line(0, "one two three", 10.0, 13.0)
-        text = karaoke.karaoke_text(ln, 1000)
-        self.assertEqual(text.count(f"\\r\\blur{karaoke.BLUR}"), 3)
+    def test_it_fills_in_the_accent_and_settles_to_white(self):
+        # \kf only has two states. The third - already sung - is one transform
+        # per word, and it is the one that leaves a single word lit.
+        style = [ln for ln in karaoke.build(project(line(0, "one two", 40.0, 43.0)))
+                 .splitlines() if ln.startswith("Style: Lyric")][0]
+        self.assertEqual(style.split(",")[3], karaoke.colour(karaoke.ACCENT))
+        self.assertIn(karaoke.tag_colour(karaoke.SUNG), karaoke.settle(100))
+
+    def test_the_accent_leaves_after_the_word_ends_not_before(self):
+        ln = line(0, "alpha", 10.0, 11.0)
+        start, _ = re.findall(r"\\t\((\d+),(\d+),\\1c", karaoke.karaoke_text(ln, 1000))[0]
+        self.assertGreaterEqual(int(start), 100)     # the word runs 0..100 ms in
 
 
 class Windows(unittest.TestCase):
@@ -279,6 +288,26 @@ class TheFile(unittest.TestCase):
     def test_unaligned_lines_are_left_out(self):
         self.assertEqual(len(events(self.text)), 2)
         self.assertNotIn("never aligned", self.text)
+
+    def test_every_lyric_line_gets_a_shadow_underneath_it(self):
+        shade, lyric = events(self.text, "Shade"), events(self.text)
+        self.assertEqual(len(shade), len(lyric))
+        for under, over in zip(shade, lyric):
+            self.assertEqual(under.split(",")[1:3], over.split(",")[1:3])   # same span
+            self.assertLess(under.split(",")[0], over.split(",")[0])        # lower layer
+
+    def test_the_shadow_draws_no_fill_and_sweeps_nothing(self):
+        # It is a blurred border and only that; a fill down there would show
+        # through the words as a smear.
+        for event in events(self.text, "Shade"):
+            self.assertIn("\\1a&HFF&", event)
+            self.assertNotIn("\\kf", event)
+
+    def test_the_shadow_swells_with_the_word_above_it(self):
+        # Otherwise it keeps the old width and slides out from under the word.
+        pattern = r"\\t\(\d+,\d+,\\fscx[\d.]+"
+        for under, over in zip(events(self.text, "Shade"), events(self.text)):
+            self.assertEqual(re.findall(pattern, under), re.findall(pattern, over))
 
     def test_every_event_ends_after_it_starts(self):
         for event in events(self.text):

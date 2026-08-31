@@ -3,11 +3,11 @@
 There is no frame renderer here, and none anywhere else either. ASS has carried
 karaoke tags since the VirtualDub era: `\\kf` sweeps a fill across a run of text
 over a given duration, which is exactly the classic per-syllable wipe, and
-libass draws it with real shaping, a blurred halo, and per-word transforms that
-grow the word being sung. This project already knows where every word starts and
-ends, so the karaoke layer is a format conversion plus a burn-in - not a text
-renderer that would have to reimplement kerning, wrapping and antialiasing to
-arrive somewhere worse.
+libass draws it with real shaping, and with per-word transforms that grow the
+word being sung and hand it back to white afterwards. This project already knows
+where every word starts and ends, so the karaoke layer is a format conversion
+plus a burn-in - not a text renderer that would have to reimplement kerning,
+wrapping and antialiasing to arrive somewhere worse.
 
 Stdlib only, so it is unit-testable with nothing installed. `song.project` is
 pure too, which is what keeps that true.
@@ -33,28 +33,44 @@ PLAY_W, PLAY_H = 1280, 720
 FONT = "Avenir Next Heavy"
 FONT_SIZE = 60
 
-# A blurred border and no drop shadow. The hard black stroke plus offset shadow
-# that came first is the look of a 2005 fansub: it puts a stair-stepped edge on
-# every glyph, which is most of what reads as aliasing, and it fights the soft
-# picture underneath instead of sitting in it. Blurring the border turns it into
-# a halo that lifts the word off any background without drawing an edge.
-BLUR = 2.8
-BORDER = 3.0
-HALO = (0x05030A, 0x24)      # the resting halo: colour, transparency
+# No blur on the words themselves, at all. libass's \blur is described as
+# softening the border, but with a border thick enough to read it bleeds into
+# the fill: at bord 3.0 / blur 2.8 the letterforms visibly lose their edges, and
+# every word came *into focus* as it was sung, which is not an effect anybody
+# asked for. So the lyric layer is a hairline edge and nothing else.
+BORDER = 1.2
+EDGE = (0x000000, 0x50)
 
-SUNG = (0xFFFFFF, 0x00)      # a word already sung
-UNSUNG = (0xFFFFFF, 0x80)    # ...and one still coming
+# The shadow is a second event underneath, carrying the same words with no fill
+# and a thick blurred border, sitting a few pixels lower. That is the only way
+# to get a soft shadow without blurring the text: ASS's own \shad is a hard
+# offset copy, which is the 1990s word-processor look, and \blur on the lyric
+# layer would take the letterforms with it. Nothing is drawn on this layer that
+# a blur could soften except the shadow itself.
+SHADE = (0x000000, 0x60)
+SHADE_BORDER = 6.5
+SHADE_BLUR = 8.0
+SHADE_DROP = 3               # pixels lower than the words
 
-# While a word is being sung its halo warms and opens, so the word carries a
-# light of its own rather than only being larger than its neighbours.
-GLOW = (0xFFD9A8, 0x60)
-GLOW_BLUR = 4.0
-GLOW_BORDER = 3.4
+# Where the block sits, in the 1280x720 frame the coordinates above assume.
+MARGIN = 86
+BASELINE = 180
+
+# Three states, and the middle one is the point. A word not yet sung is dim
+# white; the word being sung fills in the accent; a word already sung settles to
+# plain white. \kf gives the first two - it sweeps the fill from Secondary to
+# Primary - and the third is one transform per word, turning that word's primary
+# white a beat after it is done.
+UNSUNG = (0xFFFFFF, 0x68)
+ACCENT = 0xFFC64D
+SUNG = 0xFFFFFF
+SETTLE_HOLD = 130            # ms the accent holds after the word ends
+SETTLE = 320                 # ...then this long to fade to white
 
 # The word being sung swells. Capped by how long the word lasts: at full size on
 # a 90 ms syllable it is a flicker rather than an emphasis, so short words grow
 # proportionally less and a fast run reads as a ripple instead of a strobe.
-GROW = 14.0        # percent, for a word long enough to see it
+GROW = 12.0        # percent, for a word long enough to see it
 GROW_FULL = 220    # ms of word length that earns the full swell
 GROW_LEAD = 90     # ms early, so the word is already up when it is sung
 GROW_IN = 130      # ms to swell
@@ -157,7 +173,7 @@ def windows(project: Project) -> list[tuple[float, float]]:
     return spans
 
 
-def karaoke_text(line, start_cs: int) -> str:
+def karaoke_text(line, start_cs: int, shade: bool = False) -> str:
     """One dialogue line's text, with a `\\kf` run per word.
 
     Every duration is a difference of absolute centisecond positions on the
@@ -193,21 +209,44 @@ def karaoke_text(line, start_cs: int) -> str:
         # otherwise emit a negative \k, which libass reads as an enormous one.
         w_start = min(max(centis(word.start), at), end_cs)
         w_end = min(max(centis(word.end), w_start), end_cs)
-        if i:
-            out.append("{\\k0} ")
-        if w_start > at:
-            out.append(f"{{\\k{w_start - at}}}")  # unsung wait: the lead-in, or a rest
-        out.append(
-            f"{{\\r\\blur{BLUR}\\kf{w_end - w_start}"
-            f"{swell(w_start - start_cs, w_end - start_cs)}}}{escape(token)}"
-        )
+        rise, fall = w_start - start_cs, w_end - start_cs
+        if shade:
+            # Nothing sweeps here - the fill is off and only the blurred border
+            # is drawn - so the karaoke tags are left out entirely. The swell is
+            # not: without it the shadow keeps the width of a word the layer
+            # above has already grown, and slides out from under it.
+            out.append(
+                f"{' ' if i else ''}"
+                f"{{\\r\\1a&HFF&\\blur{SHADE_BLUR}{grow(rise, fall)}}}{escape(token)}"
+            )
+        else:
+            if i:
+                out.append("{\\k0} ")
+            if w_start > at:
+                out.append(f"{{\\k{w_start - at}}}")   # the lead-in, or a held rest
+            out.append(
+                f"{{\\r\\kf{w_end - w_start}{grow(rise, fall)}{settle(fall)}}}"
+                f"{escape(token)}"
+            )
         at = w_end
 
     return "".join(out)
 
 
-def swell(start_cs: int, end_cs: int) -> str:
-    """`\\t` pair that grows one word as it is sung and lets it back down.
+def settle(end_cs: int) -> str:
+    """`\\t` that turns a word white once it has been sung.
+
+    `\\kf` gives two states, and the useful one is a third. The style's primary
+    is the accent, so the sweep fills the word being sung in colour; this hands
+    that word back to white a moment later, leaving exactly one word lit at a
+    time with a short trail behind it.
+    """
+    leave = end_cs * 10 + SETTLE_HOLD
+    return f"\\t({leave},{leave + SETTLE},\\1c{tag_colour(SUNG)})"
+
+
+def grow(start_cs: int, end_cs: int) -> str:
+    """`\\t` pair that swells one word as it is sung and lets it back down.
 
     Every word's block opens with `\\r` because of this. An override applies to
     all the text after it, and a `\\t` that has not started yet does not cancel
@@ -216,31 +255,27 @@ def swell(start_cs: int, end_cs: int) -> str:
     That looked like it worked until a frame was pulled at the moment word one
     was up, where the entire line was 40% larger.
 
-    `\\r` clears the blur too, so each block re-applies it. It does not disturb
-    the karaoke clock, which keeps accumulating across the resets - checked, not
-    assumed, since the whole sweep would be wrong if it did.
+    `\\r` does not disturb the karaoke clock, which keeps accumulating across
+    the resets - checked, not assumed, since the whole sweep would be wrong if
+    it did.
 
     The line re-centres as a word grows, which is the effect rather than a flaw
     in it: the row breathes around the word being sung.
     """
     length = (end_cs - start_cs) * 10
-    grow = GROW * min(1.0, length / GROW_FULL)
-    if grow < 1.0:
+    amount = GROW * min(1.0, length / GROW_FULL)
+    if amount < 1.0:
         return ""       # below a percent it is invisible, and two tags cost more
 
     rise = max(0, start_cs * 10 - GROW_LEAD)
+    fall = end_cs * 10
     # A word shorter than the swell itself gets a shorter swell, not one that
     # overruns into its own settling.
-    peak = min(rise + GROW_IN, max(rise + 40, end_cs * 10))
-    scale = round(100 + grow, 1)
-    fall = end_cs * 10
+    peak = min(rise + GROW_IN, max(rise + 40, fall))
+    scale = round(100 + amount, 1)
     return (
-        f"\\t({rise},{peak},\\fscx{scale}\\fscy{scale}"
-        f"\\3c{tag_colour(GLOW[0])}\\3a&H{GLOW[1]:02X}&"
-        f"\\bord{GLOW_BORDER}\\blur{GLOW_BLUR})"
-        f"\\t({fall},{fall + GROW_OUT},\\fscx100\\fscy100"
-        f"\\3c{tag_colour(HALO[0])}\\3a&H{HALO[1]:02X}&"
-        f"\\bord{BORDER}\\blur{BLUR})"
+        f"\\t({rise},{peak},\\fscx{scale}\\fscy{scale})"
+        f"\\t({fall},{fall + GROW_OUT},\\fscx100\\fscy100)"
     )
 
 
@@ -265,15 +300,20 @@ def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
         " OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut,"
         " ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow,"
         " Alignment, MarginL, MarginR, MarginV, Encoding",
-        # Primary is the sung colour, Secondary the unsung one - \kf sweeps from
-        # the second to the first. Both are white and the dimming does the work,
-        # which leaves the background free to change hue by section without ever
-        # fighting the words. Alignment 2 anchors the block by its bottom edge,
-        # so a line that wraps to two rows grows upward and the row being sung
-        # never moves under you.
+        # Primary is what \kf sweeps *to*, so it is the accent rather than the
+        # final colour - each word turns itself white afterwards. Alignment 2
+        # anchors the block by its bottom edge, so a line that wraps to two rows
+        # grows upward and the row being sung never moves under you.
         f"Style: Lyric,{font},{size},"
-        f"{colour(*SUNG)},{colour(*UNSUNG)},{colour(*HALO)},{colour(0x000000, 0xFF)},"
-        f"0,0,0,0,100,100,0,0,1,{BORDER},0,2,86,86,180,1",
+        f"{colour(ACCENT)},{colour(*UNSUNG)},{colour(*EDGE)},{colour(0x000000, 0xFF)},"
+        f"0,0,0,0,100,100,0,0,1,{BORDER},0,2,{MARGIN},{MARGIN},{BASELINE},1",
+        # The shadow layer. Same face, same size, same margins, so it wraps
+        # identically - a shadow that breaks a line somewhere else than the
+        # words above it is worse than no shadow. Only the baseline differs.
+        f"Style: Shade,{font},{size},"
+        f"{colour(0x000000)},{colour(0x000000)},{colour(*SHADE)},{colour(0x000000, 0xFF)},"
+        f"0,0,0,0,100,100,0,0,1,{SHADE_BORDER},0,2,{MARGIN},{MARGIN},"
+        f"{BASELINE - SHADE_DROP},1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV,"
@@ -283,9 +323,13 @@ def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
     for line, (appear, vanish) in zip(lines, windows(project)):
         start_cs = centis(appear)
         end_cs = max(start_cs + 1, centis(vanish))
+        stamps = f"{ass_time(start_cs)},{ass_time(end_cs)}"
         out.append(
-            f"Dialogue: 0,{ass_time(start_cs)},{ass_time(end_cs)},Lyric,,0,0,0,,"
-            f"{karaoke_text(line, start_cs)}"
+            f"Dialogue: 0,{stamps},Shade,,0,0,0,,"
+            f"{karaoke_text(line, start_cs, shade=True)}"
+        )
+        out.append(
+            f"Dialogue: 1,{stamps},Lyric,,0,0,0,,{karaoke_text(line, start_cs)}"
         )
 
     return "\n".join(out) + "\n"

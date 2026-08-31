@@ -10,6 +10,7 @@ Four layers, back to front:
     wash     a near-black vertical gradient, tinted by the section
     lobes    three drifting pools of light, hues spread around the section's,
              breathing with the mix and kicking on the beat
+    ring     a wave of light leaving the centre on every downbeat
     ribbon   a scrolling +/- 6 s window of the mix waveform along the bottom
     grain    a few thousandths of noise, which is what stops the gradient banding
 
@@ -61,10 +62,20 @@ HUES = {
 #
 #   hue offset, saturation, value, half-width, half-height, x drift, y drift
 LOBES = (
-    (  0.0, 0.66, 0.50, 0.40, 0.30, (0.041, 0.017), (0.029, 0.011)),
-    ( 44.0, 0.76, 0.34, 0.26, 0.20, (0.023, 0.053), (0.037, 0.019)),
-    (-38.0, 0.70, 0.26, 0.62, 0.13, (0.013, 0.031), (0.007, 0.023)),
+    (  0.0, 0.60, 0.88, 0.40, 0.30, (0.041, 0.017), (0.029, 0.011)),
+    ( 52.0, 0.72, 0.62, 0.26, 0.20, (0.023, 0.053), (0.037, 0.019)),
+    (-46.0, 0.66, 0.46, 0.62, 0.13, (0.013, 0.031), (0.007, 0.023)),
 )
+
+# A bar is the largest unit you feel without counting, so it gets the largest
+# gesture: a wave of light leaving the centre on every downbeat and fading as it
+# goes. Everything else here breathes, and breathing alone reads as a wallpaper
+# with a slow animation on it.
+RING_LIFE = 1.15         # seconds from the downbeat to gone
+RING_REACH = 0.88        # far enough to leave the frame by every edge at once
+RING_WIDTH = 0.16        # how thick the band is
+RING_START = 0.18        # never starts at nothing: a ring of radius 0 is a flash
+RING_LIGHT = 0.34
 
 RIBBON_SECONDS = 6.0     # half-width of the scrolling waveform window
 RIBBON_BASE = 0.885      # its centre line, in fractions of frame height
@@ -95,8 +106,9 @@ def _palette(hue: float) -> np.ndarray:
     All of them dark. The words are white and they have to win, so the picture
     is lit from behind them rather than in front.
     """
-    rows = [_rgb(hue + 10, 0.85, 0.035), _rgb(hue - 10, 0.70, 0.115)]
+    rows = [_rgb(hue + 10, 0.85, 0.030), _rgb(hue - 10, 0.70, 0.105)]
     rows += [_rgb(hue + off, sat, val) for off, sat, val, *_ in LOBES]
+    rows.append(_rgb(hue - 22, 0.34, 1.00))      # the ring, close to white
     return np.stack(rows)
 
 
@@ -167,6 +179,7 @@ class Scene:
             self.beat_times = np.array([0.0, max(self.duration, 1.0)], dtype=np.float32)
             self.beat_gap = np.ones(2, dtype=np.float32)
             self.beat_weight = np.zeros(2, dtype=np.float32)
+            self.downbeats = np.zeros(0, dtype=np.float32)
             return
         self.beat_times = times
         self.beat_gap = np.diff(times, append=times[-1] + float(np.median(np.diff(times))))
@@ -178,6 +191,8 @@ class Scene:
         self.beat_weight = np.where((index - phase) % meter == 0, 1.0, 0.55).astype(
             np.float32
         )
+        downs = np.asarray(beats.get("downbeats", []), dtype=np.float32)
+        self.downbeats = downs if downs.size else times[phase::meter]
 
     def _load_sections(self, project: Project) -> None:
         """Where the colour changes, and to what.
@@ -225,10 +240,18 @@ class Scene:
         # so storing it width times over would be h*w floats of the same number.
         self.wash = ((1.0 - ys) ** 1.5)[:, None].astype(np.float32)
 
+        # Two squared-distance fields, and they are not the same shape. The
+        # vignette wants circles - it is a lens, and a lens does not know how
+        # wide the frame is. The ring wants the frame's own proportions, or it
+        # leaves by the top and bottom well before the sides and reads for half
+        # a second as two vertical walls sliding outward.
         radius = self.ax[None, :] ** 2 + self.ay[:, None] ** 2
-        self.vignette = (1.0 - 0.58 * np.clip(radius / 0.66, 0, 1) ** 1.25).astype(
+        self.vignette = (1.0 - 0.38 * np.clip(radius / 0.80, 0, 1) ** 1.3).astype(
             np.float32
         )
+        self.ring_radius = (
+            (self.ax[None, :] / aspect) ** 2 + self.ay[:, None] ** 2
+        ).astype(np.float32)
 
         self.rib_y = ys[:, None]
         # "Now" is the middle column, so brighten it and let the rest fall off.
@@ -251,6 +274,7 @@ class Scene:
         self._img = np.empty((h, w, 3), dtype=np.float32)
         self._lobe = np.empty((h, w), dtype=np.float32)
         self._tint = np.empty((h, w), dtype=np.float32)
+        self._ring = np.empty((h, w), dtype=np.float32)
 
         self._grain = 0
         rng = np.random.default_rng(0xB3A7)
@@ -273,6 +297,26 @@ class Scene:
         gap = float(self.beat_gap[i]) or 0.5
         phase = (t - float(self.beat_times[i])) / gap
         return float(np.exp(-3.4 * phase)) * float(self.beat_weight[i])
+
+    def _wave(self, t: float) -> tuple[float, float]:
+        """The live ring as (squared radius it has reached, how bright it still is).
+
+        Only the most recent downbeat is drawn. Two overlapping rings read as
+        interference rather than as a pulse, and one is what a bar is.
+        """
+        if self.downbeats.size == 0:
+            return 0.0, 0.0
+        i = int(np.searchsorted(self.downbeats, t, side="right")) - 1
+        if i < 0:
+            return 0.0, 0.0
+        age = (t - float(self.downbeats[i])) / RING_LIFE
+        if age >= 1.0:
+            return 0.0, 0.0
+        # Out fast and slowing, the way a wavefront actually behaves, and gone
+        # before the next bar so two are never on screen together.
+        travel = RING_START + (1.0 - RING_START) * (1.0 - (1.0 - age) ** 2)
+        reach = RING_REACH * travel
+        return reach * reach, RING_LIGHT * (1.0 - age) ** 2
 
     def _colours(self, t: float) -> np.ndarray:
         """The section's colour rows at time t, crossfaded across the boundary."""
@@ -310,7 +354,7 @@ class Scene:
 
     def frame(self, t: float) -> np.ndarray:
         palette = self._colours(t)
-        deep, mid, lobes = palette[0], palette[1], palette[2:]
+        deep, mid, lobes, wave = palette[0], palette[1], palette[2:5], palette[5]
         voice = self._at(self.voice, t)
         energy = self._at(self.mix, t)
         pulse = self._pulse(t)
@@ -336,10 +380,25 @@ class Scene:
                 np.multiply(field, colour[channel] * light, out=tint)
                 img[:, :, channel] += tint
 
+        edge, glow = self._wave(t)
+        if glow > 0.0:
+            # Worked in squared radius so there is no square root over every
+            # pixel: the band's width in r^2 grows with r, which is what keeps
+            # it an even thickness as it travels.
+            ring = self._ring
+            np.subtract(self.ring_radius, edge, out=ring)
+            ring *= 1.0 / max(RING_WIDTH * (2.0 * np.sqrt(edge) + RING_WIDTH), 1e-3)
+            np.multiply(ring, ring, out=ring)
+            np.negative(ring, out=ring)
+            np.exp(ring, out=ring)
+            for channel in range(3):
+                np.multiply(ring, wave[channel] * glow, out=tint)
+                img[:, :, channel] += tint
+
         ribbon = self._ribbon(t)
         ribbon *= 0.34 + 0.66 * self.rib_x
         for channel in range(3):
-            np.multiply(ribbon, mid[channel] * 3.4 + 0.30, out=tint)
+            np.multiply(ribbon, mid[channel] * 3.4 + 0.42, out=tint)
             img[:, :, channel] += tint
 
         img *= self.vignette[:, :, None]
