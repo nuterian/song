@@ -449,7 +449,7 @@ footer a:hover{color:var(--text)}
             <tr><td>how bright they burn</td><td>the isolated vocal envelope</td></tr>
             <tr><td>a small kick</td><td>the tracked beat, harder on the first of the bar</td></tr>
             <tr><td>a fast, tiny shiver</td><td>the mix again — a couple of pixels, sized by how loud it is now</td></tr>
-            <tr><td>the line's deflection</td><td>the amplitude now, one tooth per two analysis buckets</td></tr>
+            <tr><td>the line's deflection</td><td>the peaks themselves, one tooth per three analysis buckets, peak-held</td></tr>
             <tr><td>the sweep</td><td>the word timings in <code>project.json</code></td></tr>
             <tr><td>the word lit in colour</td><td>the same timings, as a per-word transform</td></tr>
           </tbody>
@@ -485,15 +485,17 @@ footer a:hover{color:var(--text)}
         <p>Short words grow proportionally less. At full size on a 90 ms
         syllable a swell is a flicker rather than an emphasis, and a fast run
         strobes.</p>
-        <h3>Nothing blurs the words, and nothing lies under them</h3>
-        <p>libass's <code>\blur</code> is described as softening the border, but
-        with a border thick enough to read it bleeds into the fill: every word
-        was coming <i>into focus</i> as it was sung, which is not an effect
-        anybody asked for. And a drop shadow, hard or soft, is a second copy of
-        the text lying underneath the first — which is the thing this is trying
-        not to look like. What is left is a hairline edge at low opacity: enough
-        to hold a letterform against a lit frame, not enough to read as an
-        outline.</p>
+        <h3>Nothing is drawn around the words</h3>
+        <p>No border, no blur, no shadow. Each of those is a second shape made
+        from the letterforms, and at this size all three read as an outline
+        rather than as separation — <code>\blur</code> worst of all, since with
+        a border thick enough to see it bleeds into the fill and every word
+        comes <i>into focus</i> as it is sung.</p>
+        <p>The contrast comes from the picture instead: a wide, soft lift of
+        light under the corner the words sit in, built the same separable way as
+        the pools. It is large enough and soft enough that there is no edge
+        anywhere to find, so it reads as light falling on that corner rather
+        than as a panel put there to hold text.</p>
         <p>Nothing darkens the corners either. A vignette is how you make a
         frame look like a spotlight in a black room, and this wanted to look
         like a lit room, so the floor is raised until the darkest corner still
@@ -526,7 +528,14 @@ footer a:hover{color:var(--text)}
         <p>The line is drawn the same way: its path is one y per column, so the
         stroke is a distance from that path, divided by the slope so a steep
         segment is not drawn thinner than a flat one.</p>
-        <p>Under three minutes for a 4:46 track at 720p on an M4 CPU.
+        <p>One tooth per <i>analysis bucket</i> — the finest the data goes — was
+        tried and is worse. At 8 ms the peak level of a compressed master barely
+        changes, so ninety teeth of near-identical height fill in as a hatched
+        block. Three buckets a tooth, peak-held so neither of the two it skips
+        can be missed, puts about two seconds of the track across the span:
+        <b>long enough for the outline to have the song's shape in it, short
+        enough that every syllable moves it</b>.</p>
+        <p>About five minutes for a 4:46 track at 720p on an M4 CPU.
         <code>--preview 1:04</code> renders 25 seconds instead, so trying
         something is not five minutes a go.</p>
       </div>

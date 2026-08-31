@@ -9,7 +9,8 @@ Four layers, back to front:
 
     wash     a lit vertical gradient, tinted by the section
     lobes    three drifting pools of light, hues spread around the section's
-    trace    one thin zigzag line low on the right, deflecting with the amplitude
+    page     a wide soft lift under the corner the words sit in
+    trace    one thin zigzag line low on the right, following the amplitude
     grain    a few thousandths of noise, which is what stops the gradient banding
 
 Lit to the corners, and lit throughout. There is no vignette and no dark floor:
@@ -77,6 +78,15 @@ LOBES = (
     (-40.0, 0.40, 0.15, 0.74, 0.18, (0.013, 0.031), (0.007, 0.023)),
 )
 
+# A wide, soft lightening under the words, so dark type has something to be dark
+# against however the picture moves. The alternative is an outline around every
+# glyph, which is the ugly way to solve the same problem. Wide and soft enough
+# that there is no edge anywhere to notice - it reads as light falling on that
+# corner rather than as a panel put there to hold text.
+PAGE_X, PAGE_Y = 0.24, 0.92     # its centre, in fractions of the frame
+PAGE_W, PAGE_H = 0.50, 0.30     # and how far it reaches
+PAGE_LIGHT = 0.34               # how far toward white it lifts
+
 # A fast, tiny wobble on top of the slow drift, its size set by how loud the
 # track is right now. A couple of pixels at most: not a movement you watch, a
 # movement you would only notice if it stopped.
@@ -91,19 +101,23 @@ VALUE_LIFT = 1.30
 # One line, low and to the right, opposite the words. It has no ends: the stroke
 # fades out into the picture well before it would reach an edge, so it reads as
 # an instrument sitting in the frame rather than as a rule drawn across it.
-TRACE_X = 0.752          # its centre, in fractions of frame width
+TRACE_X = 0.744          # its centre, in fractions of frame width
 TRACE_BASE = 0.866       # its rest height, in fractions of frame height
-TRACE_HEIGHT = 0.062     # deflection at full amplitude
-TRACE_REACH = 0.222      # half-length of the visible stroke
-TRACE_FADE = 0.070       # how much of each end is spent fading out
-TRACE_SPAN = 0.176       # half-width of the part that actually zigzags
-# One tooth per two analysis buckets, off an envelope smoothed at 12 ms - close
-# enough to the peaks themselves that the line has the track's texture in it and
-# not a rolling average of it. Coarser teeth over a wider lag made a spindle:
-# regular, symmetrical and the same shape in every loud passage.
-TRACE_TEETH = 62
-TRACE_LAG = 0.0166       # seconds between one tooth's sample and the next
-TRACE_WEIGHT = 1.7       # stroke, in pixels
+TRACE_HEIGHT = 0.066     # deflection at full amplitude
+TRACE_REACH = 0.246      # half-length of the visible stroke
+TRACE_FADE = 0.072       # how much of each end is spent fading out
+TRACE_SPAN = 0.200       # half-width of the part that actually zigzags
+# One tooth per three analysis buckets, peak-held so none of the two it skips
+# can be missed. One tooth per bucket was tried and it is worse: at 8 ms the
+# peak level of a compressed master barely changes, so ninety teeth of the same
+# height fill in as a hatched block. Three buckets a tooth puts two seconds of
+# the track across the span, which is long enough for the outline to have the
+# song's shape in it and short enough for every syllable to move it.
+TRACE_TEETH = 80
+TRACE_LAG = 1.0 / 40     # seconds between one tooth's sample and the next
+TRACE_GAMMA = 0.72       # opens up the quiet detail without touching the peaks
+TRACE_EDGE = 0.16        # the fraction of each end that ramps into the flat line
+TRACE_WEIGHT = 1.35      # stroke, in pixels
 
 GRAIN = 0.010            # dither amplitude
 GRAIN_FIELDS = 8         # cycled so the noise moves instead of sitting still
@@ -148,6 +162,21 @@ def _palettes(hue: float) -> np.ndarray:
     return np.stack([_palette(hue), _palette(hue + HUE_LIFT) * VALUE_LIFT])
 
 
+def _running_max(values: np.ndarray, width: int) -> np.ndarray:
+    """Peak-hold over `width` samples.
+
+    A tooth stands for more than one analysis bucket, and picking one of them
+    and dropping the rest means a transient lands on a tooth in one frame and
+    between two in the next - the line crawls. Holding the peak over what each
+    tooth covers means nothing can fall between them.
+    """
+    if width <= 1 or values.size < width:
+        return values
+    pad = width // 2
+    padded = np.pad(values, (pad, width - 1 - pad), mode="edge")
+    return np.lib.stride_tricks.sliding_window_view(padded, width).max(axis=1)
+
+
 def _envelope(peaks: list[float], rate: int, seconds: float) -> np.ndarray:
     """Smooth an amplitude track and rescale it so its loud parts reach 1.
 
@@ -185,9 +214,10 @@ class Scene:
         # the responsiveness costs no calm.
         self.mix = _envelope(analysis.get("mix_peaks", []), self.rate, 0.05)
         self.voice = _envelope(analysis.get("vocal_peaks", []), self.rate, 0.045)
-        # The trace reads its own, barely-smoothed copy: the field wants an
-        # envelope, the line wants the detail.
-        self.detail = _envelope(analysis.get("mix_peaks", []), self.rate, 0.012)
+        # The trace reads the peaks, not an envelope of them: the field wants
+        # the average, the line wants what actually happened.
+        peaks = _envelope(analysis.get("mix_peaks", []), self.rate, 0.0)
+        self.detail = _running_max(peaks, round(TRACE_LAG * self.rate)) ** TRACE_GAMMA
 
         self._load_beats(beats)
         self._load_sections(project)
@@ -273,14 +303,18 @@ class Scene:
         edge = np.clip(edge, 0.0, 1.0)
         self.trace_alpha = (edge * edge * (3.0 - 2.0 * edge)).astype(np.float32)[None, :]
         # Where each tooth sits, and how far its deflection is allowed to go.
-        # A raised cosine, so the zigzag grows out of the flat line and settles
-        # back into it rather than starting and stopping at a corner.
+        # Full height across the middle and ramping only at the very ends, so
+        # the outline of the zigzag is the waveform rather than a spindle the
+        # waveform has been poured into. A raised cosine over the whole span was
+        # the first try and it gave every loud passage the same lens shape.
         self.teeth_x = np.linspace(
             TRACE_X - TRACE_SPAN, TRACE_X + TRACE_SPAN, TRACE_TEETH, dtype=np.float32
         )
-        taper = 0.5 - 0.5 * np.cos(
-            np.linspace(0.0, 2.0 * np.pi, TRACE_TEETH, dtype=np.float32)
-        )
+        ramp = np.clip(
+            np.minimum(np.linspace(0.0, 1.0, TRACE_TEETH, dtype=np.float32),
+                       np.linspace(1.0, 0.0, TRACE_TEETH, dtype=np.float32))
+            / TRACE_EDGE, 0.0, 1.0)
+        taper = ramp * ramp * (3.0 - 2.0 * ramp)
         # Alternating, which is what makes it a zigzag rather than a curve.
         self.teeth_shape = (taper * np.where(np.arange(TRACE_TEETH) % 2, 1.0, -1.0)
                             ).astype(np.float32)
@@ -291,6 +325,13 @@ class Scene:
                           - TRACE_TEETH / 2.0) * TRACE_LAG
         self.teeth_pixels = self.teeth_x * w
         self.env_index = np.arange(self.detail.size, dtype=np.float32)
+
+        # Static, so it is built once. Separable like a lobe: a column of light
+        # times a row of it.
+        self.page = (
+            np.exp(-(((ys - PAGE_Y) / PAGE_H) ** 2))[:, None]
+            * np.exp(-(((xs - PAGE_X) / PAGE_W) ** 2))[None, :]
+        ).astype(np.float32) * PAGE_LIGHT
 
         # Reused every frame. At output resolution these are 2.6 MB apiece and
         # allocating them 8574 times is pure garbage-collector work.
@@ -401,6 +442,13 @@ class Scene:
             for channel in range(3):
                 np.multiply(field, colour[channel] * light, out=tint)
                 img[:, :, channel] += tint
+
+        # Toward white rather than added, so the lift is the same amount of
+        # contrast wherever the picture happens to be bright or dark.
+        for channel in range(3):
+            np.subtract(1.0, img[:, :, channel], out=tint)
+            tint *= self.page
+            img[:, :, channel] += tint
 
         # Composited, not added. The line is darker than the picture it sits on
         # and adding a dark colour to a light one lightens it: the trace was

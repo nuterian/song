@@ -33,15 +33,13 @@ PLAY_W, PLAY_H = 1280, 720
 FONT = "Avenir Next"
 FONT_SIZE = 34
 
-# No blur on the words, and nothing lying under them. libass's \blur is
-# described as softening the border, but with a border thick enough to read it
-# bleeds into the fill, and every word came *into focus* as it was sung. A drop
-# shadow, hard or soft, is a second copy of the text underneath the first, which
-# is the thing this is trying not to look like. What is left is a hairline of
-# the ground's own colour: on a light picture that means a pale edge, which
-# separates dark type from a mid tone without ever reading as an outline.
-BORDER = 1.1
-EDGE = (0xFFFFFF, 0x9C)
+# Nothing at all around the letterforms: no border, no blur, no shadow. Every
+# one of those is a second shape drawn from the text, and at this size they read
+# as an outline rather than as separation. The contrast the words need comes
+# from the picture instead - scene.py lifts a wide, soft patch of light under
+# the corner they sit in, which is a gradient nobody can see the edge of.
+BORDER = 0
+EDGE = (0xFFFFFF, 0xFF)
 
 # Dark type, because the picture is light. Three states: a word not yet sung is
 # the same ink at low opacity, the word being sung fills in the accent, and a
