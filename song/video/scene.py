@@ -7,10 +7,16 @@ and cannot drift out of agreement with them.
 
 Four layers, back to front:
 
-    wash     a near-black vertical gradient, tinted by the section
+    wash     a lit vertical gradient, tinted by the section
     lobes    three drifting pools of light, hues spread around the section's
-    trace    one thin zigzag line, deflecting with the amplitude
+    trace    one thin zigzag line low on the right, deflecting with the amplitude
     grain    a few thousandths of noise, which is what stops the gradient banding
+
+Lit to the corners. There is no vignette: darkening the edges is how you make a
+frame look like a spotlight in a black room, and the picture wanted to look like
+a lit room instead. The floor is raised far enough that the darkest corner still
+has colour in it, and the pools brighten from there rather than rescuing the
+middle of a black frame.
 
 Sensitive, and quiet with it. The envelopes are barely smoothed, so the picture
 answers the track within a frame or two of a transient - but every depth it
@@ -67,25 +73,34 @@ HUES = {
 #
 #   hue offset, saturation, value, half-width, half-height, x drift, y drift
 LOBES = (
-    (  0.0, 0.52, 0.60, 0.42, 0.32, (0.041, 0.017), (0.029, 0.011)),
-    ( 46.0, 0.60, 0.40, 0.28, 0.21, (0.023, 0.053), (0.037, 0.019)),
-    (-40.0, 0.56, 0.30, 0.64, 0.14, (0.013, 0.031), (0.007, 0.023)),
+    (  0.0, 0.56, 0.52, 0.46, 0.36, (0.041, 0.017), (0.029, 0.011)),
+    ( 46.0, 0.64, 0.38, 0.32, 0.24, (0.023, 0.053), (0.037, 0.019)),
+    (-40.0, 0.60, 0.30, 0.70, 0.16, (0.013, 0.031), (0.007, 0.023)),
 )
+
+# A fast, tiny wobble on top of the slow drift, its size set by how loud the
+# track is right now. A couple of pixels at most: not a movement you watch, a
+# movement you would only notice if it stopped.
+SHIVER = 0.011
+SHIVER_RATE = 9.7
 
 # How far the loud palette is from the quiet one. Small on purpose: the point is
 # that the colour is never quite still, not that it changes.
 HUE_LIFT = 14.0
 VALUE_LIFT = 1.30
 
-# One line. It zigzags where the song is, and lies flat where it is not - a
-# fixed span in the middle of the frame with the deflection tapering to nothing
-# before either edge, so it reads as an instrument rather than as a border.
-TRACE_BASE = 0.870       # the line's rest height, in fractions of frame height
-TRACE_HEIGHT = 0.062     # deflection at full amplitude
-TRACE_SPAN = 0.32        # half-width of the active part
-TRACE_TEETH = 30         # zigzag vertices across it
-TRACE_LAG = 0.060        # seconds between one tooth's sample and the next
-TRACE_WEIGHT = 1.9       # stroke, in pixels
+# One line, low and to the right, opposite the words. It has no ends: the stroke
+# fades out into the picture well before it would reach an edge, so it reads as
+# an instrument sitting in the frame rather than as a rule drawn across it.
+TRACE_X = 0.775          # its centre, in fractions of frame width
+TRACE_BASE = 0.868       # its rest height, in fractions of frame height
+TRACE_HEIGHT = 0.055     # deflection at full amplitude
+TRACE_REACH = 0.190      # half-length of the visible stroke
+TRACE_FADE = 0.062       # how much of each end is spent fading out
+TRACE_SPAN = 0.140       # half-width of the part that actually zigzags
+TRACE_TEETH = 28         # zigzag vertices across it
+TRACE_LAG = 0.055        # seconds between one tooth's sample and the next
+TRACE_WEIGHT = 1.8       # stroke, in pixels
 
 GRAIN = 0.010            # dither amplitude
 GRAIN_FIELDS = 8         # cycled so the noise moves instead of sitting still
@@ -113,7 +128,7 @@ def _palette(hue: float) -> np.ndarray:
     All of them dark. The words are white and they have to win, so the picture
     is lit from behind them rather than in front.
     """
-    rows = [_rgb(hue + 10, 0.85, 0.028), _rgb(hue - 10, 0.70, 0.095)]
+    rows = [_rgb(hue + 12, 0.76, 0.105), _rgb(hue - 8, 0.62, 0.250)]
     rows += [_rgb(hue + off, sat, val) for off, sat, val, *_ in LOBES]
     rows.append(_rgb(hue - 20, 0.30, 0.95))      # the trace
     return np.stack(rows)
@@ -236,24 +251,26 @@ class Scene:
         # was already the most expensive thing in the frame.
         self.ax = (xs - 0.5) * aspect                     # (w,)
         self.ay = ys - 0.5                                # (h,)
-        # Lit toward the top, dark at the floor where the trace runs. Kept as
-        # a column and broadcast at use: the gradient is constant across a row,
-        # so storing it width times over would be h*w floats of the same number.
-        self.wash = ((1.0 - ys) ** 1.5)[:, None].astype(np.float32)
-
-        radius = self.ax[None, :] ** 2 + self.ay[:, None] ** 2
-        self.vignette = (1.0 - 0.34 * np.clip(radius / 0.84, 0, 1) ** 1.3).astype(
-            np.float32
-        )
+        # Lit toward the top, a little deeper along the floor. Gentle, because
+        # the whole frame is meant to read as lit. Kept as a column and broadcast
+        # at use: the gradient is constant across a row, so storing it width
+        # times over would be h*w floats of the same number.
+        self.wash = ((1.0 - ys) ** 1.1)[:, None].astype(np.float32)
 
         # --- the trace
         self.pixel_y = (ys * h)[:, None].astype(np.float32)
         self.columns = xs * w
+        # How much of the stroke is drawn at each column: solid across the
+        # middle, easing to nothing over the last stretch at either end. This is
+        # what gives it no ends to notice.
+        edge = (TRACE_REACH - np.abs(xs - TRACE_X)) / TRACE_FADE
+        edge = np.clip(edge, 0.0, 1.0)
+        self.trace_alpha = (edge * edge * (3.0 - 2.0 * edge)).astype(np.float32)[None, :]
         # Where each tooth sits, and how far its deflection is allowed to go.
         # A raised cosine, so the zigzag grows out of the flat line and settles
         # back into it rather than starting and stopping at a corner.
         self.teeth_x = np.linspace(
-            0.5 - TRACE_SPAN, 0.5 + TRACE_SPAN, TRACE_TEETH, dtype=np.float32
+            TRACE_X - TRACE_SPAN, TRACE_X + TRACE_SPAN, TRACE_TEETH, dtype=np.float32
         )
         taper = 0.5 - 0.5 * np.cos(
             np.linspace(0.0, 2.0 * np.pi, TRACE_TEETH, dtype=np.float32)
@@ -337,7 +354,9 @@ class Scene:
         stroke = np.abs(self.pixel_y - path[None, :])
         stroke /= weight[None, :]
         np.subtract(1.0, stroke, out=stroke)
-        return np.clip(stroke, 0.0, 1.0)
+        np.clip(stroke, 0.0, 1.0, out=stroke)
+        stroke *= self.trace_alpha
+        return stroke
 
     # ------------------------------------------------------------- the frame
 
@@ -363,10 +382,13 @@ class Scene:
         # The depths are small deliberately - the envelopes underneath are
         # barely smoothed, so a large depth on top of them would twitch.
         breathe = 1.0 + 0.10 * energy + 0.07 * pulse
+        shiver = SHIVER * energy
         light = 0.72 + 0.16 * voice + 0.12 * pulse * (0.4 + 0.6 * energy)
         for (_, _, _, rx, ry, drift_x, drift_y), colour in zip(LOBES, lobes):
             cx = 0.30 * math.sin(t * drift_x[0] * TAU) + 0.13 * math.sin(t * drift_x[1] * TAU)
             cy = 0.20 * math.sin(t * drift_y[0] * TAU + 1.1) + 0.09 * math.sin(t * drift_y[1] * TAU)
+            cx += shiver * math.sin(t * SHIVER_RATE * TAU + rx * 40.0)
+            cy += shiver * math.cos(t * SHIVER_RATE * TAU * 0.83 + ry * 40.0)
             ex = np.exp(-(((self.ax - cx) / (rx * breathe)) ** 2))
             ey = np.exp(-(((self.ay - cy) / (ry * breathe)) ** 2))
             np.multiply(ey[:, None], ex[None, :], out=field)
@@ -379,7 +401,6 @@ class Scene:
             np.multiply(stroke, trace[channel] * (0.55 + 0.38 * energy), out=tint)
             img[:, :, channel] += tint
 
-        img *= self.vignette[:, :, None]
         self._grain = (self._grain + 1) % GRAIN_FIELDS
         img += self.grain[self._grain][:, :, None]
         np.clip(img, 0.0, 1.0, out=img)

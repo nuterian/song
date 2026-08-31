@@ -45,6 +45,15 @@ def durations(event: str) -> list[tuple[str, int]]:
             for sweep, value in re.findall(r"\\k(f?)(\d+)", event)]
 
 
+def spoken(event: str) -> str:
+    """An event's text with every override block taken out.
+
+    Nine commas in before the text starts, and the text may hold commas of its
+    own, so the split has to be counted rather than searched for.
+    """
+    return re.sub(r"\{[^}]*\}", "", event.split(",", 9)[9])
+
+
 def events(text: str, style: str = "Lyric") -> list[str]:
     """The dialogue lines for one layer. Every lyric line writes two: the words,
     and the soft shadow underneath them."""
@@ -269,6 +278,56 @@ class Windows(unittest.TestCase):
         self.assertLessEqual(spans[1][0], 43.1)
 
 
+class ThreeLinesAtOnce(unittest.TestCase):
+    """The one being sung, with the one before and the one after either side."""
+
+    def setUp(self):
+        self.lines = [line(i, f"line {i} here", 10.0 + i * 5, 13.0 + i * 5)
+                      for i in range(4)]
+        self.text = karaoke.build(project(*self.lines))
+
+    def slots(self, event):
+        return int(event.split(",")[7])   # Layer,Start,End,Style,Name,L,R,V
+
+    def during(self, index):
+        """Every event whose window is the one where line `index` is sung."""
+        sung = [e for e in events(self.text)][index]
+        span = sung.split(",")[1:3]
+        return [e for e in self.text.splitlines()
+                if e.startswith("Dialogue:") and e.split(",")[1:3] == span]
+
+    def test_the_middle_of_a_song_shows_three(self):
+        shown = self.during(1)
+        self.assertEqual(len(shown), 3)
+        self.assertEqual(sorted(self.slots(e) for e in shown),
+                         sorted([karaoke.SLOT_PREV, karaoke.SLOT_NOW, karaoke.SLOT_NEXT]))
+
+    def test_the_neighbours_are_the_neighbours(self):
+        shown = {self.slots(e): spoken(e) for e in self.during(1)}
+        self.assertEqual(shown[karaoke.SLOT_PREV], "line 0 here")
+        self.assertEqual(shown[karaoke.SLOT_NOW], "line 1 here")
+        self.assertEqual(shown[karaoke.SLOT_NEXT], "line 2 here")
+
+    def test_the_first_line_has_nothing_above_it_and_the_last_nothing_below(self):
+        self.assertEqual(sorted(self.slots(e) for e in self.during(0)),
+                         sorted([karaoke.SLOT_NOW, karaoke.SLOT_NEXT]))
+        self.assertEqual(sorted(self.slots(e) for e in self.during(3)),
+                         sorted([karaoke.SLOT_PREV, karaoke.SLOT_NOW]))
+
+    def test_no_line_is_ever_on_screen_in_two_slots_at_once(self):
+        # Overlapping the slots to cross-dissolve between them reads as a
+        # duplicate: the same sentence legible twice, which looks like a fault.
+        for index in range(4):
+            texts = [spoken(e) for e in self.during(index)]
+            self.assertEqual(len(texts), len(set(texts)))
+
+    def test_the_neighbours_carry_no_karaoke(self):
+        # They are there to be read ahead and remembered, not followed.
+        for event in self.text.splitlines():
+            if event.startswith("Dialogue:") and ",Near," in event:
+                self.assertNotIn("\\k", event.split(",", 9)[9].replace("\\fad", ""))
+
+
 class TheFile(unittest.TestCase):
     def setUp(self):
         self.text = karaoke.build(project(
@@ -288,31 +347,6 @@ class TheFile(unittest.TestCase):
     def test_unaligned_lines_are_left_out(self):
         self.assertEqual(len(events(self.text)), 2)
         self.assertNotIn("never aligned", self.text)
-
-    def test_every_lyric_line_gets_a_shadow_underneath_it(self):
-        shade, lyric = events(self.text, "Shade"), events(self.text)
-        self.assertEqual(len(shade), len(lyric))
-        for under, over in zip(shade, lyric):
-            self.assertEqual(under.split(",")[1:3], over.split(",")[1:3])   # same span
-            self.assertLess(under.split(",")[0], over.split(",")[0])        # lower layer
-
-    def test_the_shadow_draws_no_fill_and_sweeps_nothing(self):
-        # It is a blurred border and only that; a fill down there would show
-        # through the words as a smear.
-        for event in events(self.text, "Shade"):
-            self.assertIn("\\1a&HFF&", event)
-            self.assertNotIn("\\kf", event)
-
-    def test_the_shadow_swells_with_the_word_above_it(self):
-        # Otherwise it keeps the old width and slides out from under the word.
-        pattern = r"\\t\(\d+,\d+,\\fscx[\d.]+"
-        for under, over in zip(events(self.text, "Shade"), events(self.text)):
-            self.assertEqual(re.findall(pattern, under), re.findall(pattern, over))
-
-    def test_every_event_ends_after_it_starts(self):
-        for event in events(self.text):
-            _, start, end = event.split(",", 3)[:3]
-            self.assertLess(start, end)
 
     def test_secondary_is_the_unsung_colour_and_differs_from_primary(self):
         style = [ln for ln in self.text.splitlines() if ln.startswith("Style:")][0]

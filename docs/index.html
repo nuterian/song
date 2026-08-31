@@ -385,10 +385,11 @@ footer a:hover{color:var(--text)}
     <p class="eyebrow">The payoff</p>
     <h2>One command turns it into a video.</h2>
     <p class="say">
-      Lines fade in, fill word by word and fade out, off the timings you just
-      checked. <b>The picture is generated from the same track</b> and kept
-      quiet — soft light that answers the mix within a frame, and one thin line
-      zigzagging with the amplitude. There is nothing to supply.
+      Three lines, bottom left: the one being sung, with the one before and the
+      one after faded either side of it. <b>The picture is generated from the
+      same track</b> and kept quiet — soft light that answers the mix within a
+      frame, and one thin line opposite the words, zigzagging with the
+      amplitude. There is nothing to supply.
     </p>
   </div>
   <div class="wide">
@@ -446,6 +447,7 @@ footer a:hover{color:var(--text)}
             <tr><td>how wide they open</td><td>the mix envelope again</td></tr>
             <tr><td>how bright they burn</td><td>the isolated vocal envelope</td></tr>
             <tr><td>a small kick</td><td>the tracked beat, harder on the first of the bar</td></tr>
+            <tr><td>a fast, tiny shiver</td><td>the mix again — a couple of pixels, sized by how loud it is now</td></tr>
             <tr><td>the line's deflection</td><td>the amplitude now, not a scrolling history of it</td></tr>
             <tr><td>the sweep</td><td>the word timings in <code>project.json</code></td></tr>
             <tr><td>the word lit in colour</td><td>the same timings, as a per-word transform</td></tr>
@@ -456,7 +458,12 @@ footer a:hover{color:var(--text)}
         wants. And they are the beats librosa found, not a grid synthesized from
         the tempo: a grid is right for eight bars and then slides, and by the last
         chorus of a 4:46 song it is visibly ahead of the snare.</p>
-        <h3>Three states, and the middle one is the point</h3>
+        <h3>Three lines, and three states in the middle one</h3>
+        <p>The neighbours share the sung line's window exactly, so no line is
+        ever on screen in two slots at once. Overlapping them by a few hundred
+        milliseconds to cross-dissolve a line upward as it advances was the
+        obvious idea and it looks like a fault: for the length of the overlap
+        the same sentence is legible twice.</p>
         <p><code>\kf</code> gives two: a word not yet sung is dim, a word sung
         is filled. So the style's primary is the <b>accent</b> rather than the
         final colour, and one transform per word hands that word back to white a
@@ -471,19 +478,19 @@ footer a:hover{color:var(--text)}
         <p>Short words grow proportionally less. At full size on a 90 ms
         syllable a swell is a flicker rather than an emphasis, and a fast run
         strobes.</p>
-        <h3>Nothing blurs the words</h3>
+        <h3>Nothing blurs the words, and nothing lies under them</h3>
         <p>libass's <code>\blur</code> is described as softening the border, but
         with a border thick enough to read it bleeds into the fill: every word
         was coming <i>into focus</i> as it was sung, which is not an effect
-        anybody asked for. So the words carry a hairline edge and nothing
-        else.</p>
-        <p>The shadow is a second event underneath, the same words with no fill
-        and a thick blurred border, three pixels lower. It is the only way to a
-        soft shadow that does not touch the letterforms — ASS's own
-        <code>\shad</code> is a hard offset copy, which is the 1990s
-        word-processor look. It has to repeat the swell, or it keeps the width
-        of a word the layer above has already grown and slides out from under
-        it.</p>
+        anybody asked for. And a drop shadow, hard or soft, is a second copy of
+        the text lying underneath the first — which is the thing this is trying
+        not to look like. What is left is a hairline edge at low opacity: enough
+        to hold a letterform against a lit frame, not enough to read as an
+        outline.</p>
+        <p>Nothing darkens the corners either. A vignette is how you make a
+        frame look like a spotlight in a black room, and this wanted to look
+        like a lit room, so the floor is raised until the darkest corner still
+        has colour in it and the pools brighten from there.</p>
         <h3>Sensitive, and quiet with it</h3>
         <p>The two asks pull against each other, so they are answered
         separately. The envelopes are smoothed over 45–50 ms rather than a
@@ -512,7 +519,7 @@ footer a:hover{color:var(--text)}
         <p>The line is drawn the same way: its path is one y per column, so the
         stroke is a distance from that path, divided by the slope so a steep
         segment is not drawn thinner than a flat one.</p>
-        <p>Two and a half minutes for a 4:46 track at 720p on an M4 CPU.
+        <p>Under three minutes for a 4:46 track at 720p on an M4 CPU.
         <code>--preview 1:04</code> renders 25 seconds instead, so trying
         something is not five minutes a go.</p>
       </div>

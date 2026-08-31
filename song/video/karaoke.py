@@ -30,45 +30,46 @@ PLAY_W, PLAY_H = 1280, 720
 # asking libass for "Avenir Next" *bold* picks the Bold **Italic** face out of
 # the macOS .ttc collection and the whole song renders oblique with nothing
 # anywhere saying italic.
-FONT = "Avenir Next Heavy"
-FONT_SIZE = 46
+FONT = "Avenir Next"
+FONT_SIZE = 34
 
-# No blur on the words themselves, at all. libass's \blur is described as
+# No blur on the words, and no shadow under them. libass's \blur is described as
 # softening the border, but with a border thick enough to read it bleeds into
-# the fill: at bord 3.0 / blur 2.8 the letterforms visibly lose their edges, and
-# every word came *into focus* as it was sung, which is not an effect anybody
-# asked for. So the lyric layer is a hairline edge and nothing else.
-BORDER = 1.0
-EDGE = (0x000000, 0x64)
+# the fill, and every word came *into focus* as it was sung. A drop shadow, hard
+# or soft, is a second copy of the text lying underneath the first, which is
+# exactly the thing this is trying not to look like. What is left is a hairline
+# edge at low opacity - enough to hold the letterform against a light frame,
+# not enough to read as an outline.
+BORDER = 0.9
+EDGE = (0x14060E, 0x84)
 
-# The shadow is a second event underneath, carrying the same words with no fill
-# and a thick blurred border, sitting a few pixels lower. That is the only way
-# to get a soft shadow without blurring the text: ASS's own \shad is a hard
-# offset copy, which is the 1990s word-processor look, and \blur on the lyric
-# layer would take the letterforms with it. Nothing is drawn on this layer that
-# a blur could soften except the shadow itself.
-SHADE = (0x000000, 0x72)
-SHADE_BORDER = 5.0
-SHADE_BLUR = 9.0
-SHADE_DROP = 3               # pixels lower than the words
-
-# Where the block sits, in the 1280x720 frame the coordinates above assume.
-MARGIN = 130
-BASELINE = 176
+# Bottom left, three lines deep: the one being sung, with the one before and the
+# one after faded either side of it. Margins are from the frame edge, and the
+# right one keeps the block clear of the trace in the opposite corner.
+MARGIN_L = 86
+MARGIN_R = 540
+# Spaced so that a line long enough to wrap - none on the sample track, but
+# somebody's will - grows upward into its own slot without reaching the one
+# above it.
+SLOT_NEXT = 70               # distance from the bottom of the frame
+SLOT_NOW = 128
+SLOT_PREV = 186
 
 # Lines arrive and leave rather than cutting. \fad measures its out-fade from
 # the *end* of the event, and consecutive lines here touch rather than overlap,
 # so one line has finished fading out on the exact frame the next starts fading
 # in - no dissolve between two different sentences, and no gap either.
-FADE_IN = 340
-FADE_OUT = 440
+FADE_IN = 260
+FADE_OUT = 300
+
 
 # Three states, and the middle one is the point. A word not yet sung is dim
 # white; the word being sung fills in the accent; a word already sung settles to
 # plain white. \kf gives the first two - it sweeps the fill from Secondary to
 # Primary - and the third is one transform per word, turning that word's primary
 # white a beat after it is done.
-UNSUNG = (0xFFFFFF, 0x68)
+UNSUNG = (0xFFFFFF, 0x76)
+NEAR = (0xFFFFFF, 0x96)      # the line before and the line after
 ACCENT = 0xFFC64D
 SUNG = 0xFFFFFF
 SETTLE_HOLD = 130            # ms the accent holds after the word ends
@@ -289,6 +290,17 @@ def grow(start_cs: int, end_cs: int) -> str:
 def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
     """The whole .ass file, as text."""
     lines = [ln for ln in project.lines if ln.end > ln.start]
+    spans = windows(project)
+    fade = f"{{\\fad({FADE_IN},{FADE_OUT})}}"
+
+    def style(name: str, primary: str, secondary: str) -> str:
+        # Alignment 1 anchors each slot to its own bottom-left corner, so a line
+        # that wraps grows upward inside its slot instead of pushing the others.
+        return (
+            f"Style: {name},{font},{size},{primary},{secondary},"
+            f"{colour(*EDGE)},{colour(0x000000, 0xFF)},"
+            f"0,0,0,0,100,100,0,0,1,{BORDER},0,1,{MARGIN_L},{MARGIN_R},{SLOT_NOW},1"
+        )
 
     out = [
         "[Script Info]",
@@ -308,38 +320,36 @@ def build(project: Project, font: str = FONT, size: int = FONT_SIZE) -> str:
         " ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow,"
         " Alignment, MarginL, MarginR, MarginV, Encoding",
         # Primary is what \kf sweeps *to*, so it is the accent rather than the
-        # final colour - each word turns itself white afterwards. Alignment 2
-        # anchors the block by its bottom edge, so a line that wraps to two rows
-        # grows upward and the row being sung never moves under you.
-        f"Style: Lyric,{font},{size},"
-        f"{colour(ACCENT)},{colour(*UNSUNG)},{colour(*EDGE)},{colour(0x000000, 0xFF)},"
-        f"0,0,0,0,100,100,0,0,1,{BORDER},0,2,{MARGIN},{MARGIN},{BASELINE},1",
-        # The shadow layer. Same face, same size, same margins, so it wraps
-        # identically - a shadow that breaks a line somewhere else than the
-        # words above it is worse than no shadow. Only the baseline differs.
-        f"Style: Shade,{font},{size},"
-        f"{colour(0x000000)},{colour(0x000000)},{colour(*SHADE)},{colour(0x000000, 0xFF)},"
-        f"0,0,0,0,100,100,0,0,1,{SHADE_BORDER},0,2,{MARGIN},{MARGIN},"
-        f"{BASELINE - SHADE_DROP},1",
+        # final colour - each word turns itself white afterwards.
+        style("Lyric", colour(ACCENT), colour(*UNSUNG)),
+        # The line before and the line after. One flat colour, no sweep: they
+        # are there to be read ahead and remembered, not followed.
+        style("Near", colour(*NEAR), colour(*NEAR)),
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV,"
         " Effect, Text",
     ]
 
-    for line, (appear, vanish) in zip(lines, windows(project)):
-        start_cs = centis(appear)
-        end_cs = max(start_cs + 1, centis(vanish))
-        stamps = f"{ass_time(start_cs)},{ass_time(end_cs)}"
-        fade = f"{{\\fad({FADE_IN},{FADE_OUT})}}"
-        out.append(
-            f"Dialogue: 0,{stamps},Shade,,0,0,0,,{fade}"
-            f"{karaoke_text(line, start_cs, shade=True)}"
+    def event(style_name: str, span: tuple[float, float], slot: int, body: str) -> str:
+        start_cs = centis(max(0.0, span[0]))
+        end_cs = max(start_cs + 1, centis(span[1]))
+        return (
+            f"Dialogue: 0,{ass_time(start_cs)},{ass_time(end_cs)},{style_name},,"
+            f"0,0,{slot},,{fade}{body}"
         )
-        out.append(
-            f"Dialogue: 1,{stamps},Lyric,,0,0,0,,{fade}"
-            f"{karaoke_text(line, start_cs)}"
-        )
+
+    for i, (line, span) in enumerate(zip(lines, spans)):
+        out.append(event("Lyric", span, SLOT_NOW, karaoke_text(line, centis(span[0]))))
+        # The neighbours share the window exactly, so no line is ever on screen
+        # in two slots at once. Overlapping them by a few hundred milliseconds
+        # to cross-dissolve between slots was the obvious idea and it looks like
+        # a duplicate: for the length of the overlap the same sentence is
+        # legible twice, and the eye reads that as a fault rather than a move.
+        if i + 1 < len(lines):
+            out.append(event("Near", span, SLOT_NEXT, escape(lines[i + 1].text)))
+        if i:
+            out.append(event("Near", span, SLOT_PREV, escape(lines[i - 1].text)))
 
     return "\n".join(out) + "\n"
 
