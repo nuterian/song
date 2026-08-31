@@ -163,11 +163,16 @@ def cmd_export(args) -> int:
 def cmd_video(args) -> int:
     from .video import run as render_video
 
-    render_video(
-        Path(args.workdir),
-        preview=_preview_window(args.preview) if args.preview else None,
-        height=args.height,
-    )
+    try:
+        render_video(
+            Path(args.workdir),
+            preview=_preview_window(args.preview) if args.preview else None,
+            height=args.height,
+        )
+    except KeyboardInterrupt:
+        # ^C is the expected way to stop a four-minute render, not a crash.
+        # render_video has already killed ffmpeg and taken the part file away.
+        return 130
     return 0
 
 
