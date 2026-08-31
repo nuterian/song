@@ -123,10 +123,11 @@ torch 2.5 and Whisper hits unimplemented sparse ops there, so it is CPU througho
 python -m unittest discover -s tests
 ```
 
-66 tests over the logic that carries the claims — lyrics parsing, the
+68 tests over the logic that carries the claims — lyrics parsing, the
 word-timing invariants, word-to-line mapping, the export formats, and the
-missing-line thresholds. All pure stdlib, so they run in under a second with
-nothing installed.
+missing-line thresholds — plus a guard that those modules stay importable with
+no third-party package present at all, which is what lets CI run them in
+seconds without installing anything.
 
 ## License
 
