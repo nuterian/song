@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import http.server
+import re
 import shutil
 import subprocess
 import sys
@@ -38,17 +39,17 @@ CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 # name, (width, height), device scale, setup run once the app has booted
 SHOTS = [
-    ("app-full", (1440, 940), 2, """
+    ("app-full", (1560, 1000), 2, """
         select(6); document.querySelector('.lyrics').scrollTop = 300;
     """),
-    ("app-stage", (1420, 300), 2, """
+    ("app-stage", (1520, 300), 2, """
         document.querySelector('.lyrics').style.display = 'none';
         document.querySelector('.bar').style.display = 'none';
         select(6); focusLine(S.project.lines[6]); S.selWord = 2;
         S.audio.currentTime = S.project.lines[6].start + 1.15;
         draw();
     """),
-    ("app-review", (1180, 860), 2, """
+    ("app-review", (1260, 880), 2, """
         S.additions = [];   // the sheet leads with missing lines; this shot is the queue
         document.getElementById('btn-review').click();
         S.review.at = S.review.queue.findIndex(q => q.scope === 'word');
@@ -66,8 +67,8 @@ SHOTS = [
 # so it passes through three sections and one instrumental - which is the only
 # way to show that the colour is the song's structure and not a slideshow.
 DEMO_CLIP = "0:34-1:22"
-DEMO_WIDTH = 1280
-DEMO_CRF = "30"
+DEMO_WIDTH = 1920
+DEMO_CRF = "31"
 DEMO_AUDIO = "112k"   # it is a music video; muting it would be a strange demo
 STILL_AT = 36.0       # seconds into the clip: mid-word, mid-chorus
 
@@ -147,6 +148,39 @@ def capture_demo(workdir: Path) -> list[Path]:
     return [video, still]
 
 
+def check_page() -> list[str]:
+    """Every width/height on the page against the file it points at.
+
+    Not for equality - the shots are deliberately twice their box, so they stay
+    sharp on a retina screen. Two things are worth checking, and both have gone
+    wrong here:
+
+    - the *aspect* has to match, because the attributes map to a presentational
+      height, and if the CSS ever forgets `height:auto` that height is what gets
+      drawn. Every screenshot on the page was stretched that way once.
+    - the file has to be at least as many pixels as the box it is drawn in, or
+      the browser is upscaling and calling it a screenshot.
+    """
+    page = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+    wrong = []
+    for src, w, h in re.findall(
+        r'src="(img/[^"]+)"[^>]*?width="(\d+)" height="(\d+)"', page, re.S
+    ):
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0",
+             str(ROOT / "docs" / src)],
+            capture_output=True, text=True, check=True).stdout
+        fw, fh = (int(n) for n in out.strip().rstrip(",").split(",")[:2])
+        box, real = int(w) / int(h), fw / fh
+        if abs(box - real) > 0.005:
+            wrong.append(f"{src}: page shape {box:.3f}, file shape {real:.3f}"
+                         f" - it will be drawn stretched")
+        if fw < int(w):
+            wrong.append(f"{src}: {fw}px wide, drawn in a {w}px box - upscaled")
+    return wrong
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("workdir", nargs="?", default="workdir/gravity-in-motion",
@@ -173,3 +207,6 @@ if __name__ == "__main__":
         raise SystemExit(f"no aligned track at {workdir}; the video clip is unchanged")
     for out in capture_demo(workdir):
         print(f"  {out.relative_to(ROOT)!s:34} {out.stat().st_size / 1024:6.0f} KB")
+
+    for problem in check_page():
+        print(f"  !! {problem}")

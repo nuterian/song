@@ -21,7 +21,7 @@ body{
   -webkit-font-smoothing:antialiased;overflow-x:hidden;
 }
 a{color:inherit;text-decoration:none}
-img,video{max-width:100%;display:block}
+img,video{max-width:100%;height:auto;display:block}
 ::selection{background:rgba(255,122,61,.3)}
 
 .wrap{max-width:720px;margin:0 auto;padding:0 24px}
@@ -56,7 +56,7 @@ h2{font-size:clamp(32px,5.6vw,60px);line-height:1.02;letter-spacing:-.04em;
 code{font:.87em var(--mono);background:#151a21;border:1px solid var(--line);
   border-radius:5px;padding:1.5px 6px;color:#dbe4f0}
 
-section{padding:clamp(84px,13vw,168px) 0 0}
+section{padding:clamp(96px,14vw,184px) 0 0}
 .hero{padding:clamp(64px,11vw,124px) 0 0;text-align:center}
 .hero .wrap{max-width:860px}
 
@@ -77,17 +77,23 @@ section{padding:clamp(84px,13vw,168px) 0 0}
 .under{font:13px/1.5 var(--mono);color:var(--faint);margin:24px 0 0;letter-spacing:.02em}
 
 /* ---------- media ---------- */
-figure{margin:clamp(38px,6vw,64px) 0 0}
-figure img,figure video{width:100%;border-radius:14px;border:1px solid var(--line);
-  box-shadow:0 30px 90px rgba(0,0,0,.65)}
-figcaption{margin:18px auto 0;max-width:640px;font-size:14px;line-height:1.6;
+figure{margin:clamp(44px,6.5vw,76px) 0 0}
+/* height:auto is load-bearing. The width/height attributes are there so the
+   browser can reserve the right box before the file arrives, but they also map
+   to a presentational height - and with width:100% and no height:auto that
+   height wins, so every shot is drawn at its natural width's height and comes
+   out stretched. */
+figure img,figure video{width:100%;height:auto;display:block;
+  border-radius:14px;border:1px solid var(--line);
+  box-shadow:0 30px 90px rgba(0,0,0,.6)}
+figcaption{margin:22px auto 0;max-width:620px;font-size:14px;line-height:1.65;
   color:var(--faint);text-align:center}
 figcaption b{color:var(--dim);font-weight:600}
 
 /* ---------- numbers ---------- */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
   border:1px solid var(--line);border-radius:14px;overflow:hidden;
-  margin:clamp(40px,6vw,60px) 0 0}
+  margin:clamp(44px,6.5vw,68px) 0 0}
 .stat{background:#0e1116;padding:32px 12px;text-align:center}
 .stat b{display:block;font:700 clamp(30px,4.6vw,46px)/1 var(--mono);
   letter-spacing:-.04em;margin-bottom:10px}
@@ -96,7 +102,7 @@ figcaption b{color:var(--dim);font-weight:600}
 @media (max-width:660px){ .stats{grid-template-columns:repeat(2,1fr)} }
 
 /* ---------- disclosure ---------- */
-details{margin:32px 0 0;border-top:1px solid var(--line)}
+details{margin:clamp(44px,5vw,64px) 0 0;border-top:1px solid var(--line)}
 details summary{list-style:none;cursor:pointer;padding:17px 2px;display:flex;
   align-items:center;gap:10px;font-size:15px;font-weight:560;color:var(--dim);
   transition:color .15s var(--ease)}
@@ -152,7 +158,7 @@ footer a:hover{color:var(--ink)}
 
   <div class="wide">
     <figure>
-      <img src="img/app-full.png" width="1440" height="940" fetchpriority="high"
+      <img src="img/app-full.png" width="1560" height="1000" fetchpriority="high"
            alt="The song app: a waveform with every lyric line bracketed, and the lyrics listed below with per-line scores.">
     </figure>
   </div>
@@ -175,7 +181,7 @@ footer a:hover{color:var(--ink)}
     <figure>
       <video src="img/video-demo.mp4" poster="img/video-still.jpg"
              controls muted autoplay loop playsinline preload="metadata"
-             width="1280" height="720"
+             width="1920" height="1080"
              aria-label="Forty-eight seconds of the karaoke video: three lyric lines at the bottom left, the middle one filling word by word in an accent colour, over a soft lit wash that changes with each section, with a thin waveform level with it on the right."></video>
       <script>
         /* The only script here. An autoplaying loop is motion, and the
@@ -243,7 +249,7 @@ footer a:hover{color:var(--ink)}
   </div>
   <div class="wide">
     <figure>
-      <img src="img/app-stage.png" loading="lazy" width="1420" height="300"
+      <img src="img/app-stage.png" loading="lazy" width="1520" height="300"
            alt="The timeline zoomed to one line, word cells along the bottom with dividers running the full height of the waveform.">
       <figcaption>
         Word boundaries are cut against the audio itself — <b>a divider that
@@ -327,7 +333,7 @@ footer a:hover{color:var(--ink)}
   </div>
   <div class="wide">
     <figure>
-      <img src="img/app-review.png" loading="lazy" width="1180" height="860"
+      <img src="img/app-review.png" loading="lazy" width="1260" height="880"
            alt="The Check timings card: a waveform strip with blue, green and violet markers, and three options — Now, Suggested and Adjusted — each with its own play button.">
       <figcaption>
         Blue is the timing now, green is what the second model wants, violet is
