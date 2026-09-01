@@ -1,9 +1,14 @@
 """Compose the visuals, burn the karaoke in, mux the audio.
 
-One ffmpeg process does all three. Generated frames go in on stdin as raw RGB,
-get scaled up to output size, have the .ass burned onto them by libass, and come
-out muxed against the track. Writing the frames to a temporary directory first
-would double the IO and cost a gigabyte of PNGs for a five-minute song.
+One ffmpeg process does all three. Generated frames go in on stdin as raw
+planar RGB, have the .ass burned onto them by libass, and come out muxed against
+the track. Writing the frames to a temporary directory first would double the IO
+and cost a gigabyte of PNGs for a five-minute song.
+
+Planar rather than packed, because Scene builds its frames a channel at a time
+and a channel of a packed frame is every fourth byte. gbrp is the same pixels,
+in the layout the generator already has them in, so nothing is transposed
+between here and there.
 """
 
 from __future__ import annotations
@@ -148,7 +153,7 @@ def run(
     log = Path(tempfile.mkstemp(prefix="song-ffmpeg-", suffix=".log")[1])
     command = [
         "ffmpeg", "-y", "-nostdin", "-v", "error",
-        "-f", "rawvideo", "-pix_fmt", "rgb24",
+        "-f", "rawvideo", "-pix_fmt", "gbrp",
         "-s", f"{scene.w}x{scene.h}", "-r", str(fps), "-i", "-",
     ]
     if preview:

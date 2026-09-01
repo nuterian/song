@@ -474,12 +474,22 @@ class Scene:
             * np.exp(-(((xs - PAGE_X) / PAGE_W) ** 2))[None, :]
         ).astype(np.float32) * PAGE_LIGHT
 
-        # Reused every frame. At output resolution these are 2.6 MB apiece and
+        # Reused every frame. At output resolution these are 8 MB apiece and
         # allocating them 8574 times is pure garbage-collector work.
-        self._img = np.empty((h, w, 3), dtype=np.float32)
+        #
+        # Channel first, (3, h, w), and that is worth 2.6x on the most expensive
+        # line in the file. Every composite here works on one channel at a time,
+        # and in an (h, w, 3) frame a single channel is a strided view - every
+        # fourth byte - so each of those reads and writes at a quarter of the
+        # bus width. One lobe over a 1080p frame costs 3.93 ms that way and
+        # 1.54 ms with the channels contiguous. The transpose back at the end
+        # would eat most of it, so there is no transpose back: ffmpeg takes
+        # planar RGB directly, and _out below is already that frame.
+        self._img = np.empty((3, h, w), dtype=np.float32)
         self._lobe = np.empty((h, w), dtype=np.float32)
         self._tint = np.empty((h, w), dtype=np.float32)
         self._band_tint = np.empty((self.band.stop - self.band.start, w), np.float32)
+        self._out = np.empty((3, h, w), dtype=np.uint8)
 
         rng = np.random.default_rng(0xB3A7)
         self.grain = (rng.random((h, w), dtype=np.float32) - 0.5) * GRAIN
@@ -597,6 +607,11 @@ class Scene:
     # ------------------------------------------------------------- the frame
 
     def frame(self, t: float) -> np.ndarray:
+        """One frame, as (3, h, w) uint8 planes in ffmpeg's `gbrp` order.
+
+        Not (h, w, 3), and not RGB: see _precompute. The buffer is reused, so a
+        caller that wants to keep a frame has to copy it.
+        """
         energy = self._at(self.mix, t)
         pulse = self._pulse(t)
 
@@ -611,7 +626,9 @@ class Scene:
         img, field, tint = self._img, self._lobe, self._tint
         # The floor, lifted toward the top. Written as a column and broadcast:
         # the gradient is constant across a row.
-        img[:] = deep + (mid - deep) * self.wash[:, :, None]
+        for channel in range(3):
+            np.multiply(self.wash, mid[channel] - deep[channel], out=img[channel])
+            img[channel] += deep[channel]
 
         # Each field drifts on two periods that share no common multiple, so the
         # arrangement never visibly returns to one you have seen. The depths are
@@ -633,21 +650,21 @@ class Scene:
             # colour to a nearly-white area darkens some channel of it, and the
             # dark patches drifting round the frame were the pools themselves.
             for channel in range(3):
-                np.subtract(colour[channel], img[:, :, channel], out=tint)
+                np.subtract(colour[channel], img[channel], out=tint)
                 tint *= field
-                img[:, :, channel] += tint
+                img[channel] += tint
 
         # Toward white rather than added, so the lift under the words is the
         # same amount of contrast wherever the picture happens to be bright.
         for channel in range(3):
-            np.subtract(1.0, img[:, :, channel], out=tint)
+            np.subtract(1.0, img[channel], out=tint)
             tint *= self.page
-            img[:, :, channel] += tint
+            img[channel] += tint
 
         # Composited, not added. The lines are darker than the picture they sit
         # on and adding a dark colour to a light one lightens it: the trace was
         # drawn correctly and invisibly for a while on that mistake.
-        band = img[self.band]
+        band = img[:, self.band]
         glow = self._beat_glow(t)
         # What the stroke is coloured, column by column: ink everywhere, pulled
         # toward the warm bright row wherever a beat is blooming. A colour per
@@ -663,11 +680,17 @@ class Scene:
                 t, name, height, weight * (1.0 + TRACE_BASS_WEIGHT * bass), glow)
             stroke *= 0.66 + 0.34 * self._at(self.mix, t)
             for channel in range(3):
-                np.multiply(stroke, band[:, :, channel] - target[channel][None, :],
+                np.subtract(band[channel], target[channel][None, :],
                             out=self._band_tint)
-                band[:, :, channel] -= self._band_tint
+                self._band_tint *= stroke
+                band[channel] -= self._band_tint
 
-        img += self.grain[:, :, None]
+        img += self.grain[None]
         np.clip(img, 0.0, 1.0, out=img)
         img *= 255.0
-        return img.astype(np.uint8)
+        # Planar, and in ffmpeg's order for `gbrp`, which is green, blue, red.
+        # The rounding is the cast's: it truncates, and the grain underneath is
+        # a full level wide, so nothing here is deciding a level on its own.
+        for plane, channel in enumerate((1, 2, 0)):
+            np.copyto(self._out[plane], img[channel], casting="unsafe")
+        return self._out
