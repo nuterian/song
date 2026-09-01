@@ -160,7 +160,7 @@ sparse ops there, so it is CPU throughout.
 python -m unittest discover -s tests
 ```
 
-109 tests over the logic that carries the claims — lyrics parsing, the
+110 tests over the logic that carries the claims — lyrics parsing, the
 word-timing invariants, word-to-line mapping, the export formats, the
 missing-line thresholds, and the karaoke arithmetic and layout — plus a guard that those
 modules stay importable with no third-party package present at all, which is
