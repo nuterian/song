@@ -36,6 +36,15 @@ IMG = ROOT / "docs" / "img"
 PORT = 8155
 
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+CWEBP = "cwebp"
+
+# Everything ships as WebP. These are 2x screenshots of a dark UI - large flat
+# fields with hairline text over them - and PNG spends most of its bytes on the
+# gradients rather than on the text. At q82, measured after the 2x file is
+# halved to the size it is actually drawn at, SSIM is 0.995 or better on all
+# three and the type is indistinguishable from the PNG side by side. The three
+# shots go from 1258 KB to 332 KB.
+WEBP_Q = "82"
 
 # name, (width, height), device scale, setup run once the app has booted
 SHOTS = [
@@ -70,9 +79,19 @@ SHOTS = [
 # it - two lines instead of three - and that would be the opening frame of the
 # whole page.
 DEMO_CLIP = "0:40-1:22"
-DEMO_WIDTH = 1920
-DEMO_CRF = "31"
-DEMO_AUDIO = "112k"   # it is a music video; muting it would be a strange demo
+
+# 1600, not 1920. The clip is drawn in a 1232 px box, so 1920 is 1.56x and 1600
+# is 1.30x - both are still a downsample on a 2x screen. Measured against the
+# 16 MB render, at 1232 px every rung from 1280 to 1920 lands inside 0.001 SSIM
+# of the others, and even resampled up to 2464 device pixels the spread is
+# 0.9908 to 0.9919. Resolution above 1600 is buying almost nothing here, so it
+# is spent on a lower CRF instead. aq-mode=3 is free: it is both 5% smaller and
+# very slightly closer to the source, because this picture is mostly gradient
+# and the default aq starves exactly that.
+DEMO_WIDTH = 1600
+DEMO_CRF = "30"
+DEMO_X264 = "aq-mode=3:aq-strength=0.8"
+DEMO_AUDIO = "96k"    # it is a music video; muting it would be a strange demo
 STILL_AT = 29.0       # seconds into the clip: mid-word, mid-chorus
 
 BOOT = """
@@ -105,18 +124,24 @@ def capture(name: str, size: tuple[int, int], scale: int, setup: str) -> Path:
     html = (DEMO / "index.html").read_text(encoding="utf-8")
     page.write_text(html.replace("</body>", BOOT.replace("__SETUP__", setup) + "</body>"),
                     encoding="utf-8")
-    out = IMG / f"{name}.png"
+    shot = IMG / f"{name}.png"
+    out = IMG / f"{name}.webp"
     try:
         subprocess.run(
             [CHROME, "--headless", "--disable-gpu", "--hide-scrollbars",
              f"--force-device-scale-factor={scale}",
              f"--window-size={size[0]},{size[1]}",
              "--virtual-time-budget=12000",
-             f"--screenshot={out}", f"http://127.0.0.1:{PORT}/demo/_shot.html"],
+             f"--screenshot={shot}", f"http://127.0.0.1:{PORT}/demo/_shot.html"],
             check=True, capture_output=True,
         )
+        # -sharp_yuv, because the accent and the green score chips are the one
+        # place on a grey UI where chroma subsampling has something to ruin.
+        subprocess.run([CWEBP, "-quiet", "-q", WEBP_Q, "-m", "6", "-sharp_yuv",
+                        str(shot), "-o", str(out)], check=True)
     finally:
         page.unlink(missing_ok=True)
+        shot.unlink(missing_ok=True)
     return out
 
 
@@ -133,21 +158,29 @@ def capture_demo(workdir: Path) -> list[Path]:
         cwd=ROOT, check=True,
     )
     source = workdir / "karaoke-preview.mp4"
-    video, still = IMG / "video-demo.mp4", IMG / "video-still.jpg"
+    video, still = IMG / "video-demo.mp4", IMG / "video-still.webp"
     subprocess.run(
         ["ffmpeg", "-y", "-loglevel", "error", "-i", str(source),
-         "-vf", f"scale={DEMO_WIDTH}:-2", "-c:v", "libx264", "-preset", "slow",
-         "-crf", DEMO_CRF, "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+         "-vf", f"scale={DEMO_WIDTH}:-2:flags=lanczos",
+         "-c:v", "libx264", "-preset", "veryslow", "-crf", DEMO_CRF,
+         "-x264-params", DEMO_X264,
+         "-pix_fmt", "yuv420p", "-movflags", "+faststart",
          "-c:a", "aac", "-b:a", DEMO_AUDIO, str(video)],
         check=True,
     )
-    # JPEG, because the frame is a photograph of a gradient with film grain in
-    # it, which is the one thing PNG is bad at.
+    # The poster is the largest thing the page paints before anything has
+    # loaded, so it is the one file worth being fussy about: WebP at q80 is
+    # 14 KB where the same frame as JPEG is 27 KB.
+    frame = IMG / "_still.png"
     subprocess.run(
         ["ffmpeg", "-y", "-loglevel", "error", "-ss", str(STILL_AT), "-i", str(source),
-         "-frames:v", "1", "-update", "1", "-q:v", "3", str(still)],
+         "-frames:v", "1", "-vf", f"scale={DEMO_WIDTH}:-2:flags=lanczos",
+         "-update", "1", str(frame)],
         check=True,
     )
+    subprocess.run([CWEBP, "-quiet", "-q", "80", "-m", "6", "-sharp_yuv",
+                    str(frame), "-o", str(still)], check=True)
+    frame.unlink(missing_ok=True)
     return [video, still]
 
 
@@ -192,6 +225,8 @@ if __name__ == "__main__":
 
     if not Path(CHROME).exists():
         raise SystemExit(f"need Chrome at {CHROME}")
+    if shutil.which(CWEBP) is None:
+        raise SystemExit(f"need {CWEBP} on PATH (brew install webp)")
     if not (DEMO / "index.html").exists():
         raise SystemExit("run tools/build_demo.py first")
     IMG.mkdir(parents=True, exist_ok=True)

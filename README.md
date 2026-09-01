@@ -16,7 +16,7 @@ line, drag a word boundary, run the guided check, hear both candidates for a
 disputed word and drag a third onto the waveform. Only writing to disk needs it
 running on your machine.
 
-![The song app: a waveform with every lyric line bracketed, and the lyrics below with per-line scores](docs/img/app-full.png)
+![The song app: a waveform with every lyric line bracketed, and the lyrics below with per-line scores](docs/img/app-full.webp)
 
 ```bash
 ./setup.sh                       # one-time, ~5 min
@@ -78,7 +78,7 @@ here* and nothing else. Two guided paths sit on top of it:
   by construction, sung and absent from the lyrics. Proposed only when it matches
   a line you already wrote, so approving is a five-second listen, never proofreading.
 
-![The Check timings card: a waveform strip with three candidate markers](docs/img/app-review.png)
+![The Check timings card: a waveform strip with three candidate markers](docs/img/app-review.webp)
 
 ## The video
 
@@ -108,7 +108,7 @@ Everything answers the mix with its best correlation at zero lag, and everything
 it does is small — 6.9% of the available brightness over ten seconds. Nothing to
 supply, no stock footage, no still image.
 
-![A frame of the karaoke video: three lyric lines at the bottom left with the middle one part-filled in an accent colour, and a thin zigzag waveform level with it on the right](docs/img/video-still.jpg)
+![A frame of the karaoke video: three lyric lines at the bottom left with the middle one part-filled in an accent colour, and a thin zigzag waveform level with it on the right](docs/img/video-still.webp)
 
 ## Commands
 
