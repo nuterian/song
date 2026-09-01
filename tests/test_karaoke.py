@@ -374,12 +374,27 @@ class TheLift(unittest.TestCase):
     """The word being sung grows, and eases doing it."""
 
     def rises(self, tags):
-        return re.findall(
-            r"\\t\((\d+),(\d+),([\d.]+),\\fscx([\d.]+)\\fscy[\d.]+\)", tags)
+        """Every scale stop: (begins, ends, size)."""
+        return [(int(a), int(b), float(c)) for a, b, c in re.findall(
+            r"\\t\((\d+),(\d+),\\fscx([\d.]+)\\fscy[\d.]+\)", tags)]
+
+    def stages(self, start_cs, end_cs):
+        """The chain split at the creep - the one stop that ends with the word.
+
+        Every test below is about which of the three stages a property belongs
+        to, and a test that reads the whole chain at once can be satisfied by
+        the wrong stage. Three of these were, and passed a mutation that took
+        the creep out entirely, because the release still had stops in it that
+        looked like what they were asking for.
+        """
+        stops = self.rises(karaoke.lift(start_cs, end_cs))
+        at = [i for i, (_, ends, _) in enumerate(stops) if ends == end_cs * 10]
+        self.assertEqual(len(at), 1, "expected one stop ending with the word")
+        return stops[:at[0]], stops[at[0]], stops[at[0] + 1:]
 
     def test_it_grows_by_the_full_amount_when_the_word_is_long_enough(self):
-        _, _, _, scale = self.rises(karaoke.lift(0, 40))[0]
-        self.assertEqual(float(scale), 100 + karaoke.LIFT)
+        self.assertEqual(max(s for *_, s in self.rises(karaoke.lift(0, 40))),
+                         100 + karaoke.LIFT)
 
     def test_nothing_is_drawn_around_the_letterforms(self):
         # Weight used to be an animated border in the fill's own colour. It is
@@ -391,16 +406,49 @@ class TheLift(unittest.TestCase):
         self.assertEqual(style.split(",")[16], str(karaoke.BORDER))
         self.assertEqual(karaoke.BORDER, 0)
 
-    def test_both_halves_carry_an_acceleration(self):
-        # \t is linear without one, and a linear scale over 150 ms is a jump.
-        tags = karaoke.lift(0, 40)
-        self.assertIn(f",{karaoke.LIFT_EASE_IN},", tags)
-        self.assertIn(f",{karaoke.LIFT_EASE_OUT},", tags)
+    def test_the_stages_join_up_and_never_overlap(self):
+        # Two \t running at once on the same property is the documented way to
+        # get a word that jumps: the later one does not cancel the earlier.
+        stops = self.rises(karaoke.lift(30, 88))
+        for (_, ends, _), (begins, _, _) in zip(stops, stops[1:]):
+            self.assertEqual(ends, begins)
+
+    def test_the_attack_and_the_release_ease_rather_than_run_at_one_speed(self):
+        # \t is linear, and its acceleration is a power curve - slow at one end
+        # or the other, never both. The ease is in where the segments stop.
+        attack, _, release = self.stages(30, 88)
+        for leg in (attack, release):
+            self.assertGreaterEqual(len(leg), 3)
+            steps = [abs(b - a) for (*_, a), (*_, b) in zip(leg, leg[1:])]
+            self.assertGreater(max(steps), min(steps) * 1.5)
+
+    def test_the_word_is_still_growing_while_it_is_still_being_sung(self):
+        # The creep. A word that reaches full size and then holds is three
+        # events; one that never quite stops arriving is one long one.
+        attack, creep, _ = self.stages(30, 88)
+        self.assertEqual(creep[2], 100 + karaoke.LIFT)
+        self.assertLess(attack[-1][2], 100 + karaoke.LIFT)
+        self.assertGreater(creep[1] - creep[0], 200)
+
+    def test_the_attack_is_a_share_of_the_word_not_a_fixed_time(self):
+        # A snapped syllable and a held note do not want the same attack. Both
+        # of these sit inside the clamps and are longer than their own attack,
+        # so what is being compared is the proportion and not either clamp -
+        # 300 vs 800 ms passed this even with the floor raised above the ceiling,
+        # because the shorter word's attack was being cut off by its own end.
+        def over(end_cs):
+            attack, _, _ = self.stages(0, end_cs)
+            return attack[-1][1] - attack[0][0]
+        self.assertGreater(over(75), over(40))
 
     def test_a_short_word_lifts_less_so_a_fast_run_does_not_strobe(self):
-        long_word = float(self.rises(karaoke.lift(0, 40))[0][3])
-        short_word = float(self.rises(karaoke.lift(0, 8))[0][3])
+        long_word = max(s for *_, s in self.rises(karaoke.lift(0, 40)))
+        short_word = max(s for *_, s in self.rises(karaoke.lift(0, 8)))
         self.assertGreater(long_word, short_word)
+
+    def test_it_lands_back_at_the_size_it_started(self):
+        _, _, release = self.stages(30, 88)
+        self.assertEqual(release[-1][2], 100.0)
 
     def test_a_word_too_short_to_show_a_lift_gets_no_tags_for_one(self):
         # The threshold is half a pixel of growth, so it stays honest whatever
@@ -409,4 +457,25 @@ class TheLift(unittest.TestCase):
         self.assertNotEqual(karaoke.lift(0, 1, size=400), "")
 
     def test_the_accent_settles_to_ink(self):
-        self.assertIn(karaoke.tag_colour(karaoke.INK), karaoke.settle(100))
+        self.assertTrue(karaoke.settle(100).endswith(
+            f"\\1c{karaoke.tag_colour(karaoke.INK)})"))
+
+    def test_the_accent_drains_through_the_colours_between(self):
+        # One \t straight to ink is linear, and a linear colour fade has two
+        # corners: the moment it starts and the moment it stops. Pinned against
+        # a literal rather than against SETTLE_STEPS, which only made the test
+        # agree with whatever the constant happened to say.
+        stops = re.findall(r"\\1c(&H[0-9A-F]{6}&)", karaoke.settle(100))
+        self.assertGreaterEqual(len(stops), 3)
+        self.assertEqual(len(set(stops)), len(stops))
+        self.assertNotIn(karaoke.tag_colour(karaoke.ACCENT), stops)
+        self.assertEqual(stops.count(karaoke.tag_colour(karaoke.INK)), 1)
+
+    def test_the_settle_eases_rather_than_running_at_one_speed(self):
+        # Read off the emitted tags, not off blend() - blend is what settle
+        # uses, so asking it the same question twice proves nothing.
+        stops = re.findall(r"\\1c&H[0-9A-F]{4}([0-9A-F]{2})&", karaoke.settle(100))
+        reds = [int(r, 16) for r in stops]
+        self.assertEqual(reds, sorted(reds, reverse=True))
+        steps = [a - b for a, b in zip(reds, reds[1:])]
+        self.assertGreater(max(steps), min(steps) * 1.5)

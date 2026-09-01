@@ -48,8 +48,13 @@ EDGE = (0xFFFFFF, 0xFF)
 INK = 0x100B14
 UNSUNG = (INK, 0xA6)
 ACCENT = 0xC4490A
-SETTLE_HOLD = 130            # ms the accent holds after the word ends
-SETTLE = 320                 # ...then this long to fade to ink
+# 450 ms of tail all told, which is what it was before this was eased and is
+# not a number to grow. The median word here is 582 ms, so a longer drain than
+# this leaves the word before still visibly lit under the word being sung, and
+# two lit words is no lit word.
+SETTLE_HOLD = 120            # ms the accent holds after the word ends
+SETTLE = 330                 # ...then this long to drain back to ink
+SETTLE_STEPS = 3             # eased, like everything else that moves
 
 # The word being sung is larger than the rest of its line, and eases in and back
 # out again. Size and colour carry it and nothing else does: weight was an
@@ -60,13 +65,24 @@ SETTLE = 320                 # ...then this long to fade to ink
 # The line is anchored at its left edge, so a word growing pushes the words
 # after it to the right and leaves the ones before it alone. Centred, the whole
 # sentence would shuffle under the reader on every syllable.
-LIFT = 26.0        # percent larger, for a word long enough to show it
-LIFT_FULL = 240    # ms of word length that earns the whole lift
-LIFT_LEAD = 70     # ms early, so the word is already up when it is sung
-LIFT_IN = 150      # ms to grow
-LIFT_OUT = 300     # ...and to settle back
-LIFT_EASE_IN = 0.55    # <1 moves early and arrives slowly
-LIFT_EASE_OUT = 1.7    # >1 leaves slowly and lands fast
+# The word is sung for a while - 582 ms at the median on this track, and 883 at
+# the third quartile - and the first version of this spent 150 ms of that
+# arriving and the rest of it sitting perfectly still at full size. A word that
+# pops up, holds and pops down is three events; a word that is being sung is one
+# long one. So the lift arrives over a share of the word rather than over a
+# fixed 150 ms, and then keeps going: it is still 14% short of its full size
+# when it gets there, and spends the whole rest of the word creeping up to it.
+# That last stretch is under a third of a pixel of growth and nobody will ever
+# see it happening - which is the point. What you see is that it never stops.
+LIFT = 26.0            # percent larger, for a word long enough to show it
+LIFT_FULL = 240        # ms of word length that earns the whole lift
+LIFT_LEAD = 90         # ms early, so the word is already moving when it is sung
+LIFT_ATTACK = 0.38     # the share of the word spent arriving...
+LIFT_ATTACK_MIN = 120  # ...between these, so neither a snapped syllable
+LIFT_ATTACK_MAX = 300  #    nor a held note gets an attack that suits the other
+LIFT_SWELL = 0.86      # how much of the lift the attack delivers; the rest creeps
+LIFT_OUT = 340         # ms to release, once the word is over
+LIFT_STEPS = 4         # segments per eased stage
 
 # Bottom left, three lines deep, and they move. A line rises from the next slot
 # to the sung slot to the previous slot as the song goes through it, growing and
@@ -255,12 +271,53 @@ def karaoke_text(line, start_cs: int, state: str = "") -> str:
     return "".join(out)
 
 
-def lift(start_cs: int, end_cs: int, size: int = FONT_SIZE) -> str:
-    """`\\t` pair that grows and thickens one word as it is sung, then lets it go.
+def eased(begin: int, until: int, steps: int, stop) -> str:
+    """A `\\t` chain across one span whose stops follow a smoothstep.
 
-    Both transforms carry an acceleration, which is the whole difference between
-    a word that arrives and one that appears: `\\t` is linear without it, and a
-    linear scale over 150 ms reads as a jump.
+    `\\t` interpolates linearly. Its optional acceleration is a power curve,
+    `p**a`, and a power curve is slow at one end or the other but never at both:
+    at a<1 it leaves at infinite speed, at a>1 it arrives at full speed. Two of
+    them back to back is worse than either, because the join lands where one is
+    at full speed and the next is at infinite - a snap in the middle of the
+    move, which is exactly where nobody is expecting one.
+
+    An ease that is slow at both ends is the one that reads as natural, and the
+    way to get one out of `\\t` is the way `\\move` already gets one here: cut
+    the span into equal slices and put the curve into where they stop. Four
+    slices make the fastest one 2.2x the slowest, which is a curve; the two in
+    the middle are the same speed as each other, so there is no corner between
+    them at all.
+    """
+    out, at = [], begin
+    for k in range(1, steps + 1):
+        to = round(begin + (until - begin) * k / steps)
+        if to > at:
+            out.append(f"{{\\t({at},{to},{stop(smoothstep(k / steps))})}}"[1:-1])
+            at = to
+    return "".join(out)
+
+
+def blend(here: int, there: int, how_far: float) -> int:
+    """One point on the way from one packed RGB to another."""
+    out = 0
+    for shift in (16, 8, 0):
+        a, b = (here >> shift) & 0xFF, (there >> shift) & 0xFF
+        out |= round(a + (b - a) * how_far) << shift
+    return out
+
+
+def lift(start_cs: int, end_cs: int, size: int = FONT_SIZE) -> str:
+    """The `\\t` chain that swells one word as it is sung, then lets it go.
+
+    Three stages, and the middle one is the reason the other two are shaped the
+    way they are. The word arrives over a share of its own length rather than
+    over a fixed time, so a snapped syllable and a held note are not given the
+    same attack. It arrives 14% short. Then it spends every remaining
+    millisecond of the word closing that gap, which at this size is a third of a
+    pixel spread over half a second - far too slow to watch, and the whole
+    difference between a word that is being held and a word that is merely large.
+    Then it releases, eased at both ends so it neither jumps off the top nor
+    lands hard at the bottom.
 
     Every word's block opens with `\\r` because of this. An override applies to
     all the text after it, and a `\\t` that has not started yet does not cancel
@@ -270,22 +327,33 @@ def lift(start_cs: int, end_cs: int, size: int = FONT_SIZE) -> str:
     """
     length = (end_cs - start_cs) * 10
     amount = LIFT * min(1.0, length / LIFT_FULL)
-    # Below half a pixel of growth nobody can see it, and two transforms cost
-    # more than nothing. Expressed against the size rather than as a flat
+    # Below half a pixel of growth nobody can see it, and a chain of transforms
+    # costs more than nothing. Expressed against the size rather than as a flat
     # percentage, so it stays true when either the size or the lift changes.
     if amount * size < 50.0:
         return ""
 
     rise = max(0, start_cs * 10 - LIFT_LEAD)
     fall = end_cs * 10
-    # A word shorter than the lift itself gets a shorter one, not a lift that
-    # overruns into its own settling.
-    peak = min(rise + LIFT_IN, max(rise + 40, fall))
-    scale = round(100 + amount, 1)
-    return (
-        f"\\t({rise},{peak},{LIFT_EASE_IN},\\fscx{scale}\\fscy{scale})"
-        f"\\t({fall},{fall + LIFT_OUT},{LIFT_EASE_OUT},\\fscx100\\fscy100)"
-    )
+    attack = min(max(length * LIFT_ATTACK, LIFT_ATTACK_MIN), LIFT_ATTACK_MAX)
+    # A word shorter than its own attack gets a shorter one, not an attack that
+    # overruns into its own release.
+    peak = min(rise + round(attack), max(rise + 40, fall))
+    top, held = 100.0 + amount, 100.0 + amount * LIFT_SWELL
+
+    def scale(at: float) -> str:
+        return f"\\fscx{at:.1f}\\fscy{at:.1f}"
+
+    out = [eased(rise, peak, LIFT_STEPS,
+                 lambda u: scale(100.0 + (held - 100.0) * u))]
+    if fall > peak:
+        # The creep. One linear transform, because it is a third of a pixel and
+        # a curve on it would be a curve nobody could measure, let alone see.
+        out.append(f"\\t({peak},{fall},{scale(top)})")
+    from_ = top if fall > peak else held
+    out.append(eased(fall, fall + LIFT_OUT, LIFT_STEPS,
+                     lambda u: scale(from_ + (100.0 - from_) * u)))
+    return "".join(out)
 
 
 def settle(end_cs: int) -> str:
@@ -299,7 +367,12 @@ def settle(end_cs: int) -> str:
     # Clamped, because a line is also drawn in the slot above while the next
     # one is sung, and there its words all ended before the event began.
     leave = max(0, end_cs * 10 + SETTLE_HOLD)
-    return f"\\t({leave},{leave + SETTLE},\\1c{tag_colour(INK)})"
+    # Eased, for the same reason the size is. A linear colour fade has no
+    # velocity to watch, but it does have two corners - the moment it starts and
+    # the moment it stops - and on a word you are looking straight at, those are
+    # the two moments you see.
+    return eased(leave, leave + SETTLE, SETTLE_STEPS,
+                 lambda u: f"\\1c{tag_colour(blend(ACCENT, INK, u))}")
 
 
 Look = tuple      # (fill alpha, unsung alpha, edge alpha, scale percent)
