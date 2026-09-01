@@ -91,24 +91,31 @@ python -m song video workdir/my-track --preview 1:04 # 25 seconds, to see it
 ```
 
 Three lines sit at the bottom left — the one being sung, with the one before and
-the one after smaller and faded either side of it. Each word grows, thickens and
-fills with an accent colour as it lands, then settles back to ink behind you;
-when the line changes the whole stack rises by one, on a curve rather than a
-slide. That is ASS `\kf` karaoke drawn by libass, off the same timings the UI
-edits, so there is no second renderer to keep in agreement with the first.
+the one after smaller and faded either side of it. Each word fills with an
+accent colour as it lands and swells for as long as it is held: the swell
+arrives over a share of the word rather than over a fixed time, and then never
+quite finishes arriving, so a sustained note is one long movement instead of a
+pop and a wait. It settles back to ink behind you. When the line changes the
+whole stack rises by one, on a curve rather than a slide. That is ASS `\kf`
+karaoke drawn by libass, off the same timings the UI edits, so there is no
+second renderer to keep in agreement with the first.
 
-Level with it on the right, one zigzag line — drawn from the mix, weighted by
+Level with it on the right, one smooth curve — drawn from the mix, weighted by
 the bass and carrying the air band as a fine tremor, because a peak envelope
 cannot tell a kick from a hi-hat and the difference is most of what a song
-sounds like. Behind both, four fields of light drift and answer different parts
-of the track, over a frame lit throughout and tinted by the section you are in,
-keyed on its *name*, so every chorus looks the same.
+sounds like. It covers a second and a half of the track, so a beat has a place
+on it: the stroke blooms warm where each beat falls, full strength on a
+downbeat, and that bloom crosses the middle of the curve on the frame the beat
+is heard. It dissolves into the picture at both ends rather than stopping.
+Behind both, four fields of light drift and answer different parts of the track,
+over a frame lit throughout and tinted by the section you are in, keyed on its
+*name*, so every chorus looks the same.
 
 Everything answers the mix with its best correlation at zero lag, and everything
 it does is small — 6.9% of the available brightness over ten seconds. Nothing to
 supply, no stock footage, no still image.
 
-![A frame of the karaoke video: three lyric lines at the bottom left with the middle one part-filled in an accent colour, and a thin zigzag waveform level with it on the right](docs/img/video-still.webp)
+![A frame of the karaoke video: three lyric lines at the bottom left with the middle one part-filled in an accent colour, and a thin smooth waveform level with it on the right](docs/img/video-still.webp)
 
 ## Commands
 
