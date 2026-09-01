@@ -179,7 +179,14 @@ TRACE_GAMMA = 1.70
 #   signal, teeth, seconds per tooth, deflection, stroke px
 TRACES = (("mix", 36, 1.0 / 25, 0.038, 1.3),)
 TRACE_AIR = 0.30         # how much of the deflection the air band contributes
-TRACE_BASS_WEIGHT = 1.5  # how much heavier the stroke gets on a full kick
+TRACE_BASS_WEIGHT = 0.8  # how much heavier the stroke gets on a full kick
+# The bass sets the width of the whole stroke, end to end, which makes it one of
+# the slow signals and not one of the fast ones however thin the thing it draws
+# is. Read off the raw peak-held band it swung 39% of the stroke's own width
+# between consecutive frames, and at the faded ends - where there is a tenth of
+# a pixel of ink to begin with - that is not weight, it is flicker. 60 ms is
+# still short enough that a kick arrives on the kick.
+TRACE_BASS_SMOOTH = 0.130
 
 # Light on the line where the beats are. The teeth are a time axis - tooth i
 # reads the track at t + (i - n/2) * lag - so a beat has a place on the curve,
@@ -310,6 +317,9 @@ class Scene:
                                   ("low", self._band(beats, "low"), 1.0 / 20)):
             self.detail[name] = _running_max(
                 source, max(1, round(lag * self.rate))) ** TRACE_GAMMA
+        # The one signal here that is not drawing detail but setting a width.
+        self.detail["weight"] = _envelope(
+            self._band(beats, "low").tolist(), self.rate, TRACE_BASS_SMOOTH)
         for name in ("low", "high"):
             self.signal[name] = _envelope(
                 self._band(beats, name).tolist(), self.rate, FIELD_SMOOTH)
@@ -497,8 +507,25 @@ class Scene:
     # ------------------------------------------------------------- sampling
 
     def _at(self, track: np.ndarray, t: float) -> float:
-        i = int(t * self.rate)
-        return float(track[min(max(i, 0), track.size - 1)])
+        """One envelope, read between samples rather than at the nearest one.
+
+        These tracks run at 120 Hz and the frames do not, so truncating to an
+        index makes every one of them a staircase: consecutive frames land four
+        samples apart at 30 fps and take whichever value happens to be there.
+        That is a step, and a step is broadband - it puts energy at frequencies
+        far above anything the envelope contains and far above what the frame
+        rate can draw. It showed up as flicker at the thin ends of the trace,
+        where a stroke a pixel and a half wide was changing width by 39% of
+        itself between one frame and the next. Interpolating costs one multiply.
+        """
+        x = t * self.rate
+        i = int(x)
+        if i < 0:
+            return float(track[0])
+        if i >= track.size - 1:
+            return float(track[-1])
+        low, high = float(track[i]), float(track[i + 1])
+        return low + (high - low) * (x - i)
 
     def _pulse(self, t: float) -> float:
         """How recently a beat landed: up over the attack, then decaying away.
@@ -675,7 +702,7 @@ class Scene:
         for name, _, _, height, weight in TRACES:
             # Bass is the weight of the stroke, so a kick lands as a heavier
             # line rather than as a taller one.
-            bass = self._at(self.detail["low"], t)
+            bass = self._at(self.detail["weight"], t)
             stroke = self._trace(
                 t, name, height, weight * (1.0 + TRACE_BASS_WEIGHT * bass), glow)
             stroke *= 0.66 + 0.34 * self._at(self.mix, t)

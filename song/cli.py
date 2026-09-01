@@ -168,6 +168,7 @@ def cmd_video(args) -> int:
             Path(args.workdir),
             preview=_preview_window(args.preview) if args.preview else None,
             height=args.height,
+            audio_path=args.audio,
         )
     except KeyboardInterrupt:
         # ^C is the expected way to stop a four-minute render, not a crash.
@@ -242,6 +243,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_video.add_argument(
         "--height", type=int, default=1080,
         help="output height in pixels (default 1080; 720 renders faster)"
+    )
+    p_video.add_argument(
+        "--audio", metavar="FILE",
+        help="the track to mux, if it has moved since it was aligned "
+             "(default: where the project says, then anywhere obvious nearby)",
     )
     p_video.set_defaults(func=cmd_video)
 

@@ -27,27 +27,77 @@ from . import beats as beat_track
 from . import karaoke
 from .scene import Scene
 
-FPS = 30
+# 60, not 30. Everything in this picture is either moving or being animated by
+# libass, and both are sampled here: the word swell, the line changes, the wave
+# and the beat glow all get twice as many positions to be drawn at. It is also
+# what halves the worst frame-to-frame change in the thinnest part of the trace,
+# because half the flicker in a hairline is the frame rate failing to keep up
+# with it. Affordable because the generator got 2.2x faster first - 286 s of
+# track is 295 s of scene time at 60 fps, against 327 s for the 30 it replaces.
+FPS = 60
 # 1080 by default. The words are vector and libass draws them at whatever the
 # output is, so height is most of what "sharp" means here - and the picture
 # behind them costs about 40 ms a frame at 1920x1080 against 18 at 1280x720,
 # which is the encoder's time anyway.
 HEIGHT = 1080
-CRF = "18"          # a smooth gradient is the worst case for h264; cheap insurance
+CRF = "17"          # a smooth gradient is the worst case for h264; cheap insurance
 Progress = Callable[[str], None]
 
 
-def _source_audio(project: Project, workdir: Path) -> tuple[Path, bool]:
+def _nearby(name: str, workdir: Path) -> list[Path]:
+    """Where else the track might be, if it is not where the alignment left it.
+
+    A project records where the audio *was*, and moving or reorganising a
+    library after aligning it is entirely normal - this repo's own sample track
+    is aligned from data/ and kept in examples/. Every one of these is a
+    directory the workdir can see from where it sits.
+    """
+    roots = [workdir, workdir.parent, workdir.parent.parent, Path.cwd()]
+    seen, out = set(), []
+    for root in roots:
+        for folder in (root, root / "examples", root / "data", root / "audio"):
+            candidate = folder / name
+            if candidate not in seen:
+                seen.add(candidate)
+                out.append(candidate)
+    return out
+
+
+def _source_audio(project: Project, workdir: Path,
+                  override: Path | str | None = None) -> tuple[Path, bool]:
     """The best copy of the track on disk, and whether it is only the preview.
 
-    The original if it is still where the alignment found it. The workdir keeps
-    a cached mix.m4a for scrubbing in the browser, which will do - but it is a
-    lossy encode made for a waveform, so falling back to it is said out loud
-    rather than quietly shipped as the audio track of a finished video.
+    The original if it is still where the alignment found it, then anywhere
+    obvious nearby, and only then the workdir's cached mix.m4a - which is a
+    ~130 kbps encode made so a browser could scrub a waveform, and has no
+    business being the audio track of a finished video. Falling back to it is
+    said out loud rather than quietly shipped, and it was being shipped: this
+    project's own sample video carried it for every render until the search
+    below existed.
+
+    A candidate has to be the same length as the track that was aligned, to
+    within a frame. Matching on filename alone would happily pick up a different
+    take, or a radio edit, and burn a whole video against the wrong audio.
     """
+    if override is not None:
+        path = Path(override)
+        if not path.exists():
+            raise FileNotFoundError(f"no audio at {path}")
+        return path, False
+
     original = Path(project.audio_path)
     if original.exists():
         return original, False
+
+    for candidate in _nearby(original.name, workdir):
+        if not candidate.exists() or candidate.is_dir():
+            continue
+        try:
+            if abs(probe_duration(candidate) - float(project.duration)) < 0.05:
+                return candidate, False
+        except Exception:
+            continue
+
     if (workdir / "mix.m4a").exists():
         return workdir / "mix.m4a", True
     raise FileNotFoundError(
@@ -100,11 +150,12 @@ def run(
     preview: tuple[float, float] | None = None,
     fps: int = FPS,
     height: int = HEIGHT,
+    audio_path: Path | str | None = None,
     progress=print,
 ) -> Path:
     workdir = Path(workdir)
     project = Project.load(workdir / "project.json")
-    audio, is_preview = _source_audio(project, workdir)
+    audio, is_preview = _source_audio(project, workdir, audio_path)
     duration = probe_duration(audio)
 
     width = int(round(height * 16 / 9)) // 2 * 2
@@ -115,9 +166,11 @@ def run(
     progress(f"[1/4] beat tracking {audio}")
     if is_preview:
         progress(
-            f"      {project.audio_path} is gone; the video will carry the "
-            f"cached preview encode"
+            f"      {project.audio_path} is gone and nothing nearby matches it; "
+            f"the video will carry the cached ~130 kbps encode"
         )
+    elif str(audio) != project.audio_path:
+        progress(f"      {project.audio_path} moved; using {audio}")
     cached = (workdir / "beats.json").exists()
     grid = beat_track.build(audio, workdir)
     progress(
@@ -164,7 +217,9 @@ def run(
         "-map", "[v]", "-map", "1:a",
         "-c:v", "libx264", "-preset", "medium", "-crf", CRF,
         "-profile:v", "high", "-movflags", "+faststart",
-        "-c:a", "aac", "-b:a", "192k",
+        # 256k. The source is usually lossless and the video is the artefact
+        # people keep, so this is not the place to save four megabytes.
+        "-c:a", "aac", "-b:a", "256k",
         # The generated video always runs a frame or two past the audio, since
         # it is a whole number of frames covering a duration that is not.
         "-shortest",
