@@ -10,6 +10,7 @@ Four layers, back to front:
     wash     a lit vertical gradient, tinted by the section
     lobes    four drifting fields of light - a pool, a column, a band, a spot -
              each answering a different part of the track
+    bar      a fifth field that answers the bar rather than the level
     page     a wide soft lift under the corner the words sit in
     trace    one smooth curve low on the right, lit where the beats are
     grain    a few thousandths of noise, which is what stops the gradient banding
@@ -87,6 +88,34 @@ LOBES = (
     ( -44.0, 0.38, 0.78, 0.13, 0.30, (0.013, 0.031), (0.007, 0.023), "low"),
     (  22.0, 0.34, 0.24, 0.22, 0.22, (0.037, 0.011), (0.019, 0.043), "voice"),
 )
+
+# The bar, as light.
+#
+# Everything else here answers how loud the track is. Four fields on four
+# envelopes, a stroke on the peaks, a pulse on the beat - all of it amplitude,
+# and amplitude alone gives a picture that is reactive without being musical: it
+# can tell you a chorus is loud and it cannot tell you where the chorus has got
+# to. A listener is tracking the bar. Nothing was drawing it.
+#
+# So one field crosses the frame once per bar, right to left, the way the wave
+# flows. It swells from nothing at the downbeat, is widest across the middle of
+# the bar, and is gone by the next one - which is also what makes it safe to
+# move: sin^2 has zero slope at both ends, so the moment it teleports back to
+# the right is a moment when it is not there. A band that simply wrapped would
+# be a step, and a step across most of the frame is the one thing this picture
+# has learned not to do.
+# Wide and full height, it was not a sweep - it was the whole frame pumping once
+# a bar, which the lobes already do better, and it lifted the ground under the
+# lyrics enough to cost them contrast. Narrow, and kept up in the top half where
+# there is nothing to read, it is a light crossing a ceiling.
+BAR_HUE = -26.0          # degrees off the section hue: cooler than the room
+BAR_SAT = 0.34
+BAR_WIDTH = 0.16         # half-width, in the same aspect-corrected units as a lobe
+BAR_TRAVEL = 1.30        # how far across it goes
+BAR_TOP = -0.16          # its centre, above the middle of the frame
+BAR_DEPTH = 0.34         # and how far down it reaches - not as far as the words
+BAR_LIGHT = 0.30         # how far toward its colour a full swell pulls
+BAR_FLOOR = 0.35         # ...of which this much is there even in a quiet bar
 
 # A wide, soft lightening under the words, so dark type has something to be dark
 # against however the picture moves. The alternative is an outline around every
@@ -233,6 +262,7 @@ def _palette(hue: float) -> np.ndarray:
     # frame were coming from - they were the pools, doing the opposite of what
     # a pool of light should do.
     rows += [_rgb(hue + off, sat, 0.97) for off, sat, *_ in LOBES]
+    rows.append(_rgb(hue + BAR_HUE, BAR_SAT, 0.99))   # the bar sweep
     rows.append(_rgb(hue + 6, 0.55, 0.22))       # the trace, darker than its ground
     # What a beat lights the line to. Warmer and much brighter than the ink it
     # replaces, but still darker than the ground it is drawn on, so a bloom
@@ -351,6 +381,7 @@ class Scene:
             self.beat_times = np.array([0.0, max(self.duration, 1.0)], dtype=np.float32)
             self.beat_gap = np.ones(2, dtype=np.float32)
             self.beat_weight = np.zeros(2, dtype=np.float32)
+            self.bar_times = np.zeros(0, dtype=np.float32)
             return
         self.beat_times = times
         self.beat_gap = np.diff(times, append=times[-1] + float(np.median(np.diff(times))))
@@ -362,6 +393,8 @@ class Scene:
         self.beat_weight = np.where((index - phase) % meter == 0, 1.0, 0.55).astype(
             np.float32
         )
+        downbeats = np.asarray(beats.get("downbeats", []), dtype=np.float32)
+        self.bar_times = downbeats if downbeats.size >= 2 else times
 
     def _load_sections(self, project: Project) -> None:
         """Where the colour changes, and to what.
@@ -477,6 +510,10 @@ class Scene:
         self._glow = np.zeros(w, dtype=np.float32)
         self.env_index = np.arange(self.detail["mix"].size, dtype=np.float32)
 
+        # How far down the frame the bar light reaches. Column, broadcast at use.
+        self.bar_down = np.exp(-(((ys - 0.5 - BAR_TOP) / BAR_DEPTH) ** 2)
+                               ).astype(np.float32)[:, None]
+
         # Static, so it is built once. Separable like a lobe: a column of light
         # times a row of it.
         self.page = (
@@ -517,8 +554,16 @@ class Scene:
         rate can draw. It showed up as flicker at the thin ends of the trace,
         where a stroke a pixel and a half wide was changing width by 39% of
         itself between one frame and the next. Interpolating costs one multiply.
+
+        The float() on the way out is not decoration. Hand this a numpy scalar -
+        which is what any caller looping over np.arange does - and without it the
+        return is a numpy float64, and a numpy float64 promotes every float32
+        array it touches. The palette goes float64, the lobes go float64, and
+        the frame quietly costs twice what it should: 20.7 ms became 38.9 with
+        nothing else changed. render.py passes Python floats and never saw it;
+        a benchmark did, and spent a while blaming the interpolation.
         """
-        x = t * self.rate
+        x = float(t) * self.rate
         i = int(x)
         if i < 0:
             return float(track[0])
@@ -544,6 +589,25 @@ class Scene:
         gap = float(self.beat_gap[i]) or 0.5
         attack = 0.5 - 0.5 * math.cos(math.pi * min(1.0, since / PULSE_ATTACK))
         return attack * math.exp(-3.4 * since / gap) * float(self.beat_weight[i])
+
+    def _bar_phase(self, t: float) -> float:
+        """How far through the current bar, 0 at the downbeat and 1 at the next.
+
+        Falls back to the beat grid where downbeats were not tracked, and to
+        nothing at all where neither was - a track with no rhythm to speak of
+        gets no bar light rather than one invented at some default tempo.
+        """
+        bars = self.bar_times
+        if bars.size < 2:
+            return 0.0
+        i = int(np.searchsorted(bars, t, side="right")) - 1
+        if i < 0:
+            return 0.0
+        i = min(i, bars.size - 2)
+        span = float(bars[i + 1] - bars[i])
+        if span <= 0.0:
+            return 0.0
+        return float(min(max((t - float(bars[i])) / span, 0.0), 1.0))
 
     def _colours(self, t: float) -> np.ndarray:
         """The section's colour rows at time t, crossfaded across the boundary."""
@@ -638,7 +702,19 @@ class Scene:
 
         Not (h, w, 3), and not RGB: see _precompute. The buffer is reused, so a
         caller that wants to keep a frame has to copy it.
+
+        `t` is coerced once, here, and that is the only place it needs to be:
+        everything below reads a Python float because of this line. A numpy
+        scalar arriving instead promotes every float32 array it meets, so the
+        palette and the four lobes - the expensive arrays - are computed at
+        double precision for the same picture. 20.7 ms a frame became 38.9.
+
+        The pixels come out the same to within a level, so this is a cost guard
+        and the suite cannot see it. It is verified by timing frame() both ways,
+        not by a test. What the suite does pin is _at, which is where the
+        promotion actually leaks in from.
         """
+        t = float(t)
         energy = self._at(self.mix, t)
         pulse = self._pulse(t)
 
@@ -648,7 +724,7 @@ class Scene:
         quiet, loud = self._colours(t)
         palette = quiet + (loud - quiet) * energy
         deep, mid, fields = palette[0], palette[1], palette[2:6]
-        trace, glowc = palette[6], palette[7]
+        bar, trace, glowc = palette[6], palette[7], palette[8]
 
         img, field, tint = self._img, self._lobe, self._tint
         # The floor, lifted toward the top. Written as a column and broadcast:
@@ -679,6 +755,20 @@ class Scene:
             for channel in range(3):
                 np.subtract(colour[channel], img[channel], out=tint)
                 tint *= field
+                img[channel] += tint
+
+        # The bar. Constant down the frame, so it is a lean of light rather than
+        # a shape, and it costs a row rather than a field.
+        phase = self._bar_phase(t)
+        swell = math.sin(math.pi * phase) ** 2
+        if swell > 0.002:
+            centre = BAR_TRAVEL * (0.5 - phase)      # right to left, like the wave
+            across = np.exp(-(((self.ax - centre) / BAR_WIDTH) ** 2))
+            across *= BAR_LIGHT * swell * (BAR_FLOOR + (1.0 - BAR_FLOOR) * energy)
+            for channel in range(3):
+                np.subtract(bar[channel], img[channel], out=tint)
+                tint *= self.bar_down
+                tint *= across[None, :]
                 img[channel] += tint
 
         # Toward white rather than added, so the lift under the words is the
