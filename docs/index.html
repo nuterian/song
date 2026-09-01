@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a0c10">
 <title>song — lyrics, timed to the word</title>
 <meta name="description" content="Turn an audio track and a plain-text lyrics file into word-accurate synced lyrics and a finished karaoke video, using only free models that run on your own machine.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%23ff7a3d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -13,7 +15,7 @@
 <style>
 :root{
   --bg:#0a0c10; --ink:#f4f6fa; --dim:#98a2b3; --faint:#5b6575;
-  --line:#1c212a; --accent:#ff7a3d; --good:#4ade80;
+  --line:#1c212a; --panel:#0d1015; --accent:#ff7a3d; --good:#4ade80;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
   --ease:cubic-bezier(.16,.84,.34,1);
 }
@@ -29,36 +31,107 @@ img,video{max-width:100%;height:auto;display:block}
 .wrap{max-width:700px;margin:0 auto;padding:0 24px}
 .wide{max-width:1280px;margin:0 auto;padding:0 24px}
 
-/* ---------- reveal ----------
-   Scroll-driven, in CSS, with no script anywhere near it. The obvious way is to
-   hide everything and have JavaScript add a class as an observer fires, and it
-   is wrong in one direction that matters: anywhere the script does not finish
-   its job the page is blank. A pane reporting innerHeight 0 was enough to do it
-   here. This way the content is visible by default and the animation is the
-   enhancement, so the failure mode is "no animation" rather than "no page". */
-@keyframes rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+/* ---------- motion ----------
+   All of it is CSS, and all of it is an enhancement over a page that is
+   already finished without it. The obvious way to reveal on scroll is to hide
+   everything and have JavaScript add a class as an observer fires, and it is
+   wrong in one direction that matters: anywhere the script does not finish its
+   job the page is blank. Everything below is either scroll-driven (@supports, so an engine
+   without timelines simply shows the finished state) or a one-shot on load
+   whose only job is to arrive - never to hold anything back.
+
+   Two properties do all the work, opacity and transform, because they are the
+   two the compositor can animate without laying the page out again. The one
+   exception is the header, which animates its own blur over 96px of scroll -
+   and that one pays for itself, because it means there is no backdrop filter
+   running at all while you are at the top of the page.
+
+   Nothing above the fold starts at opacity 0, and that is not a style choice.
+   A document that is laid out but never rendered - a hidden pane, a thumbnail,
+   anything measuring the page without showing it - never advances the
+   animation clock, so a one-shot with fill-mode:both sits on its first
+   keyframe forever. A pane reporting a viewport of 0 held the whole hero at
+   opacity 0 exactly that way. So the hero only ever *moves*: frozen, it is a
+   readable hero sitting 24px low. The same rule is why the logo's meter dips
+   and returns rather than growing from nothing, and why the headline's accent
+   sweeps onto a word that is already legible ink underneath. Below the fold
+   the reveals are scroll-driven and @supports-guarded, where the fallback is
+   the finished state, so they can afford to fade. */
+@keyframes rise{from{opacity:0;transform:translateY(26px)}}
+@keyframes settle{from{opacity:0;transform:translateY(30px) scale(.985)}}
+@keyframes lift{from{opacity:0;transform:translateY(14px)}}
+@keyframes sweep{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes dock{from{background-color:rgba(10,12,16,0);border-bottom-color:rgba(28,33,42,0);
+  -webkit-backdrop-filter:blur(0px);backdrop-filter:blur(0px)}}
+@keyframes tick{0%,100%{transform:scaleY(1)}42%{transform:scaleY(.34)}70%{transform:scaleY(1.12)}}
+@keyframes sung{from{background-position:100% 0}}
+@keyframes glide{from{transform:translateY(24px)}}
+@keyframes glidefig{from{transform:translateY(30px) scale(.986)}}
+
+/* The hero is on screen before there is anything to scroll, so it arrives on
+   its own clock. Everything below it waits for you to come to it. */
+.hero .rise{animation:glide .85s var(--ease) .02s both;animation-timeline:auto}
+.hero .wrap .rise:nth-child(2){animation-delay:.10s}
+.hero .wrap .rise:nth-child(3){animation-delay:.20s}
+.hero .wrap .rise:nth-child(4){animation-delay:.28s}
+.hero figure.rise{animation:glidefig 1s var(--ease) .36s both;animation-timeline:auto}
+
 @supports (animation-timeline: view()){
   @media (prefers-reduced-motion:no-preference){
     .rise{animation:rise linear both;animation-timeline:view();
       animation-range:entry 4% entry 46%}
+    figure.rise{animation-name:settle}
+    /* Four identical boxes, so four offsets into the same range read as a
+       stagger without a single delay or a line of script. */
+    .stat{animation:lift linear both;animation-timeline:view()}
+    .stat:nth-child(1){animation-range:entry 10% entry 42%}
+    .stat:nth-child(2){animation-range:entry 14% entry 46%}
+    .stat:nth-child(3){animation-range:entry 18% entry 50%}
+    .stat:nth-child(4){animation-range:entry 22% entry 54%}
   }
 }
+@supports (animation-timeline: scroll()){
+  @media (prefers-reduced-motion:no-preference){
+    .playhead{animation:sweep linear both;animation-timeline:scroll()}
+    header.top{animation:dock linear both;animation-timeline:scroll();
+      animation-range:0 96px}
+  }
+}
+/* The disclosures snap open, and that is deliberate. Animating
+   ::details-content with interpolate-size is the tidy modern way to slide one
+   open, and it was here until it was measured: with the details open, the
+   content sat at block-size 0, content-visibility hidden, opacity 0. Whether
+   that was the harness or the engine hardly matters - every other animation on
+   this page fails to "no animation", and this one fails to "the disclosure
+   opens and there is nothing in it". Hidden prose is not a trade worth 340ms
+   of easing. The chevron already says the thing happened. */
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto} *{transition:none!important;animation:none!important}
 }
 /* A scroll-driven animation needs somewhere to scroll. On paper there is
    nowhere, and every element below the first page would print blank. */
-@media print{ .rise{animation:none!important;opacity:1!important;transform:none!important} }
+@media print{
+  .rise,.stat{animation:none!important;opacity:1!important;transform:none!important}
+  .playhead,header.top{display:none}
+}
 
 /* ---------- header ---------- */
-header.top{position:sticky;top:0;z-index:9;backdrop-filter:blur(18px);
+header.top{position:sticky;top:0;z-index:9;
+  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
   background:rgba(10,12,16,.72);border-bottom:1px solid rgba(28,33,42,.9)}
 .top .wide{display:flex;align-items:center;gap:12px;height:58px}
+.playhead{position:absolute;inset:auto 0 -1px;height:2px;background:var(--accent);
+  transform:scaleX(0);transform-origin:0 50%}
 .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.03em}
-.brand svg{width:20px;height:16px;color:var(--accent)}
+.eq{width:20px;height:16px;color:var(--accent);overflow:visible}
+.eq path{stroke:currentColor;stroke-width:2.3;stroke-linecap:round;fill:none;
+  transform-origin:50% 50%;animation:tick .85s var(--ease) both}
+.eq path:nth-child(1){animation-delay:.10s} .eq path:nth-child(2){animation-delay:.17s}
+.eq path:nth-child(3){animation-delay:.24s} .eq path:nth-child(4){animation-delay:.31s}
+.eq path:nth-child(5){animation-delay:.38s}
 .top nav{margin-left:auto;display:flex;align-items:center;gap:4px}
 .top nav a{font-size:14.5px;color:var(--dim);padding:9px 15px;border-radius:999px;
-  transition:color .18s var(--ease),background .18s var(--ease)}
+  transition:color .18s var(--ease),background .18s var(--ease),transform .18s var(--ease)}
 .top nav a:hover{color:var(--ink)}
 .top nav a.cta{background:var(--ink);color:#0a0c10;font-weight:650}
 .top nav a.cta:hover{background:#fff;transform:translateY(-1px)}
@@ -69,6 +142,16 @@ h1{font-size:clamp(52px,10.5vw,124px);line-height:.92;letter-spacing:-.055em;
    margin:0 0 30px;font-weight:700;text-wrap:balance}
 h2{font-size:clamp(36px,6.4vw,74px);line-height:.98;letter-spacing:-.05em;
    margin:0 0 22px;font-weight:700;text-wrap:balance}
+/* The headline sings its own last word, the way the video does: the accent
+   arrives across it once and stays. If background-clip:text is not there the
+   word is simply accent-coloured, which is the state it ends in anyway. */
+.lit{color:var(--accent)}
+@supports ((background-clip:text) or (-webkit-background-clip:text)){
+  .lit{color:transparent;-webkit-text-fill-color:transparent;
+    background:linear-gradient(90deg,var(--accent) 0 50%,var(--ink) 50%);
+    background-size:200% 100%;-webkit-background-clip:text;background-clip:text;
+    animation:sung 1.15s var(--ease) .5s both}
+}
 .lede{font-size:clamp(19px,2.2vw,23px);line-height:1.45;color:var(--dim);
   margin:0 0 38px;text-wrap:pretty}
 .say{font-size:19px;line-height:1.55;color:var(--dim);margin:0;text-wrap:pretty}
@@ -112,10 +195,17 @@ figcaption b{color:var(--dim);font-weight:600}
 .strip img{border-radius:12px}
 
 /* ---------- numbers ---------- */
+/* clip, not hidden, and the two lines are not interchangeable: overflow:hidden
+   makes this grid a scroll container, and a scroll container is what view()
+   resolves against. Under `hidden` each cell is permanently "in view" of its
+   own parent, so the stagger below silently never ran - the stats measured
+   opacity 1 at every scroll position on the page. overflow:clip does the same
+   clipping without the scrollport. `hidden` is kept first for anything that
+   does not know `clip`, which loses the stagger and keeps the corners. */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
-  border:1px solid var(--line);border-radius:16px;overflow:hidden;
+  border:1px solid var(--line);border-radius:16px;overflow:hidden;overflow:clip;
   margin:clamp(48px,7vw,76px) 0 0}
-.stat{background:#0d1015;padding:38px 12px;text-align:center}
+.stat{background:var(--panel);padding:38px 12px;text-align:center}
 .stat b{display:block;font:700 clamp(32px,5vw,52px)/1 var(--mono);
   letter-spacing:-.05em;margin-bottom:11px}
 .stat span{font-size:12.5px;color:var(--faint);white-space:nowrap}
@@ -138,7 +228,7 @@ details[open] summary{color:var(--ink)}
 .body p{margin:0 0 16px}
 .body b{color:var(--ink)}
 
-pre{background:#0d1015;border:1px solid var(--line);border-radius:14px;
+pre{background:var(--panel);border:1px solid var(--line);border-radius:14px;
   padding:22px 24px;overflow-x:auto;margin:0 0 22px;text-align:left}
 pre code{background:none;border:0;padding:0;font-size:14.5px;color:#bcc7d7;line-height:1.9}
 
@@ -149,20 +239,25 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
 </head>
 <body>
 
-<header class="top"><div class="wide">
-  <a class="brand" href="#top">
-    <svg viewBox="0 0 26 20" aria-hidden="true"><path d="M2 12 L2 8 M7 15 L7 5 M12 18 L12 2 M17 14 L17 6 M22 11 L22 9"
-      stroke="currentColor" stroke-width="2.3" stroke-linecap="round" fill="none"/></svg>song</a>
-  <nav>
-    <a class="ghost" href="https://github.com/nuterian/song">GitHub</a>
-    <a class="cta" href="demo/">Try it</a>
-  </nav>
-</div></header>
+<header class="top">
+  <div class="wide">
+    <a class="brand" href="#top">
+      <svg class="eq" viewBox="0 0 26 20" aria-hidden="true">
+        <path d="M2 12 L2 8"/><path d="M7 15 L7 5"/><path d="M12 18 L12 2"/>
+        <path d="M17 14 L17 6"/><path d="M22 11 L22 9"/>
+      </svg>song</a>
+    <nav>
+      <a class="ghost" href="https://github.com/nuterian/song">GitHub</a>
+      <a class="cta" href="demo/">Try it</a>
+    </nav>
+  </div>
+  <div class="playhead" aria-hidden="true"></div>
+</header>
 
 <!-- ------------------------------------------------------------ hero -->
 <section class="hero" id="top">
   <div class="wrap">
-    <h1 class="rise">Lyrics, timed to the word.</h1>
+    <h1 class="rise">Lyrics, timed to the <span class="lit">word</span>.</h1>
     <p class="lede rise">A track and a text file in. Synced lyrics and a finished
       video out. Nothing leaves your machine.</p>
     <div class="btns rise">
@@ -201,7 +296,7 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
     </figure>
   </div>
   <div class="wrap">
-    <div class="stats rise">
+    <div class="stats">
       <div class="stat win"><b>94.5</b><span>mean line score</span></div>
       <div class="stat"><b>33/33</b><span>lines aligned</span></div>
       <div class="stat"><b>160<small>ms</small></b><span>median disagreement</span></div>
