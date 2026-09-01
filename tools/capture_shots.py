@@ -63,14 +63,17 @@ SHOTS = [
 # The first chorus: four lines back to back, no instrumental to sit through,
 # and the section colour has already arrived. Twelve seconds loops without a
 # seam because nothing on screen is trying to get anywhere.
-# The page's demo. Starts on the first lyric and ends as the first chorus does,
-# so it passes through three sections and one instrumental - which is the only
-# way to show that the colour is the song's structure and not a slideshow.
-DEMO_CLIP = "0:34-1:22"
+# The page's demo, and the first thing anybody sees. It ends as the first chorus
+# does, having crossed three sections and one instrumental - the only way to
+# show that the colour is the song's structure and not a slideshow. It starts on
+# the *second* lyric rather than the first, because the first has nothing above
+# it - two lines instead of three - and that would be the opening frame of the
+# whole page.
+DEMO_CLIP = "0:40-1:22"
 DEMO_WIDTH = 1920
 DEMO_CRF = "31"
 DEMO_AUDIO = "112k"   # it is a music video; muting it would be a strange demo
-STILL_AT = 36.0       # seconds into the clip: mid-word, mid-chorus
+STILL_AT = 29.0       # seconds into the clip: mid-word, mid-chorus
 
 BOOT = """
 <script>

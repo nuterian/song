@@ -6,127 +6,142 @@
 <title>song — lyrics, timed to the word</title>
 <meta name="description" content="Turn an audio track and a plain-text lyrics file into word-accurate synced lyrics and a finished karaoke video, using only free models that run on your own machine.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%23ff7a3d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+
 <style>
 :root{
-  --bg:#0b0d11; --ink:#f2f4f8; --dim:#98a2b3; --faint:#5d6879;
-  --line:#1e232c; --accent:#ff7a3d; --good:#4ade80;
+  --bg:#0a0c10; --ink:#f4f6fa; --dim:#98a2b3; --faint:#5b6575;
+  --line:#1c212a; --accent:#ff7a3d; --good:#4ade80;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
-  --ease:cubic-bezier(.2,.8,.25,1);
+  --ease:cubic-bezier(.16,.84,.34,1);
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
-body{
-  margin:0;background:var(--bg);color:var(--ink);
+body{margin:0;background:var(--bg);color:var(--ink);
   font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
-  -webkit-font-smoothing:antialiased;overflow-x:hidden;
-}
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
 img,video{max-width:100%;height:auto;display:block}
-::selection{background:rgba(255,122,61,.3)}
+::selection{background:rgba(255,122,61,.32)}
 
-.wrap{max-width:720px;margin:0 auto;padding:0 24px}
-.wide{max-width:1240px;margin:0 auto;padding:0 24px}
+.wrap{max-width:700px;margin:0 auto;padding:0 24px}
+.wide{max-width:1280px;margin:0 auto;padding:0 24px}
+
+/* ---------- reveal ----------
+   Scroll-driven, in CSS, with no script anywhere near it. The obvious way is to
+   hide everything and have JavaScript add a class as an observer fires, and it
+   is wrong in one direction that matters: anywhere the script does not finish
+   its job the page is blank. A pane reporting innerHeight 0 was enough to do it
+   here. This way the content is visible by default and the animation is the
+   enhancement, so the failure mode is "no animation" rather than "no page". */
+@keyframes rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+@supports (animation-timeline: view()){
+  @media (prefers-reduced-motion:no-preference){
+    .rise{animation:rise linear both;animation-timeline:view();
+      animation-range:entry 4% entry 46%}
+  }
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto} *{transition:none!important;animation:none!important}
+}
+/* A scroll-driven animation needs somewhere to scroll. On paper there is
+   nowhere, and every element below the first page would print blank. */
+@media print{ .rise{animation:none!important;opacity:1!important;transform:none!important} }
 
 /* ---------- header ---------- */
-header.top{position:sticky;top:0;z-index:9;backdrop-filter:blur(16px);
-  background:rgba(11,13,17,.7);border-bottom:1px solid rgba(30,35,44,.8)}
-.top .wide{display:flex;align-items:center;gap:12px;height:56px}
-.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;
-  letter-spacing:-.03em}
+header.top{position:sticky;top:0;z-index:9;backdrop-filter:blur(18px);
+  background:rgba(10,12,16,.72);border-bottom:1px solid rgba(28,33,42,.9)}
+.top .wide{display:flex;align-items:center;gap:12px;height:58px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.03em}
 .brand svg{width:20px;height:16px;color:var(--accent)}
-.top nav{margin-left:auto;display:flex;align-items:center;gap:6px}
-.top nav a{font-size:14.5px;color:var(--dim);padding:8px 14px;border-radius:999px;
-  transition:color .15s var(--ease)}
+.top nav{margin-left:auto;display:flex;align-items:center;gap:4px}
+.top nav a{font-size:14.5px;color:var(--dim);padding:9px 15px;border-radius:999px;
+  transition:color .18s var(--ease),background .18s var(--ease)}
 .top nav a:hover{color:var(--ink)}
-.top nav a.cta{background:var(--ink);color:#0b0d11;font-weight:650}
-.top nav a.cta:hover{background:#fff}
+.top nav a.cta{background:var(--ink);color:#0a0c10;font-weight:650}
+.top nav a.cta:hover{background:#fff;transform:translateY(-1px)}
 @media (max-width:560px){ .top nav a.ghost{display:none} }
 
 /* ---------- type ---------- */
-h1{font-size:clamp(46px,9vw,104px);line-height:.96;letter-spacing:-.045em;
-   margin:0 0 26px;font-weight:700;text-wrap:balance}
-h2{font-size:clamp(32px,5.6vw,60px);line-height:1.02;letter-spacing:-.04em;
-   margin:0 0 20px;font-weight:700;text-wrap:balance}
-.lede{font-size:clamp(19px,2.3vw,23px);line-height:1.5;color:var(--dim);
-  margin:0 0 36px;text-wrap:pretty}
-.say{font-size:18px;line-height:1.62;color:var(--dim);margin:0 0 28px;text-wrap:pretty}
-.say b,.lede b{color:var(--ink);font-weight:620}
-.kicker{font:600 12px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;
-  color:var(--accent);margin:0 0 18px}
-code{font:.87em var(--mono);background:#151a21;border:1px solid var(--line);
-  border-radius:5px;padding:1.5px 6px;color:#dbe4f0}
+h1{font-size:clamp(52px,10.5vw,124px);line-height:.92;letter-spacing:-.055em;
+   margin:0 0 30px;font-weight:700;text-wrap:balance}
+h2{font-size:clamp(36px,6.4vw,74px);line-height:.98;letter-spacing:-.05em;
+   margin:0 0 22px;font-weight:700;text-wrap:balance}
+.lede{font-size:clamp(19px,2.2vw,23px);line-height:1.45;color:var(--dim);
+  margin:0 0 38px;text-wrap:pretty}
+.say{font-size:19px;line-height:1.55;color:var(--dim);margin:0;text-wrap:pretty}
+.say b,.lede b{color:var(--ink);font-weight:640}
+.kicker{font:600 12px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 20px}
+code{font:.87em var(--mono);background:#12161d;border:1px solid var(--line);
+  border-radius:5px;padding:1.5px 6px;color:#dde5f0}
 
-section{padding:clamp(96px,14vw,184px) 0 0}
-.hero{padding:clamp(64px,11vw,124px) 0 0;text-align:center}
-.hero .wrap{max-width:860px}
+section{padding:clamp(104px,15vw,200px) 0 0}
+.hero{padding:clamp(56px,10vw,112px) 0 0;text-align:center}
+.hero .wrap{max-width:880px}
 
 /* ---------- buttons ---------- */
 .btns{display:flex;gap:12px;justify-content:center;align-items:center}
-.btn{display:inline-flex;align-items:center;justify-content:center;
-  min-height:52px;padding:0 28px;border-radius:999px;font-size:16px;font-weight:620;
-  border:1px solid var(--line);background:#12161d;color:var(--ink);
-  transition:border-color .15s var(--ease),background .15s var(--ease),transform .08s var(--ease)}
-.btn:hover{border-color:#333d4d;background:#171c24}
-.btn:active{transform:translateY(1px)}
-.btn.primary{background:var(--ink);color:#0b0d11;border-color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:54px;
+  padding:0 30px;border-radius:999px;font-size:16.5px;font-weight:640;
+  border:1px solid var(--line);background:#11151c;color:var(--ink);
+  transition:border-color .18s var(--ease),background .18s var(--ease),transform .12s var(--ease)}
+.btn:hover{border-color:#38445a;background:#161b24;transform:translateY(-2px)}
+.btn:active{transform:translateY(0)}
+.btn.primary{background:var(--ink);color:#0a0c10;border-color:var(--ink)}
 .btn.primary:hover{background:#fff;border-color:#fff}
 @media (max-width:520px){
-  .btns{flex-direction:column;align-items:stretch;max-width:320px;margin-inline:auto}
+  .btns{flex-direction:column;align-items:stretch;max-width:330px;margin-inline:auto}
   .btn{width:100%}
 }
-.under{font:13px/1.5 var(--mono);color:var(--faint);margin:24px 0 0;letter-spacing:.02em}
+.under{font:13px/1.5 var(--mono);color:var(--faint);margin:26px 0 0;letter-spacing:.04em}
 
 /* ---------- media ---------- */
-figure{margin:clamp(44px,6.5vw,76px) 0 0}
-/* height:auto is load-bearing. The width/height attributes are there so the
-   browser can reserve the right box before the file arrives, but they also map
-   to a presentational height - and with width:100% and no height:auto that
-   height wins, so every shot is drawn at its natural width's height and comes
-   out stretched. */
-figure img,figure video{width:100%;height:auto;display:block;
-  border-radius:14px;border:1px solid var(--line);
-  box-shadow:0 30px 90px rgba(0,0,0,.6)}
-figcaption{margin:22px auto 0;max-width:620px;font-size:14px;line-height:1.65;
+figure{margin:clamp(46px,7vw,86px) 0 0}
+/* height:auto up there is load-bearing. The width/height attributes let the
+   browser reserve the right box before the file arrives, but they also map to a
+   presentational height - and without height:auto that height wins, so every
+   shot gets drawn at the wrong shape. It happened once. */
+figure img,figure video{width:100%;border-radius:16px;border:1px solid var(--line);
+  box-shadow:0 40px 110px rgba(0,0,0,.7)}
+figcaption{margin:24px auto 0;max-width:600px;font-size:14px;line-height:1.6;
   color:var(--faint);text-align:center}
 figcaption b{color:var(--dim);font-weight:600}
+.strip img{border-radius:12px}
 
 /* ---------- numbers ---------- */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
-  border:1px solid var(--line);border-radius:14px;overflow:hidden;
-  margin:clamp(44px,6.5vw,68px) 0 0}
-.stat{background:#0e1116;padding:32px 12px;text-align:center}
-.stat b{display:block;font:700 clamp(30px,4.6vw,46px)/1 var(--mono);
-  letter-spacing:-.04em;margin-bottom:10px}
+  border:1px solid var(--line);border-radius:16px;overflow:hidden;
+  margin:clamp(48px,7vw,76px) 0 0}
+.stat{background:#0d1015;padding:38px 12px;text-align:center}
+.stat b{display:block;font:700 clamp(32px,5vw,52px)/1 var(--mono);
+  letter-spacing:-.05em;margin-bottom:11px}
 .stat span{font-size:12.5px;color:var(--faint);white-space:nowrap}
 .stat.win b{color:var(--good)}
 @media (max-width:660px){ .stats{grid-template-columns:repeat(2,1fr)} }
 
 /* ---------- disclosure ---------- */
-details{margin:clamp(44px,5vw,64px) 0 0;border-top:1px solid var(--line)}
-details summary{list-style:none;cursor:pointer;padding:17px 2px;display:flex;
+details{margin:clamp(48px,6vw,72px) 0 0;border-top:1px solid var(--line)}
+details summary{list-style:none;cursor:pointer;padding:19px 2px;display:flex;
   align-items:center;gap:10px;font-size:15px;font-weight:560;color:var(--dim);
-  transition:color .15s var(--ease)}
+  transition:color .18s var(--ease)}
 details summary::-webkit-details-marker{display:none}
 details summary:hover{color:var(--ink)}
 details summary::after{content:"";width:7px;height:7px;margin-left:2px;
   border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;
-  transform:rotate(45deg) translate(-2px,-2px);transition:transform .2s var(--ease)}
+  transform:rotate(45deg) translate(-2px,-2px);transition:transform .22s var(--ease)}
 details[open] summary::after{transform:rotate(-135deg) translate(-3px,-3px)}
 details[open] summary{color:var(--ink)}
-.body{padding:4px 0 26px;font-size:16px;line-height:1.68;color:#aab4c4}
+.body{padding:4px 0 30px;font-size:16px;line-height:1.68;color:#a9b3c3}
 .body p{margin:0 0 16px}
-.body h3{font-size:15px;margin:26px 0 8px;color:var(--ink);letter-spacing:-.01em}
 .body b{color:var(--ink)}
 
-pre{background:#0e1116;border:1px solid var(--line);border-radius:12px;
-  padding:20px 22px;overflow-x:auto;margin:0 0 20px;text-align:left}
-pre code{background:none;border:0;padding:0;font-size:14px;color:#b9c4d4;line-height:1.85}
+pre{background:#0d1015;border:1px solid var(--line);border-radius:14px;
+  padding:22px 24px;overflow-x:auto;margin:0 0 22px;text-align:left}
+pre code{background:none;border:0;padding:0;font-size:14.5px;color:#bcc7d7;line-height:1.9}
 
-footer{margin-top:clamp(80px,11vw,140px);border-top:1px solid var(--line);
-  padding:36px 0 80px;color:var(--faint);font-size:14px;text-align:center}
-footer a{color:var(--dim)}
-footer a:hover{color:var(--ink)}
-@media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto} *{transition:none!important} }
+footer{margin-top:clamp(96px,12vw,160px);border-top:1px solid var(--line);
+  padding:40px 0 88px;color:var(--faint);font-size:14px;text-align:center}
+footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -144,177 +159,67 @@ footer a:hover{color:var(--ink)}
 <!-- ------------------------------------------------------------ hero -->
 <section class="hero" id="top">
   <div class="wrap">
-    <h1>Lyrics, timed to the word. Then the video.</h1>
-    <p class="lede">
-      Drop in a track and a text file. Everything runs on your own machine —
-      no keys, no uploads, nothing per track.
-    </p>
-    <div class="btns">
+    <h1 class="rise">Lyrics, timed to the word.</h1>
+    <p class="lede rise">A track and a text file in. Synced lyrics and a finished
+      video out. Nothing leaves your machine.</p>
+    <div class="btns rise">
       <a class="btn primary" href="demo/">Try it in your browser</a>
       <a class="btn" href="https://github.com/nuterian/song">GitHub</a>
     </div>
-    <p class="under">.lrc · word .lrc · .srt · .vtt · .ass · .mp4</p>
+    <p class="under rise">.lrc · word .lrc · .srt · .vtt · .ass · .mp4</p>
   </div>
 
   <div class="wide">
-    <figure>
-      <img src="img/app-full.png" width="1560" height="1000" fetchpriority="high"
-           alt="The song app: a waveform with every lyric line bracketed, and the lyrics listed below with per-line scores.">
-    </figure>
-  </div>
-</section>
-
-<!-- ----------------------------------------------------------- video -->
-<section>
-  <div class="wrap">
-    <p class="kicker">One command</p>
-    <h2>It renders the video.</h2>
-    <p class="say">
-      Three lines at the bottom left, each word lighting up as it lands and the
-      stack rising when the line turns over. <b>Everything behind them is
-      generated from the track itself</b> — the section picks the palette, the
-      light answers the mix, one line traces the amplitude. No footage, no
-      template, nothing to supply.
-    </p>
-  </div>
-  <div class="wide">
-    <figure>
+    <figure class="rise">
       <video src="img/video-demo.mp4" poster="img/video-still.jpg"
              controls muted autoplay loop playsinline preload="metadata"
              width="1920" height="1080"
              aria-label="Forty-eight seconds of the karaoke video: three lyric lines at the bottom left, the middle one filling word by word in an accent colour, over a soft lit wash that changes with each section, with a thin waveform level with it on the right."></video>
-      <script>
-        /* The only script here. An autoplaying loop is motion, and the
-           stylesheet already honours the request not to have any. */
-        if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          document.querySelectorAll('video[autoplay]').forEach(v => {
-            v.removeAttribute('autoplay'); v.pause();
-          });
-        }
-      </script>
-      <figcaption>
-        Forty-eight seconds, straight out of <code>python -m song video</code>.
-        Sound is on the controls. <b>1080p — about thirteen minutes for a
-        five-minute track</b>, or four at <code>--height 720</code>.
-      </figcaption>
+      <figcaption>One command. 1080p. Every pixel behind the words came out of
+        the audio — <b>no footage, no template, nothing to supply.</b></figcaption>
     </figure>
-  </div>
-  <div class="wrap">
-    <details>
-      <summary>Why there is no frame renderer in here</summary>
-      <div class="body">
-        <p>Because ASS subtitles have had karaoke tags since the VirtualDub era.
-        <code>\kf</code> sweeps a fill across a run of text over a given
-        duration, and this project already knows where every word starts and
-        ends. So the lyrics are a format conversion and a burn-in, and shaping,
-        wrapping and antialiasing come from libass rather than from code written
-        here to arrive somewhere worse.</p>
-        <h3>The arithmetic that matters</h3>
-        <p>ASS counts in centiseconds. Round each word on its own and you lose
-        half a centisecond a time — <b>13 across a 100-word line</b>, all of it
-        landing at the end, which is the half nobody checks. Every duration here
-        is the difference between two absolute positions instead.</p>
-        <h3>Sensitive, subtle and smooth are three different things</h3>
-        <p><b>Sensitive is timing</b>: the frame's brightness tracks the mix
-        with its best correlation at zero lag. <b>Subtle is amount</b>: the
-        whole frame moves through 6.9% of its range over ten seconds.
-        <b>Smooth is frequency</b> — and that one cost a round to learn. The
-        first version was sensitive and subtle and flickered, because a kick
-        swings a field 12 of 255 in three frames and a large area doing that is
-        read as a twitch, however smooth the curve driving it. The fields
-        average over 0.30 s now; the waveform keeps the unsmoothed copy, because
-        a thin stroke can show detail a field cannot.</p>
-        <h3>Everything eases, including the part that cannot</h3>
-        <p>A line does not slide between stops, it eases — but
-        <code>\move</code> is linear and has no easing of its own. So a slot
-        change is cut into three segments whose lengths follow a smoothstep, and
-        because each segment is its own event carrying its own share of the fade
-        and the scale, everything about a line eases on one curve.</p>
-      </div>
-    </details>
   </div>
 </section>
 
-<!-- ------------------------------------------------------- the premise -->
+<!-- --------------------------------------------------------- accuracy -->
 <section>
   <div class="wrap">
-    <p class="kicker">The premise</p>
-    <h2>You already know the words.</h2>
-    <p class="say">
-      Transcribe-then-match falls apart on songs: a chorus that repeats four
-      times gives four identical transcripts and nothing says which is which.
-      Since the lyrics are known, this is <b>forced alignment</b> — the text is
-      consumed in order, so repeats resolve by position for free.
-    </p>
+    <p class="kicker rise">The premise</p>
+    <h2 class="rise">You already know the words.</h2>
+    <p class="say rise">So this is <b>forced alignment</b>, not transcription. A
+      chorus that repeats four times resolves by position, for free.</p>
   </div>
   <div class="wide">
-    <figure>
+    <figure class="rise strip">
       <img src="img/app-stage.png" loading="lazy" width="1520" height="300"
            alt="The timeline zoomed to one line, word cells along the bottom with dividers running the full height of the waveform.">
-      <figcaption>
-        Word boundaries are cut against the audio itself — <b>a divider that
-        misses the syllable attack is visible</b> against the thing it is
-        supposed to be cutting.
-      </figcaption>
+      <figcaption>Word boundaries are cut against the audio itself — <b>a divider
+        that misses the attack is visible</b> against the thing it is cutting.</figcaption>
     </figure>
   </div>
   <div class="wrap">
-    <details>
-      <summary>How three models cross-examine each other</summary>
-      <div class="body">
-        <p>One aligner is not enough, and an AI-generated song has no reference
-        timing to check against. So three independent passes disagree in
-        public.</p>
-        <h3>1 · Demucs isolates the vocal</h3>
-        <p>Aligning against the stem rather than the mix is the single biggest
-        accuracy win on dense productions — the aligners stop locking onto kick
-        drums.</p>
-        <h3>2 · wav2vec2 CTC anchors the structure</h3>
-        <p>A Whisper pass over a whole song desynchronizes: a 4-bar instrumental
-        outruns its attention window and the rest slides. Measured here, that
-        put the closing line at 2:37 of a 4:46 song. CTC finds one globally
-        optimal path, so instrumentals are absorbed as blanks.</p>
-        <h3>3 · Whisper refines inside each section</h3>
-        <p>With structure anchored, each section is cropped to ~20 seconds and
-        re-aligned, where Whisper is both accurate and precise.</p>
-        <h3>4 · A blind transcription adjudicates</h3>
-        <p>Both aligners are <i>told</i> the lyrics, so both can be confidently
-        wrong in the same place. A third pass is told nothing and reports what
-        it hears. It is the strongest single signal in the merge — and it is
-        what finds the chorus repeat somebody forgot to type.</p>
-      </div>
-    </details>
-  </div>
-</section>
-
-<!-- ------------------------------------------------------------ proof -->
-<section>
-  <div class="wrap">
-    <p class="kicker">Accuracy you can check</p>
-    <h2>Every line is scored.</h2>
-    <p class="say">
-      There is no ground truth, so accuracy is <b>estimated from evidence</b>:
-      six signals per line, rolled into a number. Review goes where the
-      benchmark says it should, and lines that are fine carry no mark at all.
-    </p>
-    <div class="stats">
+    <div class="stats rise">
       <div class="stat win"><b>94.5</b><span>mean line score</span></div>
       <div class="stat"><b>33/33</b><span>lines aligned</span></div>
       <div class="stat"><b>160<small>ms</small></b><span>median disagreement</span></div>
       <div class="stat"><b>99%</b><span>vocal coverage</span></div>
     </div>
-    <details>
-      <summary>Proof the score discriminates</summary>
+    <details class="rise">
+      <summary>Three models, cross-examining each other</summary>
       <div class="body">
-        <p>A quality score that always says "fine" is worthless, so it was run
-        against a deliberately degraded alignment — the same track aligned
-        against the full mix, skipping vocal isolation. Mean line score falls
-        from <b>94.5 to 69.9</b>, vocal coverage from 99% to 9%, and lines
-        needing review go from 2 of 33 to 11.</p>
-        <p><b>Read the flags as "look here", not "this is wrong."</b> On this
-        track both flagged lines are correctly placed — they are flagged because
-        two model families disagree about them by seconds, which is the flags
-        doing their job.</p>
+        <p><b>Demucs</b> isolates the vocal — aligning against the stem rather
+        than the mix is the single biggest accuracy win on dense productions.
+        <b>wav2vec2 CTC</b> anchors the structure in one global pass, so a 4-bar
+        instrumental is absorbed as blanks instead of sliding the rest of the
+        song. <b>Whisper</b> then refines inside each ~20-second section, where
+        it is both accurate and precise.</p>
+        <p>All three are <i>told</i> the lyrics, so all three can be confidently
+        wrong in the same place. A fourth pass is told nothing and reports what
+        it hears. It is the strongest single signal in the merge — and it is
+        what finds the chorus repeat somebody forgot to type.</p>
+        <p>Run against a deliberately degraded alignment the mean score falls
+        from <b>94.5 to 69.9</b> and lines needing review go from 2 to 11. It
+        discriminates.</p>
       </div>
     </details>
   </div>
@@ -323,78 +228,79 @@ footer a:hover{color:var(--ink)}
 <!-- ----------------------------------------------------------- by ear -->
 <section>
   <div class="wrap">
-    <p class="kicker">Where models disagree</p>
-    <h2>You settle it by ear, in five seconds.</h2>
-    <p class="say">
-      Of 177 words, two aligners agreed on 137 — you never see those. The rest
-      play you both candidates from the moment each claims the word begins.
-      <b>If neither is right, drag a third onto the waveform.</b>
-    </p>
+    <p class="kicker rise">Where models disagree</p>
+    <h2 class="rise">You settle it by ear.</h2>
+    <p class="say rise">Two aligners agreed on 137 of 177 words — you never see
+      those. The rest play you both candidates. <b>If neither is right, drag a
+      third onto the waveform.</b></p>
   </div>
   <div class="wide">
-    <figure>
+    <figure class="rise">
       <img src="img/app-review.png" loading="lazy" width="1260" height="880"
            alt="The Check timings card: a waveform strip with blue, green and violet markers, and three options — Now, Suggested and Adjusted — each with its own play button.">
-      <figcaption>
-        Blue is the timing now, green is what the second model wants, violet is
-        where you dragged it. It <b>snaps to a vocal onset within 60 ms</b> and
-        is clamped to what the model would actually accept.
-      </figcaption>
     </figure>
   </div>
   <div class="wrap">
-    <details>
+    <details class="rise">
       <summary>What is deliberately not automated</summary>
       <div class="body">
-        <p>Snapping every word start to its nearest detected onset. It looks
-        like free accuracy, but on this track <b>41% of word starts have more
-        than one onset within ±150 ms</b> — snapping would be a coin flip
-        wearing a lab coat. Where two independent models disagree and both
-        readings are plausible, no heuristic settles it honestly, so a human ear
-        does.</p>
+        <p>Snapping every word start to its nearest onset. It looks like free
+        accuracy, but on this track <b>41% of word starts have more than one
+        onset within ±150 ms</b> — snapping would be a coin flip wearing a lab
+        coat. Where two models disagree and both readings are plausible, no
+        heuristic settles it honestly, so an ear does.</p>
       </div>
     </details>
   </div>
 </section>
 
-<!-- ------------------------------------------------------------ close -->
+<!-- ------------------------------------------------------------- app -->
+<section>
+  <div class="wrap">
+    <p class="kicker rise">The whole track</p>
+    <h2 class="rise">One waveform, every line.</h2>
+    <p class="say rise">Colour means <b>act here</b> and nothing else.</p>
+  </div>
+  <div class="wide">
+    <figure class="rise">
+      <img src="img/app-full.png" loading="lazy" width="1560" height="1000"
+           alt="The song app: a waveform with every lyric line bracketed, and the lyrics listed below with per-line scores.">
+    </figure>
+  </div>
+</section>
+
+<!-- ----------------------------------------------------------- close -->
 <section>
   <div class="wrap" style="text-align:center">
-    <h2>Two commands.</h2>
-    <p class="say" style="max-width:540px;margin-inline:auto">
-      Roughly five minutes to align a five-minute track, and thirteen more to
-      render it at 1080p. Models download once; re-runs reuse the cached stem.
-    </p>
-    <pre><code>./setup.sh
+    <h2 class="rise">Two commands.</h2>
+    <p class="say rise" style="margin-bottom:34px">Five minutes to align a
+      five-minute track. Thirteen more to render it.</p>
+    <div class="rise">
+      <pre><code>./setup.sh
 ./.venv/bin/python -m song</code></pre>
-    <div class="btns" style="margin-top:32px">
+    </div>
+    <div class="btns rise">
       <a class="btn primary" href="demo/">Try it in your browser</a>
       <a class="btn" href="https://github.com/nuterian/song">GitHub</a>
     </div>
 
-    <details style="text-align:left">
+    <details class="rise" style="text-align:left">
       <summary>Every command, and what lands on disk</summary>
       <div class="body">
         <pre><code>python -m song                          # open the app
 python -m song track.wav lyrics.txt     # align, then open it
-python -m song align track.wav lyrics.txt
 python -m song audit workdir/my-track   # repair + list what needs an ear
 python -m song score workdir/my-track   # re-run the benchmark on your edits
-python -m song export workdir/my-track
 python -m song video workdir/my-track   # render karaoke.mp4</code></pre>
         <p>Everything lands in <code>workdir/&lt;track&gt;/</code>:
-        <code>lyrics.lrc</code>, <code>lyrics.word.lrc</code> (per-word),
-        <code>lyrics.srt</code> and <code>.vtt</code>, plus
+        <code>lyrics.lrc</code>, <code>lyrics.word.lrc</code>,
+        <code>lyrics.srt</code>, <code>.vtt</code>, and
         <code>project.json</code> — word timings, per-line scores and the
         scorecard. <code>song video</code> adds <code>lyrics.ass</code> and
-        <code>karaoke.mp4</code>, and caches the beat grid and a two-band split
-        as <code>beats.json</code>.</p>
+        <code>karaoke.mp4</code>.</p>
         <p>Lyrics input is plain text: one line per lyric line, a blank line
-        between sections, and a header naming each. <code>[Verse 1]</code>,
-        <code>Chorus:</code>, <code>(Bridge)</code> and
-        <code>Verse 1 (8 bars, pulsing bass)</code> all parse.</p>
-        <p>Demucs on Apple MPS is broken under torch 2.5 and Whisper hits
-        unimplemented sparse ops there, so it is CPU throughout.</p>
+        between sections, a header naming each. Demucs on Apple MPS is broken
+        under torch 2.5, so it is CPU throughout.</p>
       </div>
     </details>
   </div>
@@ -407,6 +313,16 @@ python -m song video workdir/my-track   # render karaoke.mp4</code></pre>
     <span style="opacity:.65">Free, open-source models. Nothing leaves your machine.</span>
   </div>
 </footer>
+
+<script>
+  /* The reveal is CSS. This is only here because an autoplaying loop is motion
+     too, and the stylesheet already honours the request not to have any. */
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('video[autoplay]').forEach(v => {
+      v.removeAttribute('autoplay'); v.pause();
+    });
+  }
+</script>
 
 </body>
 </html>
