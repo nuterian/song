@@ -30,6 +30,12 @@ img,video{max-width:100%;height:auto;display:block}
 
 .wrap{max-width:700px;margin:0 auto;padding:0 24px}
 .wide{max-width:1280px;margin:0 auto;padding:0 24px}
+/* Body copy keeps a 700px measure and gives up being centred on the page, so it
+   starts where the pictures start. Centred over media half again its width, a
+   left-aligned column shares an axis with everything and an edge with nothing -
+   which is what "misaligned" looks like even when every gap is symmetrical. */
+.copy{max-width:1280px;margin:0 auto;padding:0 24px}
+.copy > *{max-width:700px}
 
 /* ---------- motion ----------
    All of it is CSS, and all of it is an enhancement over a page that is
@@ -61,8 +67,8 @@ img,video{max-width:100%;height:auto;display:block}
 @keyframes settle{from{opacity:0;transform:translateY(30px) scale(.985)}}
 @keyframes lift{from{opacity:0;transform:translateY(14px)}}
 @keyframes sweep{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-@keyframes dock{from{background-color:rgba(10,12,16,0);border-bottom-color:rgba(28,33,42,0);
-  -webkit-backdrop-filter:blur(0px);backdrop-filter:blur(0px)}}
+@keyframes dock{from{background-color:rgba(10,12,16,0)}
+  to{background-color:rgba(10,12,16,.88);border-bottom-color:rgba(28,33,42,.9)}}
 @keyframes tick{0%,100%{transform:scaleY(1)}42%{transform:scaleY(.34)}70%{transform:scaleY(1.12)}}
 @keyframes sung{from{background-position:100% 0}}
 @keyframes glide{from{transform:translateY(24px)}}
@@ -115,11 +121,24 @@ img,video{max-width:100%;height:auto;display:block}
   .playhead,header.top{display:none}
 }
 
-/* ---------- header ---------- */
+/* ---------- header ----------
+   No backdrop-filter. There was one, and it is the first thing to go when a
+   page scrolls badly: a blur behind a sticky element has to read the composited
+   backdrop back, blur it and draw it again on every frame the header moves over
+   content, which is every scroll frame, over 3424x116 device pixels on a retina
+   screen. This one was also animating its own radius, so it could not even be
+   cached between frames. Against a ground this close to black, 88% opacity does
+   the same job for nothing.
+
+   Its own measure, narrower than the media below it. Aligned to the video the
+   nav is 1232 wide, and on a large screen that reads as two items flung into
+   opposite corners of an empty bar - the gap either side is correct and the
+   composition still looks wrong. Inside the picture's edges it belongs to the
+   page instead of framing it. */
 header.top{position:sticky;top:0;z-index:9;
-  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
-  background:rgba(10,12,16,.72);border-bottom:1px solid rgba(28,33,42,.9)}
-.top .wide{display:flex;align-items:center;gap:12px;height:58px}
+  background:rgba(10,12,16,.88);border-bottom:1px solid rgba(28,33,42,0)}
+.top .bar{max-width:1080px;margin:0 auto;padding:0 24px;
+  display:flex;align-items:center;gap:12px;height:60px}
 .playhead{position:absolute;inset:auto 0 -1px;height:2px;background:var(--accent);
   transform:scaleX(0);transform-origin:0 50%}
 .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.03em}
@@ -188,9 +207,13 @@ figure{margin:clamp(46px,7vw,86px) 0 0}
    presentational height - and without height:auto that height wins, so every
    shot gets drawn at the wrong shape. It happened once. */
 figure img,figure video{width:100%;border-radius:16px;border:1px solid var(--line);
-  box-shadow:0 40px 110px rgba(0,0,0,.7)}
+  box-shadow:0 20px 52px rgba(0,0,0,.55)}
 figcaption{margin:24px auto 0;max-width:600px;font-size:14px;line-height:1.6;
   color:var(--faint);text-align:center}
+/* The hero is a centred composition and its caption is centred under it.
+   Everything below the hero reads down a left edge, and a caption centred over
+   a picture in that half of the page is the one line that does not. */
+section:not(.hero) figcaption{margin-left:0;text-align:left}
 figcaption b{color:var(--dim);font-weight:600}
 .strip img{border-radius:12px}
 
@@ -240,7 +263,7 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
 <body>
 
 <header class="top">
-  <div class="wide">
+  <div class="bar">
     <a class="brand" href="#top">
       <svg class="eq" viewBox="0 0 26 20" aria-hidden="true">
         <path d="M2 12 L2 8"/><path d="M7 15 L7 5"/><path d="M12 18 L12 2"/>
@@ -281,10 +304,10 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
 
 <!-- --------------------------------------------------------- accuracy -->
 <section>
-  <div class="wrap">
-    <p class="kicker rise">The premise</p>
-    <h2 class="rise">You already know the words.</h2>
-    <p class="say rise">So this is <b>forced alignment</b>, not transcription. A
+  <div class="copy rise">
+    <p class="kicker">The premise</p>
+    <h2>You already know the words.</h2>
+    <p class="say">So this is <b>forced alignment</b>, not transcription. A
       chorus that repeats four times resolves by position, for free.</p>
   </div>
   <div class="wide">
@@ -295,7 +318,7 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
         that misses the attack is visible</b> against the thing it is cutting.</figcaption>
     </figure>
   </div>
-  <div class="wrap">
+  <div class="copy">
     <div class="stats">
       <div class="stat win"><b>94.5</b><span>mean line score</span></div>
       <div class="stat"><b>33/33</b><span>lines aligned</span></div>
@@ -325,10 +348,10 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
 
 <!-- ----------------------------------------------------------- by ear -->
 <section>
-  <div class="wrap">
-    <p class="kicker rise">Where models disagree</p>
-    <h2 class="rise">You settle it by ear.</h2>
-    <p class="say rise">Two aligners agreed on 137 of 177 words — you never see
+  <div class="copy rise">
+    <p class="kicker">Where models disagree</p>
+    <h2>You settle it by ear.</h2>
+    <p class="say">Two aligners agreed on 137 of 177 words — you never see
       those. The rest play you both candidates. <b>If neither is right, drag a
       third onto the waveform.</b></p>
   </div>
@@ -338,7 +361,7 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
            alt="The Check timings card: a waveform strip with blue, green and violet markers, and three options — Now, Suggested and Adjusted — each with its own play button.">
     </figure>
   </div>
-  <div class="wrap">
+  <div class="copy">
     <details class="rise">
       <summary>What is deliberately not automated</summary>
       <div class="body">
@@ -354,10 +377,10 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
 
 <!-- ------------------------------------------------------------- app -->
 <section>
-  <div class="wrap">
-    <p class="kicker rise">The whole track</p>
-    <h2 class="rise">One waveform, every line.</h2>
-    <p class="say rise">Colour means <b>act here</b> and nothing else.</p>
+  <div class="copy rise">
+    <p class="kicker">The whole track</p>
+    <h2>One waveform, every line.</h2>
+    <p class="say">Colour means <b>act here</b> and nothing else.</p>
   </div>
   <div class="wide">
     <figure class="rise">
@@ -369,20 +392,20 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
 
 <!-- ----------------------------------------------------------- close -->
 <section>
-  <div class="wrap" style="text-align:center">
-    <h2 class="rise">Two commands.</h2>
-    <p class="say rise" style="margin-bottom:34px">Five minutes to align a
+  <div class="wrap rise" style="text-align:center">
+    <h2>Two commands.</h2>
+    <p class="say" style="margin-bottom:34px">Five minutes to align a
       five-minute track. Twelve more to render it at 1080p60.</p>
-    <div class="rise">
+    <div>
       <pre><code>./setup.sh
 ./.venv/bin/python -m song</code></pre>
     </div>
-    <div class="btns rise">
+    <div class="btns">
       <a class="btn primary" href="demo/">Try it in your browser</a>
       <a class="btn" href="https://github.com/nuterian/song">GitHub</a>
     </div>
 
-    <details class="rise" style="text-align:left">
+    <details style="text-align:left">
       <summary>Every command, and what lands on disk</summary>
       <div class="body">
         <pre><code>python -m song                          # open the app
@@ -413,12 +436,22 @@ python -m song video workdir/my-track   # render karaoke.mp4</code></pre>
 </footer>
 
 <script>
-  /* The reveal is CSS. This is only here because an autoplaying loop is motion
-     too, and the stylesheet already honours the request not to have any. */
+  /* The reveal is CSS. Both of these are about the video, which CSS cannot
+     reach: the first because an autoplaying loop is motion too and the
+     stylesheet already honours the request not to have any, the second because
+     a 1080p60 loop goes on decoding for the whole page once you have scrolled
+     past it. Every failure here leaves the video playing, which is what it did
+     before either of them existed. */
+  const clips = document.querySelectorAll('video[autoplay]');
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    document.querySelectorAll('video[autoplay]').forEach(v => {
-      v.removeAttribute('autoplay'); v.pause();
-    });
+    clips.forEach(v => { v.removeAttribute('autoplay'); v.pause(); });
+  } else if (window.IntersectionObserver) {
+    const watch = new IntersectionObserver(seen => {
+      seen.forEach(({target, isIntersecting}) => {
+        if (isIntersecting) target.play().catch(() => {}); else target.pause();
+      });
+    }, {rootMargin: '150px'});
+    clips.forEach(v => watch.observe(v));
   }
 </script>
 
