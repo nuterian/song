@@ -107,9 +107,18 @@ sounds like. It covers a second and a half of the track, so a beat has a place
 on it: the stroke blooms warm where each beat falls, full strength on a
 downbeat, and that bloom crosses the middle of the curve on the frame the beat
 is heard. It dissolves into the picture at both ends rather than stopping.
+
 Behind both, four fields of light drift and answer different parts of the track,
 over a frame lit throughout and tinted by the section you are in, keyed on its
-*name*, so every chorus looks the same.
+*name*, so every chorus looks the same. A fifth field answers the bar rather
+than the level: it crosses the ceiling once per bar, right to left, swelling
+from nothing at the downbeat and gone by the next one. Everything else here can
+tell you a chorus is loud; that one can tell you where the chorus has got to.
+
+1080p at 60 fps, h.264 at CRF 17, and the audio is muxed from the original file
+at 256k — `song video` looks for it where the project last saw it and then
+anywhere obvious nearby, because a workdir's cached mix is a ~130 kbps encode
+made so a browser could scrub a waveform. `--audio` names it outright.
 
 Everything answers the mix with its best correlation at zero lag, and everything
 it does is small — 6.9% of the available brightness over ten seconds. Nothing to
@@ -156,8 +165,8 @@ Bring your own audio. `examples/lyrics.txt` is the full sample file.
 
 ## Notes
 
-Roughly 5 minutes end-to-end for a 5-minute track on an M4 CPU, and about 13
-more to render the video at 1080p (4 at `--height 720`). Models download once (~3 GB) to the usual torch/HF caches.
+Roughly 5 minutes end-to-end for a 5-minute track on an M4 CPU, and about 12
+more to render the video at 1080p60 (6 at `--height 720`). Models download once (~3 GB) to the usual torch/HF caches.
 Demucs on Apple MPS is broken under torch 2.5 and Whisper hits unimplemented
 sparse ops there, so it is CPU throughout.
 

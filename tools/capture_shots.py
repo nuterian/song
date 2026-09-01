@@ -80,18 +80,27 @@ SHOTS = [
 # whole page.
 DEMO_CLIP = "0:40-1:22"
 
-# 1600, not 1920. The clip is drawn in a 1232 px box, so 1920 is 1.56x and 1600
-# is 1.30x - both are still a downsample on a 2x screen. Measured against the
-# 16 MB render, at 1232 px every rung from 1280 to 1920 lands inside 0.001 SSIM
-# of the others, and even resampled up to 2464 device pixels the spread is
-# 0.9908 to 0.9919. Resolution above 1600 is buying almost nothing here, so it
-# is spent on a lower CRF instead. aq-mode=3 is free: it is both 5% smaller and
-# very slightly closer to the source, because this picture is mostly gradient
-# and the default aq starves exactly that.
+# 1600, not 1920, and that still holds now the render is 60 fps. The clip is
+# drawn in a 1232 px box, so 1600 is already 1.30x and a downsample even on a 2x
+# screen. Measured against the 24 MB render at 2464 device pixels, 1920 at CRF
+# 27 scores 0.99248 against 1600's 0.99169 for 55% more bytes, and stacked side
+# by side at that magnification the type is not tellable apart. Resolution is
+# not where quality goes here; frame rate and bitrate are.
+#
+# CRF 30 to 27, which is where the clip stopped looking like a compressed copy
+# of itself. It could go further - 24 buys another 0.0005 of SSIM for 1.3 MB -
+# and it does not, because this is a hero video that autoplays: past some size
+# the thing a viewer notices is not the encode, it is the buffering, and a stall
+# looks exactly like the dropped frames this was meant to fix.
+#
+# aq-mode=3 is free: both smaller and slightly closer to the source, because
+# this picture is mostly gradient and the default aq starves exactly that.
 DEMO_WIDTH = 1600
-DEMO_CRF = "30"
+DEMO_CRF = "27"
 DEMO_X264 = "aq-mode=3:aq-strength=0.8"
-DEMO_AUDIO = "96k"    # it is a music video; muting it would be a strange demo
+# The render now muxes the original file rather than the workdir's scrub cache,
+# so there is finally something here worth carrying. 96k was throwing it away.
+DEMO_AUDIO = "160k"   # it is a music video; muting it would be a strange demo
 STILL_AT = 29.0       # seconds into the clip: mid-word, mid-chorus
 
 BOOT = """
