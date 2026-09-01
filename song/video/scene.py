@@ -11,7 +11,7 @@ Four layers, back to front:
     lobes    four drifting fields of light - a pool, a column, a band, a spot -
              each answering a different part of the track
     page     a wide soft lift under the corner the words sit in
-    trace    three zigzag lines low on the right: bass, mix and air
+    trace    one smooth curve low on the right, lit where the beats are
     grain    a few thousandths of noise, which is what stops the gradient banding
 
 Lit to the corners, and lit throughout. There is no vignette and no dark floor:
@@ -146,9 +146,20 @@ TRACE_FADE = 0.098       # how much of each end is spent fading out
 # 18 px of a 67 px fade, which is about a quarter of it.
 TRACE_TAIL = 0.25 * TRACE_FADE
 TRACE_X = 1.0 - MARGIN_L / PLAY_W - TRACE_REACH + TRACE_TAIL
-TRACE_SPAN = 0.122       # half-width of the part that actually zigzags
-TRACE_EDGE = 0.16        # the fraction of each end that ramps into the flat line
-TRACE_GAMMA = 0.90       # opens the quiet detail a little, without flattening loud
+TRACE_SPAN = 0.122       # half-width of the part that actually moves
+# How much of each end the wave spends shrinking into the flat line. Long,
+# because this is the half of "no ends" the alpha fade cannot do: a full-height
+# wave that merely dims still has a visible extent, and what should happen at
+# either end is that there stops being a wave there.
+TRACE_EDGE = 0.30
+# Deepens the troughs without touching the peaks. The zigzag did not need this
+# - a sawtooth reads as detail whatever its amplitudes are doing - but a smooth
+# curve is only as interesting as the difference between one crest and the next,
+# and after the peak hold each tooth does that difference is small: at 0.9 the
+# crests inside one frame spanned 38% of the tallest, which draws something very
+# close to a pure tone. At 1.7 they span 58%, the median height falls by 6px and
+# the loudest peaks do not move at all, because a gamma above 1 leaves 1 alone.
+TRACE_GAMMA = 1.70
 
 # One line. Three of them - bass, mix and air, stacked - showed the bands
 # honestly and looked like a readout: three objects where the picture wanted
@@ -157,10 +168,28 @@ TRACE_GAMMA = 0.90       # opens the quiet detail a little, without flattening l
 # tremor, so cymbals and consonants arrive as texture on the shape rather than
 # as a second shape. The mix is still what the line draws.
 #
+# Fewer, wider teeth than the zigzag had. 52 of them across 468 px was a cycle
+# every 18 px, and at that pitch a smooth curve and a sawtooth are the same
+# picture - the curvature has nowhere to happen. 36 gives a cycle every 26 px,
+# which is wide enough to see that it is a curve. The window it covers is kept
+# by opening the lag to match, and no detail is lost by it: the peak hold each
+# tooth does is derived from that same lag, so a wider tooth simply holds over
+# more of the envelope rather than skipping any of it.
+#
 #   signal, teeth, seconds per tooth, deflection, stroke px
-TRACES = (("mix", 52, 1.0 / 40, 0.038, 1.3),)
+TRACES = (("mix", 36, 1.0 / 25, 0.038, 1.3),)
 TRACE_AIR = 0.30         # how much of the deflection the air band contributes
 TRACE_BASS_WEIGHT = 1.5  # how much heavier the stroke gets on a full kick
+
+# Light on the line where the beats are. The teeth are a time axis - tooth i
+# reads the track at t + (i - n/2) * lag - so a beat has a place on the curve,
+# entering at the right, drifting left as the song runs, and crossing the middle
+# at the exact moment it is heard. Lighting it there is the one ornament that is
+# also a readout: it puts the beat grid beside the lyric, in the same frame, on
+# the same clock.
+GLOW_WIDTH = 2.1         # how many teeth wide a beat's bloom is
+GLOW_LIFT = 0.45         # how far toward the glow colour a full downbeat pulls
+GLOW_SWELL = 0.30        # how much fatter the stroke gets inside a bloom
 
 # One field, and it does not move. Cycling eight of them repeated every eight
 # frames, which is 3.75 Hz - squarely in the band the eye reads as flicker. A
@@ -198,6 +227,10 @@ def _palette(hue: float) -> np.ndarray:
     # a pool of light should do.
     rows += [_rgb(hue + off, sat, 0.97) for off, sat, *_ in LOBES]
     rows.append(_rgb(hue + 6, 0.55, 0.22))       # the trace, darker than its ground
+    # What a beat lights the line to. Warmer and much brighter than the ink it
+    # replaces, but still darker than the ground it is drawn on, so a bloom
+    # reads as the stroke catching the light rather than as a hole in it.
+    rows.append(_rgb(hue - 14, 0.80, 0.62))
     return np.stack(rows)
 
 
@@ -384,25 +417,54 @@ class Scene:
         edge = np.clip((TRACE_REACH - np.abs(xs - TRACE_X)) / TRACE_FADE, 0.0, 1.0)
         self.trace_alpha = (edge * edge * (3.0 - 2.0 * edge)).astype(np.float32)[None, :]
 
+        # The curve, as an amplitude riding a carrier rather than as a polyline.
+        #
+        # It used to be np.interp straight from the teeth to the columns, which
+        # is linear between knots, which is a zigzag - every tooth a corner. The
+        # obvious repair is a spline through the same points, and it is the
+        # wrong one: a spline fitted to alternating peaks overshoots at every
+        # one of them, so the loud parts of the track come out taller than the
+        # data says and the quiet parts ring.
+        #
+        # Splitting the shape in two instead costs nothing and cannot do that.
+        # The teeth carry a non-negative amplitude and the alternation is a
+        # cosine locked to their pitch: cos(pi*u) is exactly -1, +1, -1 at
+        # successive teeth, so the peaks land on the same values the zigzag hit,
+        # and everything between them is a cosine arc with no corner anywhere in
+        # it. The amplitude is smoothstepped between teeth rather than
+        # interpolated straight, so its slope matches at each knot too and the
+        # envelope has no corners either.
         self.teeth = {}
         for name, count, lag, *_ in TRACES:
-            # Full height across the middle and ramping only at the very ends,
-            # so the outline of a line is its waveform rather than a spindle the
-            # waveform has been poured into.
+            # Full height across the middle and shrinking into the flat line
+            # over the last stretch at each end, so the wave has no ends - it
+            # stops being a wave before it stops being drawn.
             ramp = np.clip(
                 np.minimum(np.linspace(0.0, 1.0, count, dtype=np.float32),
                            np.linspace(1.0, 0.0, count, dtype=np.float32))
                 / TRACE_EDGE, 0.0, 1.0)
-            taper = ramp * ramp * (3.0 - 2.0 * ramp)
+            taper = (ramp * ramp * (3.0 - 2.0 * ramp)).astype(np.float32)
+            first = (TRACE_X - TRACE_SPAN) * w
+            spacing = (2.0 * TRACE_SPAN * w) / max(1, count - 1)
+            # Where each column falls on the tooth grid. Kept unclamped for the
+            # beat glow, which needs to know that a beat is off the end rather
+            # than that it is piled up against it.
+            self.tooth_u = ((self.columns - first) / spacing).astype(np.float32)
+            held = np.clip(self.tooth_u, 0.0, count - 1.0)
+            below = np.clip(np.floor(held), 0, count - 2).astype(np.intp)
+            frac = (held - below).astype(np.float32)
             self.teeth[name] = (
-                np.linspace(TRACE_X - TRACE_SPAN, TRACE_X + TRACE_SPAN,
-                            count, dtype=np.float32) * w,
-                # Alternating, which is what makes it a zigzag rather than a curve.
-                (taper * np.where(np.arange(count) % 2, 1.0, -1.0)).astype(np.float32),
-                # Each tooth reads a little further back than the one before it,
-                # so the shape ripples left to right instead of moving as one.
+                taper,
+                below,
+                (frac * frac * (3.0 - 2.0 * frac)).astype(np.float32),
+                np.cos(np.pi * held).astype(np.float32),
+                # Each tooth reads a little further along the track than the one
+                # before it, so the shape flows right to left instead of moving
+                # as one - and so a moment in the song has a place on the curve.
                 ((np.arange(count, dtype=np.float32) - count / 2.0) * lag),
             )
+            self.trace_count, self.trace_lag = count, lag
+        self._glow = np.zeros(w, dtype=np.float32)
         self.env_index = np.arange(self.detail["mix"].size, dtype=np.float32)
 
         # Static, so it is built once. Separable like a lobe: a column of light
@@ -461,14 +523,46 @@ class Scene:
         previous, current = self.section_colour[i - 1], self.section_colour[i]
         return previous + (current - previous) * mix
 
-    def _trace(self, t: float, name: str, height: float, weight: float) -> np.ndarray:
-        """One thin zigzag line, over the band rows only. (band, w) in 0..1.
+    def _beat_glow(self, t: float) -> np.ndarray:
+        """How lit each column of the curve is by the beats near it. (w,) in 0..1.
 
-        Drawn as a stroke rather than a filled shape, and fixed in place rather
-        than scrolling: what it shows is the song right now, not a window of its
-        history sliding past.
+        A tooth is a moment - tooth i reads the track at t + (i - n/2) * lag - so
+        a beat has a column, and the column it has moves left at exactly the rate
+        the wave under it does. It crosses the middle as the beat is heard.
+
+        Downbeats bloom at full strength and the beats between them at just over
+        half, which is the same weighting the whole picture already pulses on, so
+        the bar you can see in the line is the bar you can feel in the room.
         """
-        at, shape, lag = self.teeth[name]
+        count, lag = self.trace_count, self.trace_lag
+        glow = self._glow
+        glow[:] = 0.0
+        # Only the beats whose bloom could reach a drawn column. Everything else
+        # in a five-minute grid is 590 gaussians nobody would ever see.
+        reach = (count / 2.0 + 3.0 * GLOW_WIDTH) * lag
+        lo = int(np.searchsorted(self.beat_times, t - reach))
+        hi = int(np.searchsorted(self.beat_times, t + reach))
+        if hi <= lo:
+            return glow
+        centres = count / 2.0 + (self.beat_times[lo:hi] - t) / lag
+        near = (self.tooth_u[None, :] - centres[:, None]) / GLOW_WIDTH
+        np.multiply(near, near, out=near)
+        np.negative(near, out=near)
+        np.exp(near, out=near)
+        near *= self.beat_weight[lo:hi, None]
+        glow[:] = near.sum(axis=0)
+        np.clip(glow, 0.0, 1.0, out=glow)
+        return glow
+
+    def _trace(self, t: float, name: str, height: float, weight: float,
+               glow: np.ndarray) -> np.ndarray:
+        """One thin curve, over the band rows only. (band, w) in 0..1.
+
+        Drawn as a stroke rather than a filled shape. It covers a second and a
+        half of the track either side of now, so it flows, but it is not a
+        history scrolling past: the middle of it is the word being sung.
+        """
+        taper, below, frac, carrier, lag = self.teeth[name]
         track = self.detail[name]
         when = (t + lag) * self.rate
         teeth = np.interp(when, self.env_index[:track.size], track).astype(np.float32)
@@ -478,8 +572,9 @@ class Scene:
         if air is not None:
             teeth = teeth + TRACE_AIR * np.interp(
                 when, self.env_index[:air.size], air).astype(np.float32)
-        path = np.interp(self.columns, at, teeth * shape * (height * self.h))
-        path = path.astype(np.float32) + TRACE_BASE * self.h
+        teeth = teeth * taper
+        amplitude = teeth[below] + (teeth[below + 1] - teeth[below]) * frac
+        path = amplitude * carrier * (height * self.h) + TRACE_BASE * self.h
 
         # A steep segment is longer than the column it crosses, so measuring the
         # distance to it vertically would draw it thinner. Dividing by the slope
@@ -489,6 +584,12 @@ class Scene:
         stroke = np.abs(self.band_y - path[None, :])
         stroke /= (weight * np.sqrt(1.0 + slope * slope))[None, :]
         np.subtract(1.0, stroke, out=stroke)
+        np.clip(stroke, 0.0, 1.0, out=stroke)
+        # A bloom is light, and light on a stroke this thin has to make it a
+        # little fatter as well as a little brighter or there is nowhere for the
+        # brightness to be. Applied before the end fade, so the ends still
+        # dissolve on schedule however lit they happen to be.
+        stroke *= (1.0 + GLOW_SWELL * glow)[None, :]
         np.clip(stroke, 0.0, 1.0, out=stroke)
         stroke *= self.trace_alpha
         return stroke
@@ -504,7 +605,8 @@ class Scene:
         # than painted once per section.
         quiet, loud = self._colours(t)
         palette = quiet + (loud - quiet) * energy
-        deep, mid, fields, trace = palette[0], palette[1], palette[2:6], palette[6]
+        deep, mid, fields = palette[0], palette[1], palette[2:6]
+        trace, glowc = palette[6], palette[7]
 
         img, field, tint = self._img, self._lobe, self._tint
         # The floor, lifted toward the top. Written as a column and broadcast:
@@ -546,14 +648,22 @@ class Scene:
         # on and adding a dark colour to a light one lightens it: the trace was
         # drawn correctly and invisibly for a while on that mistake.
         band = img[self.band]
+        glow = self._beat_glow(t)
+        # What the stroke is coloured, column by column: ink everywhere, pulled
+        # toward the warm bright row wherever a beat is blooming. A colour per
+        # column rather than a lit copy composited over the top, because the
+        # stroke is one pixel of coverage and two passes over it would show the
+        # seam between them.
+        target = trace[:, None] + (glowc - trace)[:, None] * (GLOW_LIFT * glow)[None, :]
         for name, _, _, height, weight in TRACES:
             # Bass is the weight of the stroke, so a kick lands as a heavier
             # line rather than as a taller one.
             bass = self._at(self.detail["low"], t)
-            stroke = self._trace(t, name, height, weight * (1.0 + TRACE_BASS_WEIGHT * bass))
+            stroke = self._trace(
+                t, name, height, weight * (1.0 + TRACE_BASS_WEIGHT * bass), glow)
             stroke *= 0.66 + 0.34 * self._at(self.mix, t)
             for channel in range(3):
-                np.multiply(stroke, band[:, :, channel] - trace[channel],
+                np.multiply(stroke, band[:, :, channel] - target[channel][None, :],
                             out=self._band_tint)
                 band[:, :, channel] -= self._band_tint
 
