@@ -69,39 +69,53 @@ SHOTS = [
     """),
 ]
 
-# The first chorus: four lines back to back, no instrumental to sit through,
-# and the section colour has already arrived. Twelve seconds loops without a
-# seam because nothing on screen is trying to get anywhere.
-# The page's demo, and the first thing anybody sees. It ends as the first chorus
-# does, having crossed three sections and one instrumental - the only way to
-# show that the colour is the song's structure and not a slideshow. It starts on
-# the *second* lyric rather than the first, because the first has nothing above
-# it - two lines instead of three - and that would be the opening frame of the
-# whole page.
-DEMO_CLIP = "0:40-1:22"
+# Eight bars of the final chorus, downbeat to downbeat, and every part of that
+# is doing something.
+#
+# It is a loop, so the only length that is right is a musical one. At 123.05 BPM
+# a bar is 1.950s and eight of them are 15.60s; this window is 15.35s because it
+# runs from one tracked downbeat to the eighth one after it rather than from an
+# arithmetic multiple. Starting and ending on a downbeat is what lets the audio
+# wrap without a seam, and it is also where the bar light is at zero - it swells
+# from nothing at each downbeat, so the frame it teleports on is a frame it is
+# not on screen for.
+#
+# The chorus opens and closes on the same words, so the wrap goes from the tail
+# of "You're my gravity in motion." straight back into the middle of "You're my
+# gravity in motion," - the same phrase, mid-word, which is about as close to
+# invisible as a lyric loop gets.
+#
+# Of the three eight-bar chorus windows in this track it is the one that wraps
+# best. Measured on the generated picture, last frame against first: mean
+# absolute difference 11.0 of 255, against 14.4 for the second chorus and 15.9
+# for the first. It is also the loudest of the three, and 99% of it has a word
+# being sung. The two lines the scorecard wants an ear on, 5 and 31, are
+# nowhere near it.
+#
+# It does not wrap invisibly and it cannot: the four fields of light drift on
+# periods with no common multiple, by design, so after 15s they are somewhere
+# else. 11 of 255 is a soft shift, not a cut.
+DEMO_CLIP = "3:38.895-3:54.243"
 
-# 1600, not 1920, and that still holds now the render is 60 fps. The clip is
-# drawn in a 1232 px box, so 1600 is already 1.30x and a downsample even on a 2x
-# screen. Measured against the 24 MB render at 2464 device pixels, 1920 at CRF
-# 27 scores 0.99248 against 1600's 0.99169 for 55% more bytes, and stacked side
-# by side at that magnification the type is not tellable apart. Resolution is
-# not where quality goes here; frame rate and bitrate are.
+# 1920 now, where the 42-second version was 1600. That was the right call at
+# that length - the clip is drawn in a 1232 px box, and 1920 cost 55% more bytes
+# for a difference invisible at 2x - and this is the right call at this one,
+# because the whole thing is short enough that the comparison changes. Measured
+# at 2464 device pixels against the render:
 #
-# CRF 30 to 27, which is where the clip stopped looking like a compressed copy
-# of itself. It could go further - 24 buys another 0.0005 of SSIM for 1.3 MB -
-# and it does not, because this is a hero video that autoplays: past some size
-# the thing a viewer notices is not the encode, it is the buffering, and a stall
-# looks exactly like the dropped frames this was meant to fix.
+#     1600 wide, CRF 20   3301 KB   0.99209
+#     1920 wide, CRF 23   3381 KB   0.99267
 #
-# aq-mode=3 is free: both smaller and slightly closer to the source, because
-# this picture is mostly gradient and the default aq starves exactly that.
-DEMO_WIDTH = 1600
-DEMO_CRF = "27"
+# The same bytes buy a better picture at the higher resolution once there are
+# only fifteen seconds of them. CRF 20 at 1920 is better again and is not taken:
+# 0.0004 of SSIM for another 2.1 MB, on something that autoplays.
+DEMO_WIDTH = 1920
+DEMO_CRF = "23"
 DEMO_X264 = "aq-mode=3:aq-strength=0.8"
 # The render now muxes the original file rather than the workdir's scrub cache,
 # so there is finally something here worth carrying. 96k was throwing it away.
 DEMO_AUDIO = "160k"   # it is a music video; muting it would be a strange demo
-STILL_AT = 29.0       # seconds into the clip: mid-word, mid-chorus
+STILL_AT = 4.6        # seconds into the clip: mid-word, mid-line, three lines up
 
 BOOT = """
 <script>
