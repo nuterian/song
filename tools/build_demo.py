@@ -15,6 +15,7 @@ to be a copy of.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import subprocess
@@ -79,9 +80,18 @@ def build(workdir: Path, media: bool = False) -> None:
     # The page is the app's own index.html with absolute asset paths made
     # relative and static mode switched on. Generated, so the demo tracks the
     # app rather than being a fork of it.
+    # Each asset link carries a hash of its content. Pages serves everything
+    # with a ten-minute cache, and without this a returning visitor gets the
+    # new page with the old script for up to ten minutes after a deploy -
+    # which broke the demo the first time an element the script binds was
+    # removed.
+    def stamp(name: str) -> str:
+        digest = hashlib.sha256((OUT / name).read_bytes()).hexdigest()[:10]
+        return f"{name}?v={digest}"
+
     html = (UI / "index.html").read_text(encoding="utf-8")
-    html = html.replace('href="/styles.css"', 'href="styles.css"')
-    html = html.replace('src="/app.js"', 'src="app.js"')
+    html = html.replace('href="/styles.css"', f'href="{stamp("styles.css")}"')
+    html = html.replace('src="/app.js"', f'src="{stamp("app.js")}"')
     html = html.replace(
         "<script src=", "<script>window.SONG_STATIC = './';</script>\n<script src=", 1
     )
