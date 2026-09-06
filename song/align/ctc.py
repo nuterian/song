@@ -9,6 +9,12 @@ Long tracks are handled by computing CTC emissions in chunks and then running a
 single global Viterbi alignment over the concatenated emissions, so the
 alignment itself never loses the long-range ordering that makes repeated
 choruses resolve correctly.
+
+Deliberately not taken from here: syllable timing. The per-character spans
+are right there, and on a held sung vowel they are wrong - the model emits
+the vowel once and bunches the rest of the word's letters at the next
+attack (measured: 154 ms median against syllable onsets placed by eye,
+worse than dividing the word evenly). See pipeline.settle_syllables.
 """
 
 from __future__ import annotations
@@ -150,11 +156,13 @@ def align_lines_ctc(
         start_frame = min(max(spans[0].start, 0), last_frame)
         end_frame = min(max(spans[-1].end, 0), last_frame)
         probs = [float(s.score) for s in spans]
+        start = float(frame_times[start_frame]) + offset
+        end = float(frame_times[end_frame]) + offset
         words.append(
             Word(
                 text=text,
-                start=float(frame_times[start_frame]) + offset,
-                end=float(frame_times[end_frame]) + offset,
+                start=start,
+                end=end,
                 prob=float(np.mean(probs)) if probs else 0.0,
             )
         )

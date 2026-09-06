@@ -50,7 +50,7 @@ from .whisper import DEFAULT_MODEL, LineTiming, align_lines, load_aligner
 from .ctc import align_lines_ctc
 from ..audio import TARGET_SR, load_mono, probe_duration
 from ..project import Project, slugify
-from .score import GATE, Scorecard, format_report, gate_failures, score_project
+from .score import GATE, Scorecard, evidence, format_report, gate_failures, score_project
 from .separate import separate_vocals
 
 
@@ -68,6 +68,10 @@ class Config:
     roundtrip_model: str = "medium"
     use_roundtrip: bool = True
     gate: dict = field(default_factory=lambda: dict(GATE))
+    # Both default on; off is for benchmarking one against the other, and is
+    # not exposed on the command line for that reason.
+    settle_ends: bool = True
+    use_voicing: bool = True
 
 
 Progress = Callable[[str], None]
@@ -85,47 +89,23 @@ MIN_LINE_DURATION = 0.25
 # ---------------------------------------------------------------- evidence
 
 
-def _acoustic_score(
-    timing: LineTiming,
-    activity: vad.VocalActivity,
-    rt: "roundtrip.RoundTrip | None" = None,
-) -> float:
-    """How well a candidate placement is supported by evidence outside itself.
+# How the merge weighs a candidate's evidence. The blind transcription gets
+# the largest single weight when it has an opinion, because it is the only
+# signal that can say which of two candidates is right.
+MERGE_WEIGHTS = {
+    "coverage": 0.45, "onset": 0.22, "density": 0.15, "confidence": 0.18,
+    "roundtrip": 0.55,
+}
 
-    Deliberately excludes cross-aligner agreement: agreement is symmetric, so it
-    says a line is uncertain but cannot say which candidate is right. The blind
-    transcription can, and gets the largest single weight when it has an opinion.
-    """
-    from .score import _ramp
 
-    duration = timing.end - timing.start
-    if duration <= 0:
-        return 0.0
-
-    coverage = activity.coverage(timing.start, timing.end)
-    onset_distance = activity.nearest_onset(timing.start)
-    density = len(timing.words) / duration if timing.words else 0.0
-
-    if density < 1.0:
-        density_term = _ramp(density, good=1.0, bad=0.25)
-    elif density > 5.5:
-        density_term = _ramp(density, good=5.5, bad=11.0)
-    else:
-        density_term = 1.0
-
-    parts = {
-        "coverage": (0.45, _ramp(coverage, good=0.65, bad=0.15)),
-        "onset": (0.22, _ramp(onset_distance, good=0.12, bad=0.7)),
-        "density": (0.15, density_term),
-        "prob": (0.18, _ramp(timing.mean_prob, good=0.6, bad=0.05)),
-    }
-
-    support = rt.support(timing.line_index, timing.start, timing.end) if rt else None
-    if support is not None:
-        parts["roundtrip"] = (0.55, support)
-
-    total_weight = sum(w for w, _ in parts.values())
-    return sum(w * v for w, v in parts.values()) / total_weight
+def _support(timing: LineTiming, activity: vad.VocalActivity, rt=None) -> float:
+    """How well a candidate placement is backed by evidence outside itself."""
+    parts, _ = evidence(
+        activity, timing.start, timing.end, len(timing.words), timing.mean_prob,
+        rt, timing.line_index,
+    )
+    weight = sum(MERGE_WEIGHTS[k] for k in parts)
+    return sum(MERGE_WEIGHTS[k] * v for k, v in parts.items()) / weight
 
 
 def _section_span(
@@ -209,11 +189,11 @@ def _merge(
     candidates: dict[str, dict[int, LineTiming]],
     activity: vad.VocalActivity,
     only: set[int] | None = None,
-    bias: dict[str, float] | None = None,
     rt: "roundtrip.RoundTrip | None" = None,
 ) -> dict[int, str]:
     """Adopt, per line, the candidate with the strongest acoustic support."""
-    bias = bias or {"whisper": 0.02, "ctc_local": 0.01, "ctc": 0.0}
+    # A nudge toward the finer aligner when the evidence cannot separate them.
+    bias = {"whisper": 0.02, "ctc_local": 0.01}
     chosen: dict[int, str] = {}
 
     for line in project.lines:
@@ -239,7 +219,7 @@ def _merge(
 
         best_name, best_timing, best_value = None, None, -1.0
         for name, timing in pool:
-            value = _acoustic_score(timing, activity, rt) + bias.get(name, 0.0)
+            value = _support(timing, activity, rt) + bias.get(name, 0.0)
             if value > best_value:
                 best_name, best_timing, best_value = name, timing, value
 
@@ -255,7 +235,98 @@ def _merge(
     return chosen
 
 
-def _polish(project: Project, activity: vad.VocalActivity) -> None:
+def settle_syllables(project: Project, activity: vad.VocalActivity) -> int:
+    """Place each word's syllables at the strongest onsets inside it.
+
+    The plan expected to take this from the CTC aligner, which times every
+    character. Measured against 38 syllable onsets placed by eye on the
+    sample track, its character spikes land 154 ms off at the median - worse
+    than dividing the word evenly (87 ms) - because on a held sung vowel the
+    model emits the vowel once and bunches the remaining letters at the next
+    attack: "gravity" comes out g-r-a at 65.0 s and v-i-t-y at 66.0-66.4,
+    with the "t" closure audibly at 65.45. So the fractions come from the
+    stem instead: for a word of n syllables, the n-1 strongest peaks of the
+    onset-strength envelope inside it, at least 60 ms apart and 120 ms clear
+    of the word's own edges. On the same 38: 60 ms median and 77% within
+    100 ms when the word's bounds are right, 70 ms and 54% on the project's
+    own bounds - a word that runs 300 ms into the next has the next word's
+    attack as its strongest peak, which is what the wide margin is for (at
+    50 ms the project number is 100 ms). Where too few peaks exist the rest
+    are spread evenly, which on its own measures 87 ms.
+
+    Fractions of the word, so they follow every later edit; see
+    Word.syllables. Returns the number of words given syllables.
+    """
+    from .. import syllables as syl
+
+    if activity.strength is None:
+        return 0
+    given = 0
+    hop = activity.hop
+    for line in project.lines:
+        if line.end <= line.start:
+            continue
+        for word in line.words:
+            parts = syl.split(word.text)
+            span = word.end - word.start
+            if len(parts) < 2 or span <= 0.1:
+                word.syllables = []
+                continue
+            a = int((word.start + SYLLABLE_EDGE) / hop)
+            b = int((word.end - SYLLABLE_EDGE) / hop)
+            cuts = _strongest_peaks(activity.strength, a, b, len(parts) - 1, int(SYLLABLE_APART / hop))
+            if len(cuts) < len(parts) - 1:
+                cuts = _fill_evenly(cuts, a, b, len(parts) - 1)
+            ats = [0.0] + [round(min(max((c * hop - word.start) / span, 0.001), 0.999), 3) for c in cuts]
+            for k in range(1, len(ats)):
+                ats[k] = max(ats[k], ats[k - 1] + 0.001)
+            if ats[-1] >= 1.0:
+                word.syllables = []
+                continue
+            word.syllables = [{"text": t, "at": at} for t, at in zip(parts, ats)]
+            given += 1
+    return given
+
+
+# Syllable cuts stay this far from the word's edges - a syllable shorter than
+# this at a word's edge is not a sweep anyone sees, and the next word's attack
+# sits inside a late end - and this far from each other.
+SYLLABLE_EDGE = 0.12
+SYLLABLE_APART = 0.06
+
+
+def _strongest_peaks(strength: np.ndarray, a: int, b: int, k: int, apart: int) -> list[int]:
+    """Frame indices of the k largest local maxima in [a, b), `apart` frames apart."""
+    a, b = max(0, a), min(len(strength), b)
+    if b - a < 3 or k <= 0:
+        return []
+    seg = strength[a:b]
+    peaks = [i for i in range(1, len(seg) - 1) if seg[i] >= seg[i - 1] and seg[i] > seg[i + 1]]
+    peaks.sort(key=lambda i: -float(seg[i]))
+    chosen: list[int] = []
+    for i in peaks:
+        if all(abs(i - c) >= apart for c in chosen):
+            chosen.append(i)
+        if len(chosen) == k:
+            break
+    return sorted(a + i for i in chosen)
+
+
+def _fill_evenly(cuts: list[int], a: int, b: int, k: int) -> list[int]:
+    """Top up `cuts` to k frames by spreading the rest over the largest gap."""
+    cuts = list(cuts)
+    while len(cuts) < k:
+        bounds = [a] + cuts + [b]
+        gaps = [(bounds[i + 1] - bounds[i], i) for i in range(len(bounds) - 1)]
+        width, i = max(gaps)
+        if width < 2:
+            break
+        cuts.append(bounds[i] + width // 2)
+        cuts.sort()
+    return cuts
+
+
+def _polish(project: Project, activity: vad.VocalActivity, settle: bool = True) -> None:
     """Trim spans onto real singing, snap starts to onsets, fix ordering."""
     for line in project.lines:
         if line.end <= line.start or line.locked:
@@ -269,6 +340,40 @@ def _polish(project: Project, activity: vad.VocalActivity) -> None:
             line.retime(start, end)
 
     project.enforce_monotonic()
+    if settle:
+        settle_word_ends(project, activity)
+    settle_syllables(project, activity)
+
+
+def settle_word_ends(project: Project, activity: vad.VocalActivity) -> int:
+    """Read every word's end off the stem's envelope. Returns words moved.
+
+    Runs after the line trim and the monotonic fix, so each word's window is
+    bounded by the next word's start as it will ship. The last word of a line
+    is bounded by the trimmed line end and can only pull it in: the VAD gate
+    that trims lines is a global threshold, and a reverb tail or a pad 20 dB
+    under the voice keeps it open long after the singer has stopped - line
+    ends ran 155 ms late at the median against gold, p90 over a second.
+
+    Measured on the sample track (song/ends.py has the isolation numbers):
+    ends median 129 -> 127 ms, bias +70 -> +59 ms, rests kept 3 -> 5 of 10,
+    8 words better by over 100 ms and 3 worse, all three next to a start the
+    aligners had wrong by more than a second. Small in place because a word
+    end is bounded by two starts; item 3 is what makes this rule worth 30 ms.
+    """
+    moved = 0
+    for line in project.lines:
+        if line.end <= line.start or line.locked or not line.words:
+            continue
+        for k, word in enumerate(line.words):
+            limit = line.words[k + 1].start if k + 1 < len(line.words) else line.end
+            end = activity.word_end(word.start, limit, current=word.end)
+            if abs(end - word.end) > 1e-6:
+                word.end = end
+                moved += 1
+        line.end = line.words[-1].end
+        line.normalize_words()
+    return moved
 
 
 # ---------------------------------------------------------------- the loop
@@ -313,7 +418,7 @@ def run(
     samples, _ = load_mono(stem_path, TARGET_SR)
 
     progress("[3/6] analysing vocal activity")
-    activity = vad.analyse(samples, TARGET_SR)
+    activity = vad.analyse(samples, TARGET_SR, voicing_model=config.use_voicing)
     active_ratio = float(np.mean(activity.active))
     progress(
         f"      vocal present {active_ratio:.0%} of track, "
@@ -375,16 +480,17 @@ def run(
 
     candidates: dict[str, dict[int, LineTiming]] = {"ctc": anchor, **refined}
 
-    # The honest benchmark: disagreement between the two pristine, independent
-    # aligners - never between the merge and one of its own inputs.
-    pristine = {"ctc": anchor, "whisper": dict(refined.get("whisper", {}))}
+    # The honest benchmark is the disagreement between the two pristine,
+    # independent aligners - never between the merge and one of its own
+    # inputs - so their spans go into the project before anything is scored,
+    # and the score reads them from there like `song score` will later.
+    _remember(project, "ctc", anchor)
+    _remember(project, "whisper", refined.get("whisper", {}))
+    project.meta["roundtrip"] = rt.to_dict() if rt else None
 
     _merge(project, candidates, activity, rt=rt)
-    _polish(project, activity)
-
-    card = score_project(
-        project, activity, reference=anchor, deltas=_deltas(pristine), rt=rt
-    )
+    _polish(project, activity, settle=config.settle_ends)
+    card = score_project(project, activity)
 
     progress("[7/7] quality gate")
     failures = gate_failures(card, config.gate)
@@ -437,24 +543,13 @@ def run(
             also_ctc=True,
         )
 
-        retry_candidates = dict(candidates)
         for name, timings in retry.items():
-            merged_source = dict(retry_candidates.get(name, {}))
-            merged_source.update(timings)
-            retry_candidates[f"{name}_r{iteration}"] = timings
-            retry_candidates[name] = merged_source
+            candidates[name] = {**candidates.get(name, {}), **timings}
+        _remember(project, "whisper", retry.get("whisper", {}))
 
-        flagged_lines = set(card.flagged)
-        _merge(project, retry_candidates, activity, only=flagged_lines, rt=rt)
-        _polish(project, activity)
-
-        for line_index, timing in retry.get("whisper", {}).items():
-            pristine["whisper"][line_index] = timing
-
-        candidates = retry_candidates
-        card = score_project(
-            project, activity, reference=anchor, deltas=_deltas(pristine), rt=rt
-        )
+        _merge(project, candidates, activity, only=set(card.flagged), rt=rt)
+        _polish(project, activity, settle=config.settle_ends)
+        card = score_project(project, activity)
         failures = gate_failures(card, config.gate)
 
         moved = sum(
@@ -483,18 +578,6 @@ def run(
     else:
         progress("      gate passed, no lines flagged")
 
-    project.scorecard = card.to_dict()
-    # Keep the independent evidence with the project so `song score` can
-    # re-benchmark manual edits without re-running any model.
-    project.meta["aligners"] = {
-        name: {
-            str(i): [round(t.start, 3), round(t.end, 3)]
-            for i, t in timings.items()
-            if t.end > t.start
-        }
-        for name, timings in pristine.items()
-    }
-    project.meta["roundtrip"] = rt.to_dict() if rt else None
     project.meta.update(
         {
             "iterations": iteration,
@@ -511,72 +594,33 @@ def run(
     return project, card
 
 
-def _deltas(
-    pristine: dict[str, dict[int, LineTiming]]
-) -> dict[int, tuple[float, float]]:
-    """Per-line |start| and |end| disagreement between the two aligner families."""
-    a = pristine.get("ctc", {})
-    b = pristine.get("whisper", {})
-    out: dict[int, tuple[float, float]] = {}
-    for index, left in a.items():
-        right = b.get(index)
-        if right is None or left.end <= left.start or right.end <= right.start:
-            continue
-        out[index] = (abs(left.start - right.start), abs(left.end - right.end))
-    return out
+def _remember(project: Project, name: str, timings: dict[int, LineTiming]) -> None:
+    """Keep one aligner's pristine spans in the project, by line index.
+
+    This is what `song score` re-benchmarks manual edits against without
+    re-running any model, and what the pipeline's own score reads too.
+    """
+    table = project.meta.setdefault("aligners", {}).setdefault(name, {})
+    for index, t in timings.items():
+        if t.end > t.start:
+            table[str(index)] = [round(t.start, 3), round(t.end, 3)]
 
 
 def rescore(
-    project: Project,
-    activity=None,
-    samples: np.ndarray | None = None,
-    progress: Progress = print,
+    project: Project, activity=None, samples: np.ndarray | None = None
 ) -> Scorecard:
     """Re-run the benchmark against whatever timings the project now holds.
 
-    Used after manual edits, so the scorecard measures the file that actually
-    ships rather than only the automatic pass. The stored aligner outputs and
-    transcription observations mean this needs no models and runs in seconds -
-    the only other cost is decoding and analysing the stem, which a caller
-    holding one already (the server keeps one per open track) can pass straight
-    in via `activity`/`samples` rather than paying for another ffmpeg decode and
-    VAD pass on every click.
+    The stored aligner outputs and transcription observations mean this needs
+    no models and runs in milliseconds; the only other cost is decoding and
+    analysing the stem, which a caller holding one already (the server keeps
+    one per open track) passes in as `activity`/`samples`.
     """
-    stem = project.stem_path or project.audio_path
     if activity is None:
         if samples is None:
-            samples, _ = load_mono(stem, TARGET_SR)
+            samples, _ = load_mono(project.stem_path or project.audio_path, TARGET_SR)
         activity = vad.analyse(samples, TARGET_SR)
-
-    stored = project.meta.get("aligners") or {}
-    reference = {
-        int(i): LineTiming(line_index=int(i), start=span[0], end=span[1])
-        for i, span in (stored.get("ctc") or {}).items()
-    }
-
-    # For lines nobody touched, the honest disagreement is still the one
-    # between the two pristine aligners. For edited lines, compare the human's
-    # timing directly against the independent aligner.
-    frozen: dict[int, tuple[float, float]] = {}
-    whisper = stored.get("whisper") or {}
-    for key, span in (stored.get("ctc") or {}).items():
-        other = whisper.get(key)
-        index = int(key)
-        if other is None or index >= len(project.lines):
-            continue
-        if project.lines[index].source == "manual":
-            continue
-        frozen[index] = (abs(span[0] - other[0]), abs(span[1] - other[1]))
-
-    card = score_project(
-        project,
-        activity,
-        reference=reference,
-        deltas=frozen or None,
-        rt=roundtrip.RoundTrip.from_dict(project.meta.get("roundtrip")),
-    )
-    project.scorecard = card.to_dict()
-    return card
+    return score_project(project, activity)
 
 
 __all__ = ["Config", "run", "rescore", "format_report"]

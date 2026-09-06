@@ -9,14 +9,18 @@ const S = {
   solo: false,
   follow: true,
   view: { start: 0, dur: 60 },
+  glide: 0,                 // the rAF of a view glide in flight, if any
   sel: 0,
   selWord: null,
+  selBound: 'left',        // which of the selected word's two bounds keys act on
+  hoverBound: null,        // the bound under the cursor, so it can light up
   rate: 1,
   additions: [],           // lines heard in the gaps that the lyrics lack
   addAt: 0,
   review: {
-    queue: [], at: 0, undo: [], stats: null, wasSolo: false,
-    adj: null,            // a timing the reviewer placed by hand, if any
+    queue: [], at: 0, stats: null, wasSolo: false,
+    adj: null,            // bounds the reviewer placed by hand: {t, end}
+    side: 'left',         // which bound the sheet's own arrow keys move
     drag: null,           // an in-progress drag on the review strip
     strip: false,         // the strip is on screen and wants playhead frames
     lastPlayed: null,     // which candidate space last previewed
@@ -35,8 +39,10 @@ const S = {
   lyricHoldUntil: 0,      // chase is suspended until this moment (0 = not held)
   filter: 'all',
   drag: null,
-  hover: null,
+  wbDrag: null,            // a drag on one of the deck's bound chips
   dirty: false,
+  saveTimer: 0,            // debounced write-back; see persistSoon
+  saving: false,
   raf: 0,
 };
 
@@ -57,7 +63,6 @@ const STATIC = (typeof window !== 'undefined' && window.SONG_STATIC) || null;
 const STATIC_FILES = {
   '/api/project': 'project.json',
   '/api/analysis': 'analysis.json',
-  '/api/audit': 'audit.json',
   '/media/mix': 'media/mix.m4a',
   '/media/vocals': 'media/vocals.m4a',
 };
@@ -89,7 +94,7 @@ const backCtx = back.getContext('2d');
    exists to answer. Measured on the sample track, mix amplitude separates
    "someone is singing" from "nobody is singing" by 0.18 sd - the vocal stem
    does it by 1.89 sd. On a compressed master the mix is a solid bar. */
-const MINI_H = 20, GAP = 5, SCRUB_H = 19, VOC_H = 118, WORD_STRIP = 24;
+const MINI_H = 20, GAP = 5, SCRUB_H = 19, VOC_H = 124, WORD_STRIP = 28;
 const MINI_Y = 0;
 const SCRUB_Y = MINI_H + GAP;
 const VOC_Y = SCRUB_Y + SCRUB_H;
@@ -108,6 +113,12 @@ const MIN_WORD = 0.06;    // shortest a word may be squeezed to, seconds
 const WORD_SNAP = 0.06;   // snap a dragged start to a vocal onset within this
 const WORD_GRAB = 5;      // px either side of a divider that grabs it
 const WORD_MIN_PX = 200;  // narrower than this and the blocks are unusable
+const BOUND_GRAB = 8;     // px either side of a selected word's bound that grabs it
+const CAP_H = 10, CAP_W = 7;   // the tab at each end of a bound handle
+/* The line's own label strip along the top of the lane. A word bound outranks
+   everything else in the lane, but not here: this band stays the line's, so
+   selecting a word never takes the line's own edges away from the mouse. */
+const LINE_BAND = 18;
 
 /* Playback speeds. Word work is done by ear, and at 1x a syllable boundary goes
    past faster than you can judge it; 0.5x and 0.25x are the workhorses. */
@@ -174,13 +185,42 @@ function markDirty() {
   S.dirty = true;
   invalidate();
   paintSaveBtn();
+  persistSoon();
 }
 
 /** The save button lights only when there is something to save. */
 function paintSaveBtn() {
   const b = document.getElementById('btn-save');
+  if (!b) return;
+  if (b.classList.contains('just-saved')) return;   // let the confirmation stand
   b.innerHTML = 'Save<span class="k">⌘S</span>';
   b.classList.toggle('dirty', S.dirty);
+}
+
+/* --------------------------------------------------------- write-back
+
+   An edit is not a proposal. Dropping a bound *is* the new state, so it goes to
+   disk by itself; ⌘S stays as the "now, and tell me" version of the same thing.
+
+   Debounced rather than immediate, and deferred while a gesture is in flight:
+   a drag lands sixty edits a second and every save rewrites five files. The
+   dirty flag and the beforeunload guard are left in place as the backstop for
+   the window where a write is still pending. */
+
+const AUTOSAVE_MS = 700;
+
+function cancelPersist() { clearTimeout(S.saveTimer); S.saveTimer = 0; }
+
+function persistSoon() {
+  if (STATIC) return;                   // the demo has nowhere to write
+  cancelPersist();
+  S.saveTimer = setTimeout(async () => {
+    S.saveTimer = 0;
+    // Never mid-gesture: the state to save is the one you let go of.
+    if (S.drag || S.wbDrag || S.scrub || S.review.drag || S.saving) return persistSoon();
+    if (!S.dirty) return;
+    await save({ quiet: true });
+  }, AUTOSAVE_MS);
 }
 
 /* Edits below record a history step before they mutate anything. */
@@ -199,12 +239,16 @@ const HIST_LIMIT = 200;
 const COALESCE_MS = 700;
 
 function snapLine(line) {
+  const ws = line.words || [];
   return {
     index: line.index,
     start: line.start,
     end: line.end,
     source: line.source,
-    starts: line.words.map(w => w.start),
+    // Both edges: a word's end is a measured quantity now, so restoring the
+    // starts and re-deriving would quietly close every rest in the line.
+    starts: ws.map(w => w.start),
+    ends: ws.map(w => w.end),
   };
 }
 
@@ -215,6 +259,7 @@ function restoreLine(snap) {
   line.end = snap.end;
   line.source = snap.source;
   snap.starts.forEach((t, i) => { if (line.words[i]) line.words[i].start = t; });
+  snap.ends.forEach((t, i) => { if (line.words[i]) line.words[i].end = t; });
   normalizeWords(line);
 }
 
@@ -261,7 +306,8 @@ function dropIfUnchanged(entry) {
   const same = entry.lines.every(snap => {
     const line = S.project.lines[snap.index];
     return line && line.start === snap.start && line.end === snap.end
-      && snap.starts.every((t, i) => line.words[i] && line.words[i].start === t);
+      && snap.starts.every((t, i) => line.words[i] && line.words[i].start === t)
+      && snap.ends.every((t, i) => line.words[i] && line.words[i].end === t);
   });
   if (same) { h.undo.pop(); syncHistory(); }
 }
@@ -310,6 +356,9 @@ function stepHistory(entry, onto) {
   invalidate();
   draw();
   syncHistory();
+  // Taking an edit back is an edit. Without this the disk would keep whatever
+  // the last write-back caught until the next unrelated change flushed it.
+  persistSoon();
 }
 
 function undoEdit() {
@@ -350,23 +399,29 @@ function syncHistory() {
 
 /** Reloading the project from the server invalidates every snapshot. */
 function resetHistory() {
+  cancelPersist();                      // whatever was queued was for the old copy
   S.hist = { undo: [], redo: [], savedAt: 0, coalesce: null };
   syncHistory();
 }
 
 /* ------------------------------------------------------- word-level edits */
 
-/* Enhanced LRC stores one timestamp per word, so a word's end *is* the next
-   word's start. Editing starts only makes gaps and overlaps unrepresentable:
-   a line of N words has exactly N-1 internal boundaries, and the line's own
-   edges own the other two. The price is that Whisper's raw ends - which encode
-   small inter-word pauses - get flattened to contiguous. Nothing downstream
-   reads them; every export keys off starts. */
+/* Mirrors TimedLine.normalize_words in project.py.
+
+   Word spans are ordered and nested inside the line, but they are not a tiling:
+   a word ends where the singer stops, and a line can hold a rest in the middle
+   of it. An end that carries no information (at or before its own start) still
+   falls back to the next word's start - that is all that is known about it. */
 function normalizeWords(line) {
   const ws = line.words;
-  if (!ws || !ws.length) return;
+  if (!ws || !ws.length || line.end <= line.start) return;
   ws[0].start = line.start;
-  for (let i = 0; i < ws.length - 1; i++) ws[i].end = ws[i + 1].start;
+  let previous = line.start;
+  for (const w of ws) { w.start = clamp(w.start, previous, line.end); previous = w.start; }
+  for (let i = 0; i < ws.length - 1; i++) {
+    const ceiling = ws[i + 1].start;
+    ws[i].end = ws[i].end <= ws[i].start ? ceiling : Math.min(ws[i].end, ceiling);
+  }
   ws[ws.length - 1].end = line.end;
 }
 
@@ -381,24 +436,184 @@ function snapOnset(t) {
   return best;
 }
 
+/* ------------------------------------------------------------- word bounds
+
+   A word covers a span of the track and *both* ends of that span are editable,
+   on every surface that draws the word. The two are genuinely independent: a
+   word ends where the singer stops, so pulling a word short opens a rest rather
+   than dragging its neighbour along.
+
+   Two words that touch share a pixel but not a number, so every edge is still
+   one edge and one drag. Holding shift brings the neighbour along, which keeps
+   a shut boundary shut and a rest the width it was - the re-cut this lane has
+   always had, now one of two things a boundary can do rather than the only one.
+
+   Everything that moves a word edge - drag, arrow key, stamp, review sheet -
+   goes through setBound or setPair. One clamp, one snap, one normalisation. */
+
+/** Where a bound sits now. */
+function boundTime(line, i, side) {
+  const w = ((line && line.words) || [])[i];
+  return !w ? 0 : side === 'left' ? w.start : w.end;
+}
+
 /**
- * Move the start of word `i`, absorbing the change into the two words either
- * side of it.
+ * How far a bound may travel.
  *
- * Word 0's start *is* the line start, so moving it moves the line's left edge -
- * without rescaling the rest, which is what dragging the region edge does.
+ * Pulling a bound *into* its own word opens a rest and answers to nothing but
+ * MIN_WORD. Pushing it *out* runs into the neighbour, and rather than stopping
+ * dead it shoves that neighbour's facing edge along - so the limit is the
+ * neighbour's far edge, less its own MIN_WORD.
+ *
+ * Stopping dead was the alternative and it is unusable: words arrive from the
+ * aligner shut against each other, so a bound that refused to push could not
+ * move outward at all, and "this word starts too late" - the commonest repair
+ * there is - would have no gesture.
+ *
+ * Word 0's left bound is the line start and the last word's right bound is the
+ * line end, so those two answer to the track rather than to a neighbour.
  */
-function setWordStart(line, i, t) {
-  const ws = line.words || [];
-  if (i < 0 || i >= ws.length) return;
-  const lo = i === 0 ? 0 : ws[i - 1].start + MIN_WORD;
-  const hi = (i + 1 < ws.length ? ws[i + 1].start : line.end) - MIN_WORD;
-  t = clamp(t, lo, Math.max(lo, hi));
-  if (i === 0) line.start = t;
-  ws[i].start = t;
+function boundRange(line, i, side) {
+  const ws = (line && line.words) || [];
+  const last = ws.length - 1;
+  if (!ws.length || i < 0 || i > last) return [0, 0];
+  if (side === 'left') {
+    const lo = i === 0 ? 0 : ws[i - 1].start + MIN_WORD;
+    return [lo, Math.max(lo, ws[i].end - MIN_WORD)];
+  }
+  const lo = ws[i].start + MIN_WORD;
+  const hi = i === last ? (duration() || line.end) : ws[i + 1].end - MIN_WORD;
+  return [lo, Math.max(lo, hi)];
+}
+
+/** Move one bound of one word. The single writer for a word's own span. */
+function setBound(line, i, side, t) {
+  const ws = (line && line.words) || [];
+  if (!ws[i]) return;
+  const [lo, hi] = boundRange(line, i, side);
+  t = clamp(t, lo, hi);
+  if (side === 'left') {
+    ws[i].start = t;
+    if (i === 0) line.start = t;             // word 0's start *is* the line start
+    else if (ws[i - 1].end > t) ws[i - 1].end = t;        // shoved out of the way
+  } else {
+    ws[i].end = t;
+    if (i === ws.length - 1) line.end = t;   // and the last word's end is its end
+    else if (ws[i + 1].start < t) ws[i + 1].start = t;
+  }
   normalizeWords(line);
   line.source = 'manual';
   markDirty();
+}
+
+/**
+ * Move an edge and carry its neighbour with it, keeping whatever sits between
+ * the two: a shut boundary stays shut, a rest keeps its width.
+ *
+ * This is the old divider drag - the one that re-cuts a pair of syllables
+ * without disturbing anything outside them - now available at every edge under
+ * shift, rather than being the only thing a boundary could do.
+ */
+function setPair(g, t) {
+  const ws = (g.line && g.line.words) || [];
+  const i = g.i, near = g.side === 'left' ? ws[i - 1] : ws[i + 1];
+  if (!ws[i]) return;
+  if (!near) return setBound(g.line, i, g.side, t);   // the line's own outer edge
+  const [lo, hi] = grabRange(g, true);
+  t = clamp(t, lo, hi);
+  if (g.side === 'left') {
+    const gap = ws[i].start - near.end;
+    near.end = t - gap;
+    ws[i].start = t;
+  } else {
+    const gap = near.start - ws[i].end;
+    ws[i].end = t;
+    near.start = t + gap;
+  }
+  normalizeWords(g.line);
+  g.line.source = 'manual';
+  markDirty();
+}
+
+/* A grab is {line, i, side}: one word, one of its two edges. The drag, the
+   keyboard, the deck chips and the review strip all hold one of these, so none
+   of them grows its own idea of what is being moved. */
+
+function grabTime(g) { return boundTime(g.line, g.i, g.side); }
+
+/** How far a grab may travel, on its own or with its neighbour in tow. */
+function grabRange(g, pair) {
+  if (!pair) return boundRange(g.line, g.i, g.side);
+  const ws = g.line.words, i = g.i;
+  if (g.side === 'left') {
+    const prev = ws[i - 1];
+    if (!prev) return boundRange(g.line, i, 'left');
+    const lo = prev.start + MIN_WORD + (ws[i].start - prev.end);
+    return [lo, Math.max(lo, ws[i].end - MIN_WORD)];
+  }
+  const next = ws[i + 1];
+  if (!next) return boundRange(g.line, i, 'right');
+  const lo = ws[i].start + MIN_WORD;
+  return [lo, Math.max(lo, next.end - MIN_WORD - (next.start - ws[i].end))];
+}
+
+/** The neighbouring edge a bound would close onto, or null if there is none. */
+function neighbourEdge(g) {
+  const ws = g.line.words;
+  return g.side === 'left' ? (g.i > 0 ? ws[g.i - 1].end : null)
+    : (g.i + 1 < ws.length ? ws[g.i + 1].start : null);
+}
+
+/* Close onto a neighbour from this far out. Restoring an exact touch by eye is
+   hopeless at any zoom, and "nearly shut" is a rest nobody meant to leave. */
+const GAP_SNAP = 0.05;
+
+/**
+ * Place whatever a drag has hold of.
+ *
+ * Snaps shut onto its neighbour when it comes near one, else onto a vocal
+ * onset; `free` (alt) takes the time literally and `pair` (shift) brings the
+ * neighbour along instead of leaving it.
+ *
+ * The lock-on ring is only shown for a snap that survived the clamp - a ring on
+ * a boundary the model then moved somewhere else would be a lie about what
+ * just happened.
+ */
+function placeGrab(g, t, free, pair) {
+  let snapped = t;
+  if (!free) {
+    const near = pair ? null : neighbourEdge(g);
+    snapped = near != null && Math.abs(near - t) < GAP_SNAP ? near : snapOnset(t);
+  }
+  const [lo, hi] = grabRange(g, pair);
+  const out = clamp(snapped, lo, hi);
+  if (snapped !== t && out === snapped) S.flash = { t: out, at: performance.now() };
+  if (pair) setPair(g, out); else setBound(g.line, g.i, g.side, out);
+  return out;
+}
+
+/**
+ * Move a word's start the way a re-timing pass means it.
+ *
+ * If the word before it ended exactly where this one began, the two stay shut
+ * and the boundary moves; if a rest was already there, the rest is left as it
+ * was. Only a deliberate pull on an edge opens or closes one, so re-timing by
+ * ear - tap-along, taking a review card - never invents a silence.
+ */
+function setWordStart(line, i, t) {
+  const ws = (line && line.words) || [];
+  if (!ws[i]) return;
+  if (i > 0 && touching(ws[i - 1], ws[i])) setPair({ line, i, side: 'left' }, t);
+  else setBound(line, i, 'left', t);
+}
+
+/** The selected word, with its bounds already in pixels. Null if none. */
+function selWordGeom() {
+  if (!S.project) return null;
+  const line = S.project.lines[S.sel];
+  const w = ((line && line.words) || [])[S.selWord];
+  if (S.selWord == null || !w || line.end <= line.start) return null;
+  return { line, i: S.selWord, w, x0: t2x(w.start), x1: t2x(w.end) };
 }
 
 /** Escape hatch: spread the line's words evenly across its span. */
@@ -407,7 +622,12 @@ function redistribute(line) {
   if (ws.length < 2 || line.end <= line.start) return false;
   pushHistory('redistribute words', [line]);
   const step = (line.end - line.start) / ws.length;
-  ws.forEach((w, i) => { w.start = line.start + i * step; });
+  // Evenly means a tiling: this is the escape hatch from tangled edits, so it
+  // closes every rest as well as re-spacing the starts.
+  ws.forEach((w, i) => {
+    w.start = line.start + i * step;
+    w.end = line.start + (i + 1) * step;
+  });
   normalizeWords(line);
   line.source = 'manual';
   markDirty();
@@ -496,11 +716,43 @@ function setView(start, dur) {
   S.view.start = st;
 }
 
-function zoomAt(t, factor) {
+function zoomAt(t, factor, animate) {
   const frac = clamp((t - S.view.start) / S.view.dur, 0, 1);
   const dur = S.view.dur * factor;
+  if (animate) return glideView(t - frac * dur, dur, 240);
   setView(t - frac * dur, dur);
   draw();
+}
+
+/* A discrete view change - a zoom button, Fit, a jump to a line, the follow
+   catching up - glides rather than cuts. The wheel and a drag stay instant:
+   they are continuous already, and an ease under a hand that is still moving
+   reads as lag. Eased out, so the destination arrives first and the last few
+   pixels settle; anything still in flight is replaced, not queued. */
+function glideView(start, dur, ms) {
+  const total = duration();
+  const d = clamp(dur, 0.75, total);
+  const st = clamp(start, 0, Math.max(0, total - d));
+  const from = { start: S.view.start, dur: S.view.dur };
+  if (REDUCED_MOTION.matches || !ms || (Math.abs(st - from.start) < 1e-6 && Math.abs(d - from.dur) < 1e-6)) {
+    cancelAnimationFrame(S.glide);
+    setView(st, d);
+    draw();
+    return;
+  }
+  cancelAnimationFrame(S.glide);
+  const t0 = performance.now();
+  const step = now => {
+    const u = clamp((now - t0) / ms, 0, 1);
+    const k = 1 - Math.pow(1 - u, 3);          // ease-out cubic
+    // Interpolate the duration in log space, so a zoom feels linear in scale
+    // rather than racing at the start and crawling at the end.
+    const dd = Math.exp(Math.log(from.dur) + (Math.log(d) - Math.log(from.dur)) * k);
+    setView(from.start + (st - from.start) * k, dd);
+    draw();
+    if (u < 1) S.glide = requestAnimationFrame(step);
+  };
+  S.glide = requestAnimationFrame(step);
 }
 
 const t2x = t => (t - S.view.start) / S.view.dur * canvas.clientWidth;
@@ -646,7 +898,7 @@ function drawScrubBar() {
   const perPx = S.view.dur / W;
   const step = steps.find(s => s / perPx >= targetPx) || 120;
 
-  ctx.font = '10px ui-monospace, Menlo, monospace';
+  ctx.font = '11px ui-monospace, Menlo, monospace';
   ctx.fillStyle = C.muted;
   ctx.textBaseline = 'middle';
   for (let t = Math.ceil(S.view.start / step) * step; t < S.view.start + S.view.dur; t += step) {
@@ -689,7 +941,7 @@ function drawVocalLane() {
 
 function drawRegions() {
   const W = canvas.clientWidth;
-  ctx.font = '11px -apple-system, system-ui, sans-serif';
+  ctx.font = '12px -apple-system, system-ui, sans-serif';
   ctx.textBaseline = 'top';
 
   for (const line of S.project.lines) {
@@ -698,8 +950,10 @@ function drawRegions() {
 
     const x0 = t2x(line.start), x1 = t2x(line.end), w = Math.max(2, x1 - x0);
     const selected = line.index === S.sel;
-    const score = (line.score && line.score.total) || 0;
-    const tone = line.flagged ? C.bad : grade(score) === 'good' ? C.good : C.ok;
+    const scored = !!(line.score && line.score.total != null);
+    const score = scored ? line.score.total : 0;
+    const tone = line.flagged ? C.bad : !scored ? C.muted
+      : grade(score) === 'good' ? C.good : C.ok;
 
     ctx.fillStyle = selected ? 'rgba(91,157,255,.20)' : 'rgba(255,255,255,.028)';
     ctx.fillRect(x0, VOC_Y, w, VOC_H);
@@ -714,10 +968,11 @@ function drawRegions() {
     if (w > 46) {
       ctx.save();
       ctx.beginPath();
-      ctx.rect(x0 + 4, VOC_Y, w - 8, 16);
+      ctx.rect(x0 + 4, VOC_Y, w - 8, 18);
       ctx.clip();
-      ctx.fillStyle = selected ? '#fff' : 'rgba(230,237,247,.7)';
-      ctx.fillText(line.text, x0 + 5, VOC_Y + 2);
+      ctx.font = (selected ? '600 ' : '') + '12px -apple-system, system-ui, sans-serif';
+      ctx.fillStyle = selected ? '#fff' : 'rgba(230,237,247,.72)';
+      ctx.fillText(line.text, x0 + 6, VOC_Y + 3);
       ctx.restore();
     }
   }
@@ -746,7 +1001,7 @@ function eachWordLine(fn) {
  * because the waveform above it is still showing those lines' regions.
  */
 function drawWordBlocks() {
-  ctx.font = '11px -apple-system, system-ui, sans-serif';
+  ctx.font = '12px -apple-system, system-ui, sans-serif';
   ctx.textBaseline = 'top';
 
   const t = S.audio.currentTime;
@@ -755,6 +1010,19 @@ function drawWordBlocks() {
   eachWordLine((line, blocks) => {
     drew = true;
     const live = line.index === S.sel;
+
+    // A rest between two words, painted as its own thing. An empty stretch of
+    // the strip has to read as "nobody is singing here" rather than as a cell
+    // that failed to draw - it is the one state the old model could not hold.
+    for (let i = 0; i + 1 < blocks.length; i++) {
+      const a = blocks[i], b = blocks[i + 1];
+      const w = b.x0 - a.x1;
+      if (w <= 0.5) continue;
+      ctx.fillStyle = live ? 'rgba(5,8,14,.85)' : 'rgba(5,8,14,.5)';
+      ctx.fillRect(a.x1, WORD_Y, w, WORD_STRIP);
+      ctx.fillStyle = live ? 'rgba(140,170,215,.32)' : 'rgba(140,170,215,.16)';
+      ctx.fillRect(a.x1 + 1, WORD_Y + WORD_STRIP / 2 - 0.5, Math.max(0, w - 2), 1);
+    }
 
     for (const b of blocks) {
       const w = Math.max(1, b.x1 - b.x0);
@@ -781,30 +1049,41 @@ function drawWordBlocks() {
         ctx.beginPath();
         ctx.rect(b.x0 + 2, WORD_Y, w - 4, WORD_STRIP);
         ctx.clip();
+        ctx.font = (active || chosen ? '600 ' : '') + '12px -apple-system, system-ui, sans-serif';
         ctx.fillStyle = active || chosen ? '#fff'
-          : live ? 'rgba(230,237,247,.8)' : 'rgba(230,237,247,.45)';
-        ctx.fillText(b.w.text, b.x0 + 4, WORD_Y + 6);
+          : live ? 'rgba(230,237,247,.82)' : 'rgba(230,237,247,.5)';
+        ctx.fillText(b.w.text, b.x0 + 5, WORD_Y + Math.round((WORD_STRIP - 14) / 2));
         ctx.restore();
       }
     }
 
-    // The selected line's boundaries run the full height of the waveform: a
-    // divider that misses the syllable attack is visible against the audio it
-    // is supposed to be cutting. Other lines get a tick inside the strip only,
+    // Every internal edge of the line. Two touching words share one; two with
+    // a rest between them have one each, bracketing it.
+    const ws = line.words;
+    const edges = [];
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i], nxt = blocks[i + 1];
+      if (i > 0) edges.push({ x: b.x0, i, side: 'left' });
+      if (nxt && !touching(b.w, nxt.w)) edges.push({ x: b.x1, i, side: 'right' });
+    }
+
+    // The selected line's edges run the full height of the waveform: a boundary
+    // that misses the syllable attack is visible against the audio it is
+    // supposed to be cutting. Other lines get a tick inside the strip only,
     // enough to read the split without striping the whole lane.
-    for (let i = 1; i < blocks.length; i++) {
-      const x = blocks[i].x0;
+    for (const e of edges) {
       if (!live) {
         ctx.fillStyle = 'rgba(170,203,255,.28)';
-        ctx.fillRect(x - 0.5, WORD_Y, 1, WORD_STRIP);
+        ctx.fillRect(e.x - 0.5, WORD_Y, 1, WORD_STRIP);
         continue;
       }
-      const near = i === S.selWord || i - 1 === S.selWord;
+      const near = e.i === S.selWord
+        || (e.side === 'left' && e.i - 1 === S.selWord && touching(ws[e.i - 1], ws[e.i]));
       ctx.fillStyle = near ? 'rgba(213,228,255,.95)' : 'rgba(170,203,255,.5)';
-      ctx.fillRect(x - 0.5, VOC_Y, 1.5, VOC_H);
+      ctx.fillRect(e.x - 0.5, VOC_Y, 1.5, VOC_H);
       ctx.fillStyle = near ? '#d5e4ff' : C.wordDiv;
-      ctx.fillRect(x - 2.5, WORD_Y, 5.5, 3);
-      ctx.fillRect(x - 2.5, VOC_Y + VOC_H - 3, 5.5, 3);
+      ctx.fillRect(e.x - 2.5, WORD_Y, 5.5, 3);
+      ctx.fillRect(e.x - 2.5, VOC_Y + VOC_H - 3, 5.5, 3);
     }
 
     if (live && S.selWord != null && blocks[S.selWord]) {
@@ -818,13 +1097,111 @@ function drawWordBlocks() {
   if (!drew) laneNote('zoom in to see and edit words');
 }
 
+/* ------------------------------------------------------- drawing a bound
+
+   One painter, used by the timeline and by the review strip. They have
+   different windows, different heights and different canvases, and share this
+   so that the thing you learn to grab in one is the thing you grab in the
+   other. */
+
+/** The tab at one end of a bound bar, pointing into the word it belongs to. */
+function boundCap(g, x, y, dir, down) {
+  const s = down ? 1 : -1;
+  g.beginPath();
+  g.moveTo(x, y);
+  g.lineTo(x + dir * CAP_W, y);
+  g.lineTo(x + dir * CAP_W, y + s * (CAP_H - 4));
+  g.lineTo(x, y + s * CAP_H);
+  g.closePath();
+  g.fill();
+}
+
+/**
+ * One bound of one word: a bar through the whole waveform, capped at both ends
+ * with a tab pointing into the word.
+ *
+ * The tabs are the grab target and the direction cue at once - you can see
+ * which side of the span you have hold of before you pull. `state` is how live
+ * it is: the focused bound (the one the arrow keys move) is bright, the one
+ * under the cursor brighter still.
+ */
+function drawBound(g, x, y, h, side, state, tone) {
+  const hot = state === 'hot', live = hot || state === 'focus';
+  const dir = side === 'left' ? 1 : -1;
+  const colour = tone || (live ? '#dce9ff' : 'rgba(160,198,255,.75)');
+
+  if (hot) {                            // a soft column under the cursor
+    g.fillStyle = 'rgba(120,175,255,.16)';
+    g.fillRect(x + (dir > 0 ? 0 : -BOUND_GRAB), y, BOUND_GRAB, h);
+  }
+  const w = live ? 2.5 : 1.5;
+  g.fillStyle = colour;
+  g.fillRect(x - w / 2, y, w, h);
+  boundCap(g, x, y, dir, true);
+  boundCap(g, x, y + h, dir, false);
+}
+
+/** A small dark plate carrying a time, so a readout stays legible over audio. */
+function timeChip(g, x, y, text, align, tone) {
+  g.font = '600 11px ui-monospace, Menlo, monospace';
+  const w = g.measureText(text).width + 10;
+  const bx = align === 'right' ? x - w : align === 'mid' ? x - w / 2 : x;
+  g.fillStyle = 'rgba(8,12,20,.88)';
+  g.fillRect(bx, y, w, 16);
+  g.fillStyle = tone || '#dbe7ff';
+  g.textBaseline = 'top';
+  g.fillText(text, bx + 5, y + 3);
+  return w;
+}
+
+/**
+ * The selected word: its coverage of the track, and both of its bounds as
+ * handles you can take hold of.
+ *
+ * Drawn independently of the word cells, which switch off when a line is too
+ * narrow to caption. The one word you are working on is exactly what you zoom
+ * to, so its handles have to survive whatever the rest of the lane does.
+ */
+function drawWordFocus() {
+  const g = selWordGeom();
+  if (!g) return;
+  const W = canvas.clientWidth;
+  if (g.x1 < -40 || g.x0 > W + 40) return;
+
+  const w = Math.max(1, g.x1 - g.x0);
+  ctx.fillStyle = 'rgba(91,157,255,.10)';
+  ctx.fillRect(g.x0, VOC_Y, w, VOC_H);
+
+  const g2 = S.drag && S.drag.grab;
+  const held = g2 && g2.line === g.line && g2.i === g.i ? g2.side : null;
+  const over = S.hoverBound ? S.hoverBound.side : null;
+  for (const side of ['left', 'right']) {
+    const x = side === 'left' ? g.x0 : g.x1;
+    const state = held === side || (!held && over === side) ? 'hot'
+      : S.selBound === side ? 'focus' : 'idle';
+    drawBound(ctx, x, VOC_Y, VOC_H, side, state);
+  }
+
+  // Both ends and the span between them, in numbers. The focused bound's own
+  // readout is lit, so the arrow keys never act on a value you cannot see.
+  const y = WORD_Y - 17;
+  const lit = '#eaf2ff', dim = 'rgba(190,208,232,.75)';
+  timeChip(ctx, clamp(g.x0 - 2, 40, W - 4), y, fmt(g.w.start), 'right',
+       S.selBound === 'left' ? lit : dim);
+  timeChip(ctx, clamp(g.x1 + 2, 4, W - 44), y, fmt(g.w.end), 'left',
+       S.selBound === 'right' ? lit : dim);
+  if (w > 74) {
+    timeChip(ctx, (g.x0 + g.x1) / 2, y, `${(g.w.end - g.w.start).toFixed(2)}s`, 'mid', dim);
+  }
+}
+
 function laneNote(text) {
   ctx.fillStyle = 'rgba(10,15,24,.8)';
   ctx.fillRect(0, WORD_Y, canvas.clientWidth, WORD_STRIP);
   ctx.fillStyle = C.muted;
-  ctx.font = '11px -apple-system, system-ui, sans-serif';
+  ctx.font = '12px -apple-system, system-ui, sans-serif';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 8, WORD_Y + WORD_STRIP / 2);
+  ctx.fillText(text, 10, WORD_Y + WORD_STRIP / 2);
   ctx.textBaseline = 'top';
 }
 
@@ -833,8 +1210,8 @@ function drawScrubCursor() {
   const x = S.scrubHoverX;
   if (x == null) return;
   const label = fmt(x2t(x));
-  ctx.font = '11px ui-monospace, Menlo, monospace';
-  const w = ctx.measureText(label).width + 10;
+  ctx.font = '600 11px ui-monospace, Menlo, monospace';
+  const w = ctx.measureText(label).width + 12;
   const bx = clamp(x - w / 2, 0, canvas.clientWidth - w);
 
   ctx.fillStyle = 'rgba(255,255,255,.28)';
@@ -897,7 +1274,7 @@ function drawPlayhead() {
 /* With nothing under the cursor the readout says what the surface does, rather
    than sitting blank. It is replaced the moment you point at anything. */
 const HINT_REST =
-  'drag a line to move it · its edges to resize · the ruler to scrub · a divider to split words';
+  'click a word for its two bounds · drag either · shift takes the neighbour · , . pick, ← → nudge';
 
 function restHint() {
   if (!S.el.hint) return;
@@ -951,6 +1328,7 @@ function draw() {
 
   drawRegions();
   drawWordBlocks();
+  drawWordFocus();
   drawMinimapHead();
   drawSnapFlash();
   drawScrubCursor();
@@ -976,11 +1354,18 @@ function hit(x, y) {
   return best;
 }
 
-/** Hit test in the word lane: a divider between two words, or a block. */
+/** True when two words meet with no rest between them. */
+function touching(a, b) { return a && b && Math.abs(b.start - a.end) < 1e-6; }
+
 /**
  * Hit test the word strip across every line on screen.
  *
- * Dividers beat blocks - they are what you came here to drag - and the selected
+ * Every word edge is grabbable here, not only the selected word's - the cells
+ * are where you reach for a boundary you can see without first selecting the
+ * word under it. Where a rest sits between two words there are two edges to
+ * grab, one per word, which is how a rest is widened or shut.
+ *
+ * Edges beat blocks - they are what you came here to drag - and the selected
  * line beats its neighbours where cells touch, so the line you are working on
  * never loses a boundary to the line next to it.
  */
@@ -990,16 +1375,46 @@ function hitWord(x, y) {
   const keep = (cand) => { if (!best || cand.rank > best.rank) best = cand; };
 
   eachWordLine((line, blocks) => {
-    const live = line.index === S.sel;
-    for (let i = 1; i < blocks.length; i++) {
-      if (Math.abs(x - blocks[i].x0) <= WORD_GRAB) {
-        keep({ line, kind: 'divider', i, rank: live ? 4 : 3 });
+    const live = line.index === S.sel, ws = line.words;
+    for (const b of blocks) {
+      const rank = live ? 4 : 3;
+      if (b.i > 0 && Math.abs(x - b.x0) <= WORD_GRAB) {
+        keep({ line, kind: 'edge', i: b.i, side: 'left', rank });
+      }
+      // Where two words touch their edges are the same pixel, and the one
+      // offered is the later word's start - which is the boundary you mean.
+      // Shift carries the word behind it along; see setPair.
+      if (Math.abs(x - b.x1) <= WORD_GRAB && !touching(b.w, ws[b.i + 1])) {
+        keep({ line, kind: 'edge', i: b.i, side: 'right', rank });
       }
     }
     for (const b of blocks) {
       if (x >= b.x0 && x <= b.x1) keep({ line, kind: 'block', i: b.i, rank: live ? 2 : 1 });
     }
   });
+  return best;
+}
+
+/**
+ * The selected word's bounds, which own the vocal lane while a word is up.
+ *
+ * They beat the word cells and the line body: when a word is selected, its two
+ * edges are the thing the surface is for. The line's own label strip along the
+ * top is left alone (see LINE_BAND), so a line can still be moved and resized
+ * without deselecting first.
+ */
+function hitBound(x, y) {
+  if (y < VOC_Y + LINE_BAND || y > VOC_Y + VOC_H) return null;
+  const g = selWordGeom();
+  if (!g) return null;
+  let best = null;
+  for (const [side, bx] of [['left', g.x0], ['right', g.x1]]) {
+    const d = Math.abs(x - bx);
+    if (d > BOUND_GRAB) continue;
+    // A tie on a word only a few pixels wide goes to the bound already focused.
+    const rank = -d + (side === S.selBound ? 0.5 : 0);
+    if (!best || rank > best.rank) best = { line: g.line, i: g.i, side, rank };
+  }
   return best;
 }
 
@@ -1065,7 +1480,11 @@ function renderRow(line) {
     + (line.index === S.sel ? ' selected' : '');
   row.dataset.index = line.index;
 
-  const score = (line.score && line.score.total) || 0;
+  // A line nobody has scored is not a line that scored zero: the gold file
+  // and a freshly added line both arrive without a scorecard, and a red 0 on
+  // every row is a false alarm the eye cannot unsee.
+  const scored = !!(line.score && line.score.total != null);
+  const score = scored ? line.score.total : 0;
   const words = (line.words || []).map((w, i) => {
     const todo = S.todo.get(`${line.index}:${i}`);
     return `<span class="w${todo ? ' todo' : ''}" data-i="${i}" ` +
@@ -1081,7 +1500,8 @@ function renderRow(line) {
     `<div class="text">${words || escapeHtml(line.text)}</div>` +
     `<div class="issues"${issues.length ? ` title="${escapeHtml(issues.join(' · '))}"` : ''}>` +
       (issues.length ? `▲ ${escapeHtml(issues.join(' · '))}` : '') + '</div>' +
-    `<div class="score ${grade(score)}">${score.toFixed(0)}</div>`;
+    (scored ? `<div class="score ${grade(score)}">${score.toFixed(0)}</div>`
+            : '<div class="score none" title="not scored">—</div>');
 
   row.addEventListener('click', e => {
     const wordEl = e.target.closest && e.target.closest('.w');
@@ -1146,7 +1566,10 @@ function escapeHtml(s) {
 }
 
 function refreshRow(line) {
-  if (line.index === S.sel) renderPlaceBar();
+  // Every edit path already refreshes the row it touched, so this is the one
+  // place the deck's readouts have to be kept honest - undo and the review
+  // sheet included.
+  if (line.index === S.sel) { renderPlaceBar(); syncWordBar(); }
   const row = S.rows.get(line.index);
   if (!row) return;
   row.querySelector('.times').textContent = `${fmt(line.start)} → ${fmt(line.end)}`;
@@ -1185,7 +1608,7 @@ function ensureVisible(line) {
   if (!line || line.end <= line.start) return;
   const span = line.end - line.start;
   if (line.start < S.view.start || line.end > S.view.start + S.view.dur) {
-    setView(line.start - Math.max(1.5, span * 0.4), Math.max(S.view.dur, span * 2.2));
+    glideView(line.start - Math.max(1.5, span * 0.4), Math.max(S.view.dur, span * 2.2), 300);
   }
 }
 
@@ -1207,10 +1630,47 @@ function preview(line) {
 
 function paintSelWord() {
   for (const el of document.querySelectorAll('.w.sel')) el.classList.remove('sel');
-  if (S.selWord == null) return;
   const row = S.rows.get(S.sel);
-  const el = row && row.querySelectorAll('.w')[S.selWord];
-  if (el) el.classList.add('sel');
+  const el = S.selWord == null ? null : row && row.querySelectorAll('.w')[S.selWord];
+  if (el) {
+    el.classList.add('sel');
+    el.dataset.bound = S.selBound;      // lights the bracket on the focused side
+  }
+  syncWordBar();
+}
+
+/**
+ * The word bar: the selected word's span as numbers you can grab.
+ *
+ * The waveform is the place to drag a bound *against the audio*; this is the
+ * place to see exactly where it is and move it by a known amount. Same word,
+ * same two bounds, same focus - a click here and a click on a handle out there
+ * mean the same thing, and the arrow keys act on whichever was clicked last.
+ */
+function syncWordBar() {
+  const bar = S.el.wordBar;
+  if (!bar) return;
+  const line = S.project && S.project.lines[S.sel];
+  const w = ((line && line.words) || [])[S.selWord];
+  if (S.selWord == null || !w) { bar.hidden = true; return; }
+  bar.hidden = false;
+  S.el.wbText.textContent = w.text;
+  S.el.wbLeft.querySelector('span').textContent = fmt(w.start);
+  S.el.wbRight.querySelector('span').textContent = fmt(w.end);
+  S.el.wbDur.textContent = `${(w.end - w.start).toFixed(2)}s`;
+  S.el.wbLeft.classList.toggle('on', S.selBound === 'left');
+  S.el.wbRight.classList.toggle('on', S.selBound === 'right');
+}
+
+/** Point the keyboard at one of the two bounds. The mouse does this by grabbing. */
+function focusBound(side) {
+  if (S.selWord == null) return false;
+  if (S.selBound !== side) {
+    S.selBound = side;
+    paintSelWord();
+    draw();
+  }
+  return true;
 }
 
 function selectWord(lineIndex, wordIndex, focus) {
@@ -1231,6 +1691,7 @@ function selectWord(lineIndex, wordIndex, focus) {
 
 function deselectWord() {
   S.selWord = null;
+  S.hoverBound = null;
   paintSelWord();
   draw();
 }
@@ -1357,7 +1818,7 @@ function tick() {
 
     if (S.follow && playing) {
       const rel = (t - S.view.start) / S.view.dur;
-      if (rel > 0.72 || rel < 0) setView(t - S.view.dur * 0.3, S.view.dur);
+      if (rel > 0.72 || rel < 0) glideView(t - S.view.dur * 0.3, S.view.dur, 420);
     }
 
     let active = -1;
@@ -1440,14 +1901,35 @@ function tap() {
   select(Math.min(S.sel + 1, S.project.lines.length - 1));
 }
 
-/** Nudge the selected word's start. Returns false if no word is selected. */
-function nudgeWord(delta) {
-  const line = S.project.lines[S.sel];
-  const ws = (line && line.words) || [];
-  if (S.selWord == null || !ws[S.selWord]) return false;
-  pushCoalesced('nudge word', line);
-  setWordStart(line, S.selWord, ws[S.selWord].start + delta);
-  refreshRow(line);
+/**
+ * Nudge the focused bound of the selected word. False if no word is up, which
+ * is what makes the arrow keys fall through to the line - the same key does
+ * the finest thing available in the context you are actually in.
+ */
+function nudgeBound(delta) {
+  const g = selWordGeom();
+  if (!g) return false;
+  const side = S.selBound;
+  pushCoalesced(`nudge ${side} bound`, g.line);
+  setBound(g.line, g.i, side, boundTime(g.line, g.i, side) + delta);
+  refreshRow(g.line);
+  ensureVisible(g.line);
+  draw();
+  return true;
+}
+
+/**
+ * Stamp a bound at the playhead - S and E, the same two keys that set a line's
+ * edges, acting on the word when there is one selected.
+ */
+function stampBound(side) {
+  const g = selWordGeom();
+  if (!g) return false;
+  pushHistory(`set word ${side} bound`, [g.line]);
+  S.selBound = side;
+  setBound(g.line, g.i, side, S.audio.currentTime);
+  refreshRow(g.line);
+  paintSelWord();
   draw();
   return true;
 }
@@ -1500,16 +1982,20 @@ function indexTodo() {
   }
 }
 
-async function loadAudit() {
-  try {
-    const data = await (await fetch(api('/api/audit'))).json();
-    S.review.queue = data.queue || [];
-    S.review.additions = null;
-    S.additions = data.additions || [];
-    S.review.stats = data.never_run ? null : data;
-    indexTodo();
-    rvBadge();
-  } catch { /* an audit is optional; the timeline works without one */ }
+/**
+ * Take the audit from the project it belongs to. The queue and the proposals
+ * are the project's own arrays, not copies: a `done` mark or a dismissal set
+ * here is saved with the next write-back and survives a reload.
+ */
+function adoptAudit() {
+  const data = (S.project.meta && S.project.meta.audit) || null;
+  S.review.queue = (data && data.queue) || [];
+  S.additions = (data && data.additions) || [];
+  S.review.stats = data;
+  S.review.at = 0;
+  S.addAt = 0;
+  indexTodo();
+  rvBadge();
 }
 
 function openReview() {
@@ -1554,19 +2040,17 @@ async function runAudit() {
     return;
   }
 
-  // The repair pass edits the project server-side, so take the fresh copy.
-  S.project = await (await fetch(api('/api/project'))).json();
+  // The repair pass edits the project server-side, and the audit lives in it.
+  S.project = data;
   resetHistory();                            // the repair pass replaced the project
-  S.review = { ...S.review, queue: data.queue || [], at: 0, stats: data };
-  S.additions = data.additions || [];
-  S.addAt = 0;
-  indexTodo();
+  adoptAudit();
   renderList();
+  invalidate();
   draw();
-  rvBadge();
 
-  if (data.repairs && data.repairs.length) {
-    toast(`repaired ${data.repairs.length} impossible timing(s) automatically`);
+  const repairs = (S.review.stats && S.review.stats.repairs) || [];
+  if (repairs.length) {
+    toast(`repaired ${repairs.length} impossible timing(s) automatically`);
   }
   if (adPending().length) { rvShow('rv-add'); adRender(); rvSyncSolo(); return; }
   if (!S.review.queue.length) { rvFinish(); return; }
@@ -1585,6 +2069,7 @@ function rvRender() {
   // A new word is a clean slate: no adjustment carried over, nothing armed.
   S.review.adj = null;
   S.review.drag = null;
+  S.review.side = 'left';
   S.review.lastPlayed = null;
 
   RV('rv-count').textContent = `Word ${S.review.at + 1} of ${total}`;
@@ -1604,7 +2089,8 @@ function rvRender() {
   const later = item.delta > 0;
   const dragNote = item.scope === 'line'
     ? ' Drag the strip to shift the whole proposed placement.'
-    : ' If neither is right, drag the strip to put the word where you hear it.';
+    : ' If neither is right, drag either bracket on the strip to say where the ' +
+      'word begins and ends — <kbd>,</kbd> and <kbd>.</kbd> aim the arrows at one.';
   RV('rv-hint').innerHTML = (item.scope === 'line'
     ? 'The second model puts this word outside the line altogether, so the whole ' +
       'line looks misplaced. <em>Use suggested</em> re-times the entire line.'
@@ -1693,7 +2179,11 @@ function rvDecide(action) {
         markDirty();
       }
     } else {
-      setWordStart(line, item.word, adj ? adj.t : item.proposed);
+      // Left first, then right: the right bound's clamp is measured against the
+      // left one, which is the order the strip staged them in - so what was
+      // drawn is exactly what lands.
+      setWordStart(line, item.word, adj && adj.t != null ? adj.t : item.proposed);
+      if (adj && adj.end != null) setBound(line, item.word, 'right', adj.end);
     }
     refreshRow(line);
     draw();
@@ -1706,6 +2196,23 @@ function rvDecide(action) {
     rvBadge();
     syncTodoMark(item);
     draw();
+    persistSoon();                      // the mark lives in the project now
+  }
+
+  // The decision itself is the label - including "keep as is", which says the
+  // aligner was right and the rule that queued it was not.
+  if (action !== 'skip' && line) {
+    const after = action === 'accept'
+      ? (adj && adj.t != null ? adj.t : item.proposed) : item.current;
+    logDecisions([{
+      source: 'review', action: adj ? 'adjust' : action, line: item.line, word: item.word,
+      bound: item.scope === 'line' ? 'line' : 'start',
+      before: item.current, after, proposed: item.proposed,
+      reasons: item.reasons || [], severity: item.severity,
+    }]);
+    // The line as it stands now is what the next save should diff against;
+    // otherwise the same edit would be logged again as a timeline drag.
+    if (S.logged && S.loggedFor === S.project) rememberLogged(line);
   }
 
   S.review.adj = null;
@@ -1783,22 +2290,45 @@ function rvProposal(item) {
 function rvCands() {
   const item = rvCurrent();
   if (!item) return null;
+  const adj = S.review.adj;
   return {
     cur: item.current,
     alt: item.proposed,
-    adj: S.review.adj ? S.review.adj.t : null,
+    adj: adj ? adj.t : null,
+    adjEnd: adj ? adj.end : null,
+  };
+}
+
+/**
+ * Where the word's two bounds would sit if this card were accepted.
+ *
+ * The sheet stages rather than commits: its whole job is "listen to these, pick
+ * one", and a drag that wrote through would leave the *Now* marker pointing at
+ * a place the word no longer is. So the handles here move a proposal - drawn,
+ * grabbed, snapped and nudged exactly like the ones on the timeline, and
+ * applied through the same setBound the moment you take the card.
+ */
+function rvEff(item) {
+  const line = S.project.lines[item.line];
+  const w = line && (line.words || [])[item.word];
+  const adj = S.review.adj;
+  return {
+    left: adj && adj.t != null ? adj.t : (w ? w.start : item.current),
+    right: adj && adj.end != null ? adj.end : (w ? w.end : item.current + 0.3),
+    staged: !!adj,
   };
 }
 
 /** How far a line-scope adjustment moves the proposed placement. */
 function rvOffset(item) {
-  return S.review.adj ? S.review.adj.t - item.proposed : 0;
+  return S.review.adj && S.review.adj.t != null ? S.review.adj.t - item.proposed : 0;
 }
 
 /** The moment the adjusted version says the word begins - what to play. */
 function rvAdjPlay(item) {
   if (!item) return 0;
-  return S.review.adj ? S.review.adj.t : item.current;
+  const adj = S.review.adj;
+  return adj && adj.t != null ? adj.t : rvEff(item).left;
 }
 
 /**
@@ -1934,8 +2464,8 @@ function rvDrawStrip() {
              c.adj == null ? 'rgba(62,207,142,.12)' : 'rgba(180,140,255,.13)');
     }
   } else {
-    const w = line && line.words[item.word];
-    if (w) rvBand(g, w.start, w.end, 'rgba(91,157,255,.13)');
+    const e = rvEff(item);
+    rvBand(g, e.left, e.right, e.staged ? 'rgba(180,140,255,.15)' : 'rgba(91,157,255,.13)');
   }
 
   // The vocal itself - the only evidence any of this is decided on - and the
@@ -1945,7 +2475,21 @@ function rvDrawStrip() {
   // The adjusted one, when it exists, is the live one; the other two dim.
   if (c.cur != null) rvMarker(g, c.cur, C.sel, c.adj == null);
   if (c.alt != null) rvMarker(g, c.alt, C.good, c.adj == null);
-  if (c.adj != null) rvMarker(g, c.adj, C.adj, true);
+
+  // The word's two bounds, drawn by the same painter as the timeline's. Grab
+  // either one; the focused one is what the arrow keys move.
+  if (item.scope !== 'line') {
+    const e = rvEff(item);
+    const tone = e.staged ? C.adj : null;
+    for (const side of ['left', 'right']) {
+      const x = rvT2X(side === 'left' ? e.left : e.right);
+      const held = S.review.drag && S.review.drag.side === side;
+      drawBound(g, x, 0, RV_H, side,
+                held ? 'hot' : S.review.side === side ? 'focus' : 'idle', tone);
+    }
+  } else if (c.adj != null) {
+    rvMarker(g, c.adj, C.adj, true);
+  }
 
   rvFlashRing(g);
 
@@ -1963,66 +2507,102 @@ function rvDrawStrip() {
 /**
  * The range the model would actually accept.
  *
- * Word scope mirrors setWordStart's clamp exactly, so the strip can never show
- * a position that would be silently dragged somewhere else on accept. Line
- * scope has no such neighbours - the whole line moves - so it is held to the
- * drawn window, which already spans both placements plus the padding.
+ * Word scope defers to boundRange - the very function the accept will clamp
+ * with - so the strip can never show a position that would be silently dragged
+ * somewhere else. Line scope has no neighbours to answer to, the whole line
+ * moves, so it is held to the drawn window instead.
  */
-function rvRange(item) {
-  const line = S.project.lines[item.line];
+function rvRange(item, side) {
   // A line-scope drag has no neighbouring words to answer to - the whole line
   // rides along - so it is held to the drawn window, which already spans both
   // placements and the padding either side of them.
   if (item.scope === 'line') return [Math.max(0, RVW.a), RVW.b];
-  const ws = (line && line.words) || [];
-  const i = item.word;
-  const lo = i === 0 ? 0 : ws[i - 1].start + MIN_WORD;
-  const hi = (i + 1 < ws.length ? ws[i + 1].start : line.end) - MIN_WORD;
+  const line = S.project.lines[item.line];
+  let [lo, hi] = boundRange(line, item.word, side || 'left');
+
+  // Both bounds can be staged at once, and the card is applied left first, so
+  // each has to be held to what the other will already have made true. Without
+  // this the strip could draw a span the accept would then quietly reshape.
+  const adj = S.review.adj;
+  if (adj) {
+    if (side === 'left' && adj.end != null) hi = Math.min(hi, adj.end - MIN_WORD);
+    if (side === 'right' && adj.t != null) lo = adj.t + MIN_WORD;
+  }
   return [lo, Math.max(lo, hi)];
 }
 
-function rvClampT(item, t) {
-  const [lo, hi] = rvRange(item);
+function rvClampT(item, t, side) {
+  const [lo, hi] = rvRange(item, side || 'left');
   return clamp(t, lo, hi);
 }
 
-/** Place the adjusted candidate. `free` is alt: take the time literally. */
-function rvSetAdj(t, free) {
+/**
+ * Place one staged bound. `free` is alt: take the time literally.
+ *
+ * Line scope has only the one handle - the marker that shifts the whole
+ * proposed placement - so it always writes the left side.
+ */
+function rvSetAdj(t, free, side) {
   const item = rvCurrent();
   if (!item) return;
+  side = item.scope === 'line' ? 'left' : (side || S.review.side || 'left');
   const snapped = free ? t : snapOnset(t);
-  const out = rvClampT(item, snapped);
+  const out = rvClampT(item, snapped, side);
   // Flash only on a snap that survived the clamp - a ring on a boundary the
   // model then moved would be a lie about what just happened.
   if (snapped !== t && out === snapped) S.flash = { t: out, at: performance.now() };
-  S.review.adj = { t: out };
+  const eff = rvEff(item);
+  const adj = S.review.adj || { t: null, end: null };
+  // The first touch of either handle stages both, so what the strip draws is
+  // the whole span the accept will write - never half of it.
+  S.review.adj = side === 'left'
+    ? { t: out, end: item.scope === 'line' ? null : (adj.end != null ? adj.end : eff.right) }
+    : { t: adj.t != null ? adj.t : eff.left, end: out };
+  S.review.side = side;
   rvSyncAdj();
   rvDrawStrip();
 }
 
 function rvResetAdj() {
   S.review.adj = null;
+  S.review.side = 'left';
   if (S.review.lastPlayed === 'adj') S.review.lastPlayed = null;
   rvSyncAdj();
   rvDrawStrip();
 }
 
+/** Point the sheet's arrow keys at one bound. Grabbing a handle does the same. */
+function rvFocus(side) {
+  const item = rvCurrent();
+  if (!item || item.scope === 'line') return;
+  S.review.side = side;
+  rvSyncAdj();
+  rvDrawStrip();
+}
+
 /**
- * Nudge by 50 ms (shift: 10 ms), creating the adjusted candidate from whichever
- * one is armed - the last you listened to, or else the suggestion, which is
- * what the primary button would take.
+ * Nudge the focused bound by 50 ms (shift: 10 ms).
+ *
+ * The left bound starts from whichever candidate is armed - the last you
+ * listened to, or else the suggestion, which is what the primary button would
+ * take. The right bound has no candidates to choose between, so it starts from
+ * where the word currently ends.
  */
 function rvNudgeAdj(delta) {
   const item = rvCurrent();
   if (!item) return;
   const c = rvCands();
-  const base = c.adj != null ? c.adj
-    : S.review.lastPlayed === 'cur' ? c.cur
-    : c.alt != null ? c.alt : c.cur;
+  const side = item.scope === 'line' ? 'left' : (S.review.side || 'left');
+  let base;
+  if (side === 'right') {
+    base = c.adjEnd != null ? c.adjEnd : rvEff(item).right;
+  } else {
+    base = c.adj != null ? c.adj
+      : S.review.lastPlayed === 'cur' ? c.cur
+      : c.alt != null ? c.alt : c.cur;
+  }
   if (base == null) return;
-  S.review.adj = { t: rvClampT(item, base + delta) };
-  rvSyncAdj();
-  rvDrawStrip();
+  rvSetAdj(base + delta, true, side);   // a nudge is deliberate: no onset snap
 }
 
 /** Everything that changes the moment a third candidate exists. */
@@ -2034,7 +2614,13 @@ function rvSyncAdj() {
   RV('rv-key-adj').hidden = !on;
   RV('rv-adj-reset').hidden = !on;
   RV('rv-strip-hint').hidden = on;
-  if (on && item) RV('rv-adj-time').textContent = fmt(rvAdjPlay(item));
+  if (on && item) {
+    // Word scope adjusts a span, so the readout is a span. Line scope adjusts
+    // one placement, and says so with one time.
+    const e = rvEff(item);
+    RV('rv-adj-time').textContent = item.scope === 'line'
+      ? fmt(rvAdjPlay(item)) : `${fmt(e.left)} → ${fmt(e.right)}`;
+  }
   RV('rv-accept').textContent = on ? 'Use adjusted'
     : item && item.scope === 'line' ? 'Use suggested for the line' : 'Use suggested';
 }
@@ -2048,27 +2634,45 @@ function rvStripDown(e) {
   const x = e.clientX - RV('rv-wave').getBoundingClientRect().left;
   const c = rvCands();
 
-  // Grabbing a marker drags from where that marker is, so a candidate can be
-  // refined without first jumping to the cursor. Clicking bare waveform is the
-  // blunt version of the same thing: put it here.
-  let from = rvX2T(x), near = RV_GRAB + 1;
-  for (const t of [c.adj, c.alt, c.cur]) {
-    if (t == null) continue;
-    const d = Math.abs(rvT2X(t) - x);
-    if (d < near) { near = d; from = t; }
+  // A bound handle first, exactly as on the timeline: whichever of the word's
+  // two edges is nearest the grab, dragged from where it already is rather
+  // than jumping to the cursor.
+  let side = 'left', from = rvX2T(x), near = RV_GRAB + 1;
+  if (item.scope !== 'line') {
+    const eff = rvEff(item);
+    for (const [s, t] of [['left', eff.left], ['right', eff.right]]) {
+      const d = Math.abs(rvT2X(t) - x);
+      if (d < near) { near = d; from = t; side = s; }
+    }
   }
-  S.review.drag = { x0: x, t0: from };
-  if (near > RV_GRAB) rvSetAdj(from, e.altKey);
+  // Failing that, one of the two candidate markers - they are start times, so
+  // they refine the left bound. Clicking bare waveform is the blunt version of
+  // the same thing: put this bound here.
+  if (near > RV_GRAB) {
+    for (const t of [c.adj, c.alt, c.cur]) {
+      if (t == null) continue;
+      const d = Math.abs(rvT2X(t) - x);
+      if (d < near) { near = d; from = t; side = 'left'; }
+    }
+  }
+  S.review.side = side;
+  S.review.drag = { x0: x, t0: from, side };
+  if (near > RV_GRAB) rvSetAdj(from, e.altKey, side);
+  else { rvSyncAdj(); rvDrawStrip(); }
 }
 
 function rvStripMove(e) {
   const d = S.review.drag;
   if (!d) return;
   const x = e.clientX - RV('rv-wave').getBoundingClientRect().left;
-  rvSetAdj(d.t0 + (x - d.x0) * (RVW.b - RVW.a) / RVW.w, e.altKey);
+  rvSetAdj(d.t0 + (x - d.x0) * (RVW.b - RVW.a) / RVW.w, e.altKey, d.side);
 }
 
-function rvStripUp() { S.review.drag = null; }
+function rvStripUp() {
+  if (!S.review.drag) return;
+  S.review.drag = null;
+  rvDrawStrip();
+}
 
 /* ------------------------------------------------- lines the lyrics lack
 
@@ -2211,51 +2815,38 @@ async function adDecide(action) {
   rvStopPlay();
   S.audio.pause();
 
-  // Adding a line renumbers the whole project - the review queue, the marks,
-  // both aligners' spans, the round-trip's observations - and that belongs on
-  // the server, which owns the model. Dismissing one is only "not now", so the
-  // hosted demo does it in memory rather than dead-ending on this card and
-  // never letting anyone reach the word queue behind it.
-  if (STATIC) {
-    if (action === 'accept') { needsServer('Adding a line'); return; }
+  // Dismissing is only "not now": a flag on the proposal, which sits in the
+  // project and goes to disk with the next write-back. Adding a line renumbers
+  // the whole project - the review queue, the marks, both aligners' spans, the
+  // round-trip's observations - and that belongs on the server, which owns the
+  // model.
+  if (action !== 'accept') {
     cand.dismissed = true;
+    markDirty();
     renderList();
-    S.addAt = 0;
-    if (adPending().length) adRender();
-    else rvAfterAdditions();
-    return;
-  }
-
-  let data;
-  try {
-    const res = await fetch('/api/additions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, candidate: cand }),
-    });
-    if (!res.ok) throw new Error(await res.text());
-    data = await res.json();
-  } catch (err) {
-    return toast('could not update the lyrics: ' + err.message, true);
-  }
-
-  if (action === 'accept') {
+  } else {
+    if (needsServer('Adding a line')) return;
+    let data;
+    try {
+      const res = await fetch('/api/additions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidate: cand }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      data = await res.json();
+    } catch (err) {
+      return toast('could not update the lyrics: ' + err.message, true);
+    }
     // Every line after the insertion is renumbered, so the queue, the todo
     // marks and the undo stack all have to come from the server's new truth
     // rather than be patched here - the same reset the audit itself does.
     S.project = data.project;
-    S.review.queue = (data.audit.queue || []);
-    if (S.review.stats) S.review.stats = { ...S.review.stats, ...data.audit };
-    S.additions = data.audit.additions || [];
     resetHistory();
-    indexTodo();
+    adoptAudit();
     renderList();
     invalidate();
     draw();
-    rvBadge();
     toast(`line added at ${fmt(cand.start)} — it is in the exports now`);
-  } else {
-    S.additions = (data.audit && data.audit.additions) || [];
-    renderList();
   }
 
   S.addAt = 0;
@@ -2329,7 +2920,10 @@ async function openTracks() {
     row.className = 'tk-row' + (t.active ? ' active' : '');
     row.innerHTML =
       `<span class="tk-name">${escapeHtml(t.name)}</span>` +
-      `<span class="tk-meta">${t.lines} lines · score ${t.score}</span>` +
+      // The name comes from the audio file, so two alignments of one song are
+      // the same name twice. The folder is what actually tells them apart.
+      `<span class="tk-meta">${escapeHtml(t.dir.split('/').pop())} · ` +
+        `${t.lines} lines · score ${t.score}</span>` +
       (t.flagged ? `<span class="tk-badge todo">${t.flagged} to review</span>` : '') +
       (t.active ? '<span class="tk-badge here">open</span>' : '');
     if (!t.active) row.addEventListener('click', () => switchTrack(t.dir));
@@ -2442,36 +3036,194 @@ function bindTracks() {
 
 /* ---------------------------------------------------------------- server */
 
-async function save() {
-  if (needsServer('Saving')) return;
-  const res = await fetch('/api/project', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(S.project),
-  });
-  if (!res.ok) return toast('save failed', true);
-  S.hist.savedAt = S.hist.undo.length;      // undoing back to here is "clean" again
-  syncHistory();
-  toast('saved — lrc, word-lrc, srt and vtt rewritten');
+/* ------------------------------------------------------------- decisions
+
+   Every bound a person moves is a label: the aligner said one thing, the ear
+   said another, by this much. The server keeps them (decisions.jsonl in the
+   workdir, with the word's features at the time) so that, with a few hundred
+   across several tracks, the audit queue can be ranked by "a human changed
+   this" instead of by rule severity. Nothing here can fail a save: the post
+   is fire-and-forget, and the demo has nowhere to send it. */
+
+function logDecisions(entries) {
+  if (STATIC || !entries.length) return;
+  try {
+    fetch('/api/decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entries),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (err) { /* a log is never worth an error */ }
 }
 
-async function rescore() {
-  if (needsServer('Re-scoring')) return;
-  toast('re-running the benchmark…');
-  await save();
-  const res = await fetch('/api/rescore', { method: 'POST' });
-  if (!res.ok) return toast('re-score failed', true);
-  const card = await res.json();
-  const fresh = await (await fetch('/api/project')).json();
-  S.project = fresh;
-  resetHistory();                            // snapshots point at replaced objects
-  renderScorecard(card);
-  renderList();
+/** Remember the bounds as last logged, so a save can report what moved. */
+function rememberLogged(line) {
+  if (!S.logged || S.loggedFor !== S.project) { S.logged = {}; S.loggedFor = S.project; }
+  S.logged[line.index] = (line.words || []).map(w => [w.start, w.end]);
+}
+
+/** Timeline edits since the last save or review decision, one per bound. */
+function timelineDecisions() {
+  const out = [];
+  if (!S.logged || S.loggedFor !== S.project) {
+    // First sight of this project: baseline it and report nothing, because
+    // nothing has been decided yet.
+    (S.project.lines || []).forEach(rememberLogged);
+    return out;
+  }
+  for (const line of S.project.lines || []) {
+    const was = S.logged[line.index];
+    const ws = line.words || [];
+    if (!was || was.length !== ws.length) { rememberLogged(line); continue; }
+    ws.forEach((w, i) => {
+      if (Math.abs(w.start - was[i][0]) > 1e-6)
+        out.push({ source: 'timeline', action: 'drag', line: line.index, word: i,
+                   bound: 'start', before: was[i][0], after: w.start });
+      if (Math.abs(w.end - was[i][1]) > 1e-6)
+        out.push({ source: 'timeline', action: 'drag', line: line.index, word: i,
+                   bound: 'end', before: was[i][1], after: w.end });
+    });
+    rememberLogged(line);
+  }
+  return out;
+}
+
+async function save(opts) {
+  const quiet = !!(opts && opts.quiet);
+  if (quiet ? !!STATIC : needsServer('Saving')) return;
+  cancelPersist();
+  logDecisions(timelineDecisions());
+  const at = S.hist.undo.length;            // what this write actually covers
+  S.saving = true;
+  let res;
+  try {
+    res = await fetch('/api/project', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(S.project),
+    });
+  } catch (err) {
+    S.saving = false;
+    if (!quiet) toast('save failed — ' + err.message, true);
+    return;
+  }
+  S.saving = false;
+  if (!res.ok) return toast('save failed', true);
+  S.hist.savedAt = at;                      // undoing back to here is "clean" again
+  syncHistory();
+  adoptScores(await res.json());
+  if (quiet) flashSaved(); else toast('saved — lrc, word-lrc, srt and vtt rewritten');
+}
+
+/**
+ * Take the scores the server computed for what was just saved.
+ *
+ * Scores only - the timings, the history and the selection stay as they are,
+ * because more edits may have landed while the write was in flight. The
+ * score is a function of the file, so it arrives with every save rather than
+ * on request; this is what keeps the chips and the flags telling the truth
+ * about the timings under them.
+ */
+function adoptScores(fresh) {
+  if (!fresh || !fresh.lines || !S.project) return;
+  fresh.lines.forEach((l, i) => {
+    const line = S.project.lines[i];
+    if (!line || line.text !== l.text) return;
+    line.score = l.score;
+    line.flagged = l.flagged;
+  });
+  S.project.scorecard = fresh.scorecard;
+  renderScorecard(fresh.scorecard);
+  if (S.filter === 'flagged') { renderList(); }
+  else for (const line of S.project.lines) refreshScore(line);
+  invalidate();                           // the minimap marks the flagged lines
   draw();
-  toast(`re-scored — ${card.n_flagged} line(s) need review`);
+}
+
+/** Patch one row's score cell and issues to match the line. */
+function refreshScore(line) {
+  const row = S.rows.get(line.index);
+  if (!row) return;
+  const scored = !!(line.score && line.score.total != null);
+  const score = scored ? line.score.total : 0;
+  const issues = (line.score && line.score.issues) || [];
+  row.classList.toggle('flagged', !!line.flagged);
+  const cell = row.querySelector('.score');
+  cell.className = scored ? `score ${grade(score)}` : 'score none';
+  cell.textContent = scored ? score.toFixed(0) : '—';
+  const why = row.querySelector('.issues');
+  why.textContent = issues.length ? `▲ ${issues.join(' · ')}` : '';
+  why.title = issues.join(' · ');
+}
+
+/** A quiet save says so on the button rather than over the whole window. */
+function flashSaved() {
+  const b = document.getElementById('btn-save');
+  if (!b) return;
+  b.classList.remove('dirty');
+  b.classList.add('just-saved');
+  b.innerHTML = 'Saved<span class="k">⌘S</span>';
+  clearTimeout(flashSaved._t);
+  flashSaved._t = setTimeout(() => {
+    b.classList.remove('just-saved');
+    paintSaveBtn();
+  }, 1300);
 }
 
 /* ---------------------------------------------------------------- events */
+
+/**
+ * Take hold of a bound.
+ *
+ * Every grab in the lane ends up here - a handle on the selected word, or a
+ * divider between two cells - so there is one history step, one clamp, one
+ * snap and one cursor for all of them. The grab offset is carried so the bound
+ * never jumps to the pointer on the first pixel of the drag.
+ */
+function startBoundDrag(g, x) {
+  selectWord(g.line.index, g.i, false);
+  S.selBound = g.side;
+  S.drag = {
+    grab: g,
+    off: grabTime(g) - x2t(x),
+    entry: pushHistory(`move ${g.side} bound`, [g.line]),
+  };
+  canvas.style.cursor = 'col-resize';
+  paintSelWord();
+  draw();
+}
+
+/**
+ * What a bound is, in words - including what else it is.
+ *
+ * A word ends where the next begins, so a right bound *is* the next word's
+ * start and moving it moves both. Saying so on hover is the cheapest way to
+ * teach the one rule this model runs on.
+ */
+function boundLabel(line, i, side) {
+  const ws = line.words || [];
+  const w = ws[i];
+  const t = fmt(boundTime(line, i, side));
+  const rest = gap => gap > 1e-6 ? `${gap.toFixed(2)}s of rest` : 'no rest';
+  if (side === 'left') {
+    return i === 0 ? `"${w.text}" starts at ${t} — and so does the line`
+      : `"${w.text}" starts at ${t} — ${rest(w.start - ws[i - 1].end)} ` +
+        `after "${ws[i - 1].text}"`;
+  }
+  return i === ws.length - 1 ? `"${w.text}" ends at ${t} — and so does the line`
+    : `"${w.text}" ends at ${t} — ${rest(ws[i + 1].start - w.end)} ` +
+      `before "${ws[i + 1].text}"`;
+}
+
+/** True when the bound under the cursor changed, so the caller repaints once. */
+function hoverBoundChanged(b) {
+  const was = S.hoverBound;
+  if ((!was && !b) || (was && b && was.line === b.line && was.i === b.i
+      && was.side === b.side)) return false;
+  S.hoverBound = b;
+  return true;
+}
 
 function bindCanvas() {
   canvas.addEventListener('mousedown', e => {
@@ -2480,8 +3232,7 @@ function bindCanvas() {
 
     if (y < MINI_H) {
       const t = (x / canvas.clientWidth) * duration();
-      setView(t - S.view.dur / 2, S.view.dur);
-      draw();
+      glideView(t - S.view.dur / 2, S.view.dur, 260);
       return;
     }
 
@@ -2498,15 +3249,22 @@ function bindCanvas() {
       return;
     }
 
+    // The selected word's own bounds come first: while a word is up, its two
+    // edges are what this lane is for.
+    const bound = hitBound(x, y);
+    if (bound) {
+      startBoundDrag(bound, x);
+      return;
+    }
+
     const word = hitWord(x, y);
     if (word) {
-      selectWord(word.line.index, word.i, false);
-      if (word.kind === 'divider') {
-        S.drag = {
-          word: true, line: word.line, i: word.i,
-          entry: pushHistory('move boundary', [word.line]),
-        };
-        canvas.style.cursor = 'col-resize';
+      // An edge in the cells is the same edit as a handle on the selected word,
+      // reached without selecting first, so it starts the very same drag.
+      if (word.kind === 'edge') {
+        startBoundDrag({ line: word.line, i: word.i, side: word.side }, x);
+      } else {
+        selectWord(word.line.index, word.i, false);
       }
       return;
     }
@@ -2545,13 +3303,12 @@ function bindCanvas() {
       return;
     }
 
-    if (S.drag && S.drag.word) {
+    if (S.drag && S.drag.grab) {
       const d = S.drag;
-      const raw = x2t(x);
-      const snapped = e.altKey ? raw : snapOnset(raw);
-      if (snapped !== raw) S.flash = { t: snapped, at: performance.now() };
-      setWordStart(d.line, d.i, snapped);
-      refreshRow(d.line);
+      // Carrying the grab offset means the bound never jumps to the cursor on
+      // the first pixel - you keep hold of exactly where you took it.
+      placeGrab(d.grab, x2t(x) + d.off, e.altKey, e.shiftKey);
+      refreshRow(d.grab.line);
       draw();
       return;
     }
@@ -2583,14 +3340,24 @@ function bindCanvas() {
       return;
     }
 
+    const bound = hitBound(x, y);
+    if (hoverBoundChanged(bound)) draw();
+    if (bound) {
+      canvas.style.cursor = 'col-resize';
+      setHint(`${boundLabel(bound.line, bound.i, bound.side)}` +
+        `   drag to move  ·  shift = take the neighbour too  ·  alt = no snap`);
+      return;
+    }
+
     const word = hitWord(x, y);
     if (word) {
       const w = word.line.words[word.i];
-      canvas.style.cursor = word.kind === 'divider' ? 'col-resize' : 'pointer';
-      setHint(word.kind === 'divider'
-        ? `boundary ${word.i}: "${word.line.words[word.i - 1].text}" | "${w.text}" ` +
-          `at ${fmt(w.start)}   drag to move (alt = no onset snap)`
-        : `word ${word.i}: "${w.text}"  ${fmt(w.start)} → ${fmt(w.end)}`);
+      canvas.style.cursor = word.kind === 'edge' ? 'col-resize' : 'pointer';
+      setHint(word.kind === 'edge'
+        ? `${boundLabel(word.line, word.i, word.side)}   drag to move  ·  ` +
+          `shift = take the neighbour too`
+        : `word ${word.i}: "${w.text}"  ${fmt(w.start)} → ${fmt(w.end)}` +
+          `  (${(w.end - w.start).toFixed(2)}s)`);
       return;
     }
 
@@ -2604,7 +3371,9 @@ function bindCanvas() {
   });
 
   canvas.addEventListener('mouseleave', () => {
-    if (!S.drag && !S.scrub) restHint();
+    if (S.drag || S.scrub) return;
+    restHint();
+    if (hoverBoundChanged(null)) draw();
   });
 
   window.addEventListener('mouseup', () => {
@@ -2612,6 +3381,7 @@ function bindCanvas() {
       dropIfUnchanged(S.drag.entry);       // a click that moved nothing is not an edit
       canvas.style.cursor = 'crosshair';
       S.drag = null;
+      draw();                              // drop the held highlight off the handle
     }
     if (S.scrub) { canvas.style.cursor = 'crosshair'; S.scrub = null; }
   });
@@ -2659,6 +3429,9 @@ function bindKeys() {
         case ' ': e.preventDefault(); rvReplay(); break;
         case 'ArrowLeft': e.preventDefault(); rvNudgeAdj(-step); break;
         case 'ArrowRight': e.preventDefault(); rvNudgeAdj(step); break;
+        // The same two keys the timeline uses to pick a bound.
+        case ',': case '<': e.preventDefault(); rvFocus('left'); break;
+        case '.': case '>': e.preventDefault(); rvFocus('right'); break;
         case 'Enter': e.preventDefault(); rvDecide('accept'); break;
         case '1': e.preventDefault(); rvPlayFrom(item.current, 'cur'); break;
         case '2': e.preventDefault(); rvPlayFrom(item.proposed, 'new'); break;
@@ -2689,11 +3462,20 @@ function bindKeys() {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
       e.preventDefault(); redoEdit(); return;
     }
+    // alt+arrow walks the words, the way alt+arrow walks words in a text
+    // field. Same job as tab, on the hand that is already nudging.
+    if (e.altKey && !e.metaKey && !e.ctrlKey
+        && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      stepWord(e.key === 'ArrowRight' ? 1 : -1);
+      return;
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
 
 
-    // Arrows are context-sensitive: they move the selected word if there is
-    // one, otherwise the whole line, so existing muscle memory carries over.
+    // Arrows are context-sensitive: they move the focused bound of the selected
+    // word if there is one, otherwise the whole line, so existing muscle memory
+    // carries over. Coarse by default, fine with shift.
     const step = e.shiftKey ? 0.01 : 0.05;
 
     switch (e.key) {
@@ -2703,13 +3485,18 @@ function bindKeys() {
         break;
       case 'Tab': e.preventDefault(); stepWord(e.shiftKey ? -1 : 1); break;
       case 'Escape': e.preventDefault(); deselectWord(); break;
-      case 'ArrowLeft': e.preventDefault(); if (!nudgeWord(-step)) nudge(-step); break;
-      case 'ArrowRight': e.preventDefault(); if (!nudgeWord(step)) nudge(step); break;
+      case 'ArrowLeft': e.preventDefault(); if (!nudgeBound(-step)) nudge(-step); break;
+      case 'ArrowRight': e.preventDefault(); if (!nudgeBound(step)) nudge(step); break;
       case 'ArrowUp': e.preventDefault(); select(S.sel - 1); break;
       case 'ArrowDown': e.preventDefault(); select(S.sel + 1); break;
       case 'Enter': e.preventDefault(); preview(S.project.lines[S.sel]); break;
-      case 's': case 'S': e.preventDefault(); setEdge('start'); break;
-      case 'e': case 'E': e.preventDefault(); setEdge('end'); break;
+      // The two keys that set a line's edges, acting on the word when one is
+      // selected - the same context-sensitivity the arrows have.
+      case 's': case 'S': e.preventDefault(); if (!stampBound('left')) setEdge('start'); break;
+      case 'e': case 'E': e.preventDefault(); if (!stampBound('right')) setEdge('end'); break;
+      // Which bound the arrows move. Clicking a handle does the same thing.
+      case ',': case '<': e.preventDefault(); focusBound('left'); break;
+      case '.': case '>': e.preventDefault(); focusBound('right'); break;
       case 't': case 'T': e.preventDefault(); tap(); break;
       case 'w': case 'W': e.preventDefault(); tapWord(); break;
       case '[': e.preventDefault(); stepRate(-1); break;
@@ -2727,6 +3514,54 @@ function bindKeys() {
   });
 }
 
+/* The deck's two bound chips.
+
+   A click aims the arrow keys at that bound - exactly what clicking its handle
+   on the waveform does. A horizontal drag scrubs it at 4 ms a pixel (shift:
+   1 ms), which is the fine control a wide zoom cannot give you out on the lane.
+   Same setBound underneath, so the same one undo step and the same write-back. */
+
+const CHIP_MS = 0.004, CHIP_FINE = 0.001;
+
+function bindWordBar() {
+  for (const btn of [S.el.wbLeft, S.el.wbRight]) {
+    const side = btn.dataset.side;
+
+    btn.addEventListener('pointerdown', e => {
+      const g = selWordGeom();
+      if (!g) return;
+      e.preventDefault();
+      btn.setPointerCapture(e.pointerId);
+      focusBound(side);
+      S.wbDrag = {
+        side, i: g.i, line: g.line, x0: e.clientX,
+        t0: boundTime(g.line, g.i, side),
+        entry: pushHistory(`move ${side} bound`, [g.line]),
+      };
+    });
+
+    btn.addEventListener('pointermove', e => {
+      const d = S.wbDrag;
+      if (!d) return;
+      const dx = e.clientX - d.x0;
+      if (Math.abs(dx) < 2) return;      // a click is a click, not a 1 ms edit
+      setBound(d.line, d.i, d.side, d.t0 + dx * (e.shiftKey ? CHIP_FINE : CHIP_MS));
+      refreshRow(d.line);
+      draw();
+    });
+
+    const done = e => {
+      const d = S.wbDrag;
+      if (!d) return;
+      S.wbDrag = null;
+      dropIfUnchanged(d.entry);          // a plain click costs no undo step
+      if (btn.hasPointerCapture(e.pointerId)) btn.releasePointerCapture(e.pointerId);
+    };
+    btn.addEventListener('pointerup', done);
+    btn.addEventListener('pointercancel', done);
+  }
+}
+
 function bindChrome() {
   document.getElementById('btn-play').addEventListener('click', () =>
     S.audio.paused ? S.audio.play() : S.audio.pause());
@@ -2739,9 +3574,9 @@ function bindChrome() {
     document.body.classList.remove('playing');
   });
 
-  document.getElementById('btn-zoom-in').addEventListener('click', () => zoomAt(S.audio.currentTime, 0.6));
-  document.getElementById('btn-zoom-out').addEventListener('click', () => zoomAt(S.audio.currentTime, 1.7));
-  document.getElementById('btn-zoom-fit').addEventListener('click', () => { setView(0, duration()); draw(); });
+  document.getElementById('btn-zoom-in').addEventListener('click', () => zoomAt(S.audio.currentTime, 0.6, true));
+  document.getElementById('btn-zoom-out').addEventListener('click', () => zoomAt(S.audio.currentTime, 1.7, true));
+  document.getElementById('btn-zoom-fit').addEventListener('click', () => glideView(0, duration(), 360));
 
   document.getElementById('btn-solo').addEventListener('click', () => setSolo(!S.solo));
   document.getElementById('btn-follow').addEventListener('click', () => setFollow(!S.follow));
@@ -2757,7 +3592,6 @@ function bindChrome() {
   help.addEventListener('click', e => { if (e.target === help) help.close(); });
 
   document.getElementById('btn-save').addEventListener('click', save);
-  document.getElementById('btn-rescore').addEventListener('click', rescore);
   document.getElementById('btn-export').addEventListener('click', async () => {
     if (needsServer('Exporting')) return;
     await save();
@@ -2809,8 +3643,7 @@ function showCurtain(which, message) {
   document.querySelector('.stage').hidden = on;
   document.querySelector('.lyrics').hidden = on;
   document.body.classList.toggle('no-track', on);
-  for (const id of ['btn-review', 'btn-rescore', 'btn-export', 'btn-save',
-                    'btn-undo', 'btn-redo']) {
+  for (const id of ['btn-review', 'btn-export', 'btn-save', 'btn-undo', 'btn-redo']) {
     const el = RV(id);
     if (el) el.disabled = on;
   }
@@ -2856,6 +3689,11 @@ async function main() {
   S.el.placeText = document.getElementById('place-text');
   S.el.placeTime = document.getElementById('place-time');
   S.el.placeBtn = document.getElementById('btn-place');
+  S.el.wordBar = document.getElementById('wordbar');
+  S.el.wbText = document.getElementById('wb-text');
+  S.el.wbLeft = document.getElementById('wb-left');
+  S.el.wbRight = document.getElementById('wb-right');
+  S.el.wbDur = document.getElementById('wb-dur');
 
   S.project = await (await fetch(api('/api/project'))).json();
   // Nothing aligned yet: the app opens on its own first run rather than
@@ -2880,16 +3718,16 @@ async function main() {
   setView(0, duration());
   layout();
   renderScorecard(S.project.scorecard);
+  adoptAudit();          // before the list, so the queue is marked in it
   renderList();
   bindCanvas();
   bindKeys();
   bindChrome();
   bindReview();
+  bindWordBar();
   bindAdditions();
   syncHistory();
   restHint();
-  await loadAudit();
-  renderList();          // now that the queue is known, mark it in the list
   draw();
   tick();
 

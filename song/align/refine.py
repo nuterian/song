@@ -16,6 +16,7 @@ snapping is a coin flip dressed up as a fix.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +25,7 @@ import numpy as np
 
 from ..audio import TARGET_SR, load_mono
 from ..project import Project, TimedLine
+from . import repeats
 
 # A sung word shorter than this is a degenerate timestamp, not a word.
 MIN_REAL_WORD = 0.05
@@ -38,6 +40,9 @@ DISAGREE = 0.20
 LOW_PROB = 0.35
 # No detected vocal onset within this of a word start is suspicious on its own.
 ONSET_FAR = 0.25
+# A word end this far from where the envelope says the voice stopped is a
+# rest's worth of error - the karaoke renderer's MIN_REST - and gets repaired.
+END_SLOP = 0.15
 
 
 @dataclass
@@ -86,6 +91,9 @@ class Repair:
     was: float
     now: float
     why: str
+    # Which bound moved. Every repair was a start until word ends were read
+    # off the stem; the field is explicit so nothing downstream has to guess.
+    bound: str = "start"
 
     def to_dict(self) -> dict:
         return {
@@ -95,6 +103,7 @@ class Repair:
             "was": round(self.was, 3),
             "now": round(self.now, 3),
             "why": self.why,
+            "bound": self.bound,
         }
 
 
@@ -184,7 +193,7 @@ def repair_line(line: TimedLine, activity) -> list[Repair]:
                 for k in range(i, j + 1):
                     was, now = words[k].start, lo + (k - i) * step
                     if abs(now - was) > 1e-6:
-                        words[k].start = now
+                        _slide(words[k], now)
                         fixed.append(Repair(line.index, k, words[k].text, was, now,
                                             "zero-length word: a sung word cannot last 0 s"))
         i = j + 1
@@ -195,7 +204,7 @@ def repair_line(line: TimedLine, activity) -> list[Repair]:
             was = words[k].start
             now = min(words[k - 1].start + MIN_REAL_WORD, line.end)
             if abs(now - was) > 1e-6:
-                words[k].start = now
+                _slide(words[k], now)
                 fixed.append(Repair(line.index, k, words[k].text, was, now,
                                     "out of order: started before the previous word"))
 
@@ -209,14 +218,46 @@ def repair_line(line: TimedLine, activity) -> list[Repair]:
                 continue
             nxt = _next_active(activity, t, limit=words[k + 1].start if k + 1 < n else line.end)
             if nxt is not None and abs(nxt - t) > 1e-6:
-                words[k].start = nxt
+                _slide(words[k], nxt)
                 fixed.append(Repair(line.index, k, words[k].text, t, nxt,
                                     "started in silence: the vocal stem is not sounding there"))
+
+    # 4. Ends that disagree with the stem's envelope by more than a rest:
+    #    the voice stopped and the word ran on, or the aligner stopped the word
+    #    on continuous vocal. song/ends.py has the rule and its guard; below
+    #    END_SLOP the rule's own error (30 ms median on true starts) is not
+    #    worth reporting as a repair.
+    if activity is not None and hasattr(activity, "word_end"):
+        for k, w in enumerate(words):
+            limit = words[k + 1].start if k + 1 < n else line.end
+            now = activity.word_end(w.start, limit, current=w.end)
+            delta = now - w.end
+            if abs(delta) >= END_SLOP:
+                why = (f"ended {-delta:.2f}s after the voice stopped" if delta < 0
+                       else f"stopped {delta:.2f}s before the voice did")
+                fixed.append(Repair(line.index, k, w.text, w.end, now, why, bound="end"))
+                w.end = now
+        if words[-1].end != line.end:
+            line.end = words[-1].end
 
     if fixed:
         line.source = "manual"
     line.normalize_words()
     return fixed
+
+
+def _slide(word, now: float) -> None:
+    """Move a word to a new start, carrying its length with it.
+
+    Every repair here asserts where a word *begins*. Word ends are measured
+    quantities now rather than derived ones, so a word that begins 200 ms later
+    ends 200 ms later too - leaving the end behind would report a repair and
+    quietly shorten the word to nothing. normalize_words holds whatever this
+    produces inside the line and off its neighbours.
+    """
+    span = max(0.0, word.end - word.start)
+    word.start = now
+    word.end = now + span
 
 
 def _next_active(activity, t: float, limit: float) -> float | None:
@@ -231,6 +272,43 @@ def _next_active(activity, t: float, limit: float) -> float | None:
             return round(i * hop, 3)
         i += 1
     return None
+
+
+# ---------------------------------------------------------------- repeats
+
+
+def repair_from_repeats(project: Project, stem: np.ndarray, sr: int, say) -> list[Repair]:
+    """Re-place an outlier rendition of a repeated lyric from a trusted sibling.
+
+    Only fires where `repeats.transfer_pairs` says the target is an outlier and
+    the source is not; measured on the sample track that is lines 8 and 18,
+    and the transfer takes their start error from 140 and 493 ms to 24 and
+    14 ms. The whole line moves, so it is reported once per line rather than
+    once per word, with the deviation that triggered it.
+    """
+    fixed: list[Repair] = []
+    for source, target, sdev, tdev in repeats.transfer_pairs(project):
+        say(f"  line {target.index}: re-placing from its repeat, line {source.index}")
+        bounds = repeats.transfer(stem, sr, source, target)
+        if bounds is None:
+            continue
+        starts = [b[0] for b in bounds]
+        if any(b <= a for a, b in zip(starts, starts[1:])):
+            continue                     # the warp folded; not a placement
+        was = target.start
+        for w, (s, e) in zip(target.words, bounds):
+            w.start, w.end = s, max(s + MIN_REAL_WORD, e)
+        target.start, target.end = bounds[0][0], bounds[-1][1]
+        target.normalize_words()
+        target.source = "repeat"
+        fixed.append(Repair(
+            target.index, 0, target.words[0].text, was, target.start,
+            f"its word lengths were {math.exp(tdev / len(target.words)):.2f}x off the "
+            f"other renditions' on average; placed from line {source.index}", bound="line",
+        ))
+    if fixed:
+        project.enforce_monotonic()
+    return fixed
 
 
 # ---------------------------------------------------------------- audit
@@ -301,6 +379,12 @@ def run(
 ) -> dict:
     """Repair what is provably wrong, then queue what genuinely needs an ear.
 
+    The result is stored as `project.meta["audit"]` and returned. It lives in
+    the project rather than beside it because its queue, proposals and repairs
+    are keyed by line index, and an inserted line renumbers everything in the
+    project in one place (Project.insert_line); a second file would have to be
+    renumbered in lockstep, and was.
+
     `samples` lets a caller that has already decoded the stem (the server keeps
     one in memory per open track; the CLI loads one to build `activity`) hand
     it straight in, instead of this function silently re-decoding the same
@@ -315,6 +399,12 @@ def run(
     issues: list[Issue] = []
     line_proposals: dict[int, dict] = {}
     verified = 0
+
+    # The song's own repeats first: a rendition whose word durations sit far
+    # from its siblings' is re-placed from the sibling nearest their median,
+    # before the per-line rules look at it. See repeats.py for the numbers.
+    repairs += repair_from_repeats(project, stem, TARGET_SR, say)
+
     lines = [ln for ln in project.lines if ln.end > ln.start and ln.words]
 
     for n, line in enumerate(lines, 1):
@@ -333,12 +423,32 @@ def run(
             flagged = {i.word for i in found}
             verified += sum(1 for k in range(len(line.words)) if k not in flagged)
 
+    # Words that disagree with their own repeats, as A/B choices on the
+    # boundary after them. 3 of 4 right on the sample track; the fourth is a
+    # line whose two siblings are the wrong ones.
+    for outlier in repeats.outliers(project):
+        line = project.lines[outlier.line]
+        d = outlier.issue()
+        issues.append(Issue(d["line"], d["word"], line.words[d["word"]].text,
+                            _context(line, d["word"]), d["current"], d["proposed"],
+                            d["reasons"], d["severity"], d["scope"]))
+
+    # A project aligned before syllables existed gets them here, off the stem.
+    if activity is not None and getattr(activity, "strength", None) is not None:
+        from .pipeline import settle_syllables
+
+        settle_syllables(project, activity)
+
     issues.sort(key=lambda i: (-i.severity, -abs(i.delta)))
     total_words = sum(len(ln.words) for ln in lines)
-    return {
+    # Dismissed proposals are the user's judgement and outlive a re-run.
+    previous = project.meta.get("audit") or {}
+    project.meta["audit"] = {
         "n_words": total_words,
         "n_verified": verified,
         "repairs": [r.to_dict() for r in repairs],
         "queue": [i.to_dict() for i in issues],
         "line_proposals": {str(k): v for k, v in line_proposals.items()},
+        "additions": [a for a in previous.get("additions", []) if a.get("dismissed")],
     }
+    return project.meta["audit"]

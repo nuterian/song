@@ -25,6 +25,11 @@ pyyaml==6.0.2
 tqdm==4.67.1
 
 librosa==0.10.2.post1
+
+# Voice-activity probability on the stem (song/vad.py). 2 MB, weights bundled
+# in the wheel, runs offline; optional at runtime - without it the energy gate
+# stands alone. Pulls only packaging, torch and torchaudio.
+silero-vad==6.2.1
 soundfile==0.12.1
 rapidfuzz==3.10.1
 

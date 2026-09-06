@@ -116,6 +116,55 @@ class KaraokeDurations(unittest.TestCase):
         self.assertEqual(spacers, [0, 0])
         self.assertIn("{\\k0} ", text)
 
+    def test_a_rest_between_words_is_held_unlit(self):
+        """The word stops sweeping when the singer stops, not when the next starts.
+
+        This branch existed from the beginning and could never fire: the model
+        flattened every end onto the next start before the renderer saw it, so
+        a word before a rest swept through the silence. On the sample track one
+        outro word swept for 10.6 s.
+        """
+        ln = TimedLine(
+            index=0, section=0, text="one two", start=10.0, end=13.0,
+            words=[Word("one", 10.0, 10.5), Word("two", 12.0, 13.0)],
+        )
+        ln.normalize_words()
+        text = karaoke.karaoke_text(ln, karaoke.centis(10.0))
+        self.assertEqual(durations(text), [("kf", 50), ("k", 0), ("k", 150), ("kf", 100)])
+
+    def test_a_gap_too_small_to_be_a_rest_is_swept_through(self):
+        """60 ms is inside the aligners' own disagreement, not a silence.
+
+        Whisper is cautious about a word's tail, so most gaps it leaves are
+        slop. Drawn as rests they stall the fill for a few frames apiece and
+        the sweep stutters; the project keeps them either way.
+        """
+        ln = TimedLine(
+            index=0, section=0, text="one two", start=10.0, end=13.0,
+            words=[Word("one", 10.0, 11.94), Word("two", 12.0, 13.0)],
+        )
+        ln.normalize_words()
+        self.assertEqual(durations(karaoke.karaoke_text(ln, karaoke.centis(10.0))),
+                         [("kf", 200), ("k", 0), ("kf", 100)])
+
+    def test_a_gap_at_the_threshold_is_held(self):
+        ln = TimedLine(
+            index=0, section=0, text="one two", start=10.0, end=13.0,
+            words=[Word("one", 10.0, 11.85), Word("two", 12.0, 13.0)],
+        )
+        ln.normalize_words()
+        self.assertEqual(durations(karaoke.karaoke_text(ln, karaoke.centis(10.0))),
+                         [("kf", 185), ("k", 0), ("k", 15), ("kf", 100)])
+
+    def test_a_word_that_runs_to_the_next_holds_nothing(self):
+        ln = TimedLine(
+            index=0, section=0, text="one two", start=10.0, end=13.0,
+            words=[Word("one", 10.0, 12.0), Word("two", 12.0, 13.0)],
+        )
+        ln.normalize_words()
+        self.assertEqual(durations(karaoke.karaoke_text(ln, karaoke.centis(10.0))),
+                         [("kf", 200), ("k", 0), ("kf", 100)])
+
     def test_durations_do_not_drift_over_a_long_line(self):
         # Rounding each word on its own loses up to half a centisecond a time.
         # These land on .005 boundaries, which is the worst case for it.
@@ -479,3 +528,53 @@ class TheLift(unittest.TestCase):
         self.assertEqual(reds, sorted(reds, reverse=True))
         steps = [a - b for a, b in zip(reds, reds[1:])]
         self.assertGreater(max(steps), min(steps) * 1.5)
+
+
+class SyllableSweeps(unittest.TestCase):
+    """One `\\kf` per syllable, tiling the word to the centisecond."""
+
+    def syllabled(self, start=1.0, end=2.0, at=(0.0, 0.31, 0.6), text="gravity"):
+        parts = ("gra", "vi", "ty")
+        ln = TimedLine(index=0, section=0, text=text, start=start, end=end,
+                       words=[Word("gravity", start, end, syllables=[
+                           {"text": t, "at": a} for t, a in zip(parts, at)])])
+        return ln
+
+    def test_a_word_with_syllables_sweeps_per_syllable_and_sums_to_the_word(self):
+        text = karaoke.karaoke_text(self.syllabled(), karaoke.centis(1.0))
+        kf = [d for kind, d in durations(text) if kind == "kf"]
+        self.assertEqual(kf, [31, 29, 40])
+        self.assertEqual(sum(kf), 100)
+
+    def test_the_glyphs_follow_the_lyric_with_its_punctuation(self):
+        ln = self.syllabled(text="Gravity,")
+        text = karaoke.karaoke_text(ln, karaoke.centis(1.0))
+        self.assertIn("}Gra{", text)
+        self.assertIn("}vi{", text)
+        self.assertTrue(text.endswith("}ty,"))
+
+    def test_the_lift_and_settle_are_on_the_word_not_repeated_per_syllable(self):
+        text = karaoke.karaoke_text(self.syllabled(), karaoke.centis(1.0))
+        self.assertEqual(text.count("\\fscx"), text.count("\\fscx") if "\\fscx" in text else 0)
+        self.assertEqual(text.count("\\r"), 1)
+
+    def test_glyphs_that_do_not_match_the_syllables_fall_back_to_one_sweep(self):
+        ln = self.syllabled(text="gravitas")            # letters differ from the word
+        text = karaoke.karaoke_text(ln, karaoke.centis(1.0))
+        self.assertEqual([d for kind, d in durations(text) if kind == "kf"], [100])
+
+    def test_syllables_that_round_onto_the_same_centisecond_never_go_negative(self):
+        ln = self.syllabled(start=1.0, end=1.02, at=(0.0, 0.3, 0.6))   # a 20 ms word
+        text = karaoke.karaoke_text(ln, karaoke.centis(1.0))
+        kf = [d for kind, d in durations(text) if kind == "kf"]
+        self.assertTrue(all(d >= 0 for d in kf))
+        self.assertEqual(sum(kf), 2)
+
+    def test_a_rest_after_a_syllabled_word_is_still_held(self):
+        ln = self.syllabled(start=1.0, end=1.5)
+        ln.words.append(Word("in", 1.8, 2.0))
+        ln.end = 2.0
+        text = karaoke.karaoke_text(ln, karaoke.centis(1.0))
+        kinds = durations(text)
+        self.assertIn(("k", 30), kinds)                 # the 300 ms rest
+        self.assertEqual(sum(d for kind, d in kinds if kind == "kf"), 70)

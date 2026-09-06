@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import mimetypes
 import subprocess
 import threading
 import webbrowser
@@ -11,9 +10,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from . import analysis, exports, vad
+from . import analysis, decisions, exports, vad
 from .align import gaps, pipeline, refine, roundtrip
 from .audio import TARGET_SR, load_mono
 from .project import Project, slugify
@@ -39,37 +39,6 @@ def _preview(source: Path, target: Path, stereo: bool = True) -> Path:
         check=True,
     )
     return target
-
-
-def _ranged(path: Path, request: Request) -> Response:
-    """Serve a file with HTTP Range support so audio seeking works."""
-    size = path.stat().st_size
-    media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    range_header = request.headers.get("range")
-
-    if not range_header or not range_header.startswith("bytes="):
-        return FileResponse(path, media_type=media_type)
-
-    raw = range_header.removeprefix("bytes=").split("-", 1)
-    start = int(raw[0]) if raw[0] else 0
-    end = int(raw[1]) if len(raw) > 1 and raw[1] else size - 1
-    start = max(0, min(start, size - 1))
-    end = max(start, min(end, size - 1))
-
-    with path.open("rb") as fh:
-        fh.seek(start)
-        chunk = fh.read(end - start + 1)
-
-    return Response(
-        content=chunk,
-        status_code=206,
-        media_type=media_type,
-        headers={
-            "Content-Range": f"bytes {start}-{end}/{size}",
-            "Accept-Ranges": "bytes",
-            "Content-Length": str(len(chunk)),
-        },
-    )
 
 
 def create_app(target: Path | str, device: str = "cpu") -> FastAPI:
@@ -104,9 +73,6 @@ def create_app(target: Path | str, device: str = "cpu") -> FastAPI:
     def project_file() -> Path:
         return wd() / "project.json"
 
-    def audit_file() -> Path:
-        return wd() / "audit.json"
-
     def current() -> Project:
         return state["project"]
 
@@ -117,19 +83,25 @@ def create_app(target: Path | str, device: str = "cpu") -> FastAPI:
             raise HTTPException(409, "no track is open")
         return project
 
+    stem_lock = threading.Lock()
+
     def loaded_stem():
-        # Callers are all behind require_project(); this is the belt.
         """(samples, VocalActivity) for the open track, decoded once and kept.
 
-        Re-score and the timing audit both need this; before this cache carried
-        the samples too, each one re-ran ffmpeg and re-decoded the stem on every
-        click even though the exact same array was already sitting in memory.
+        Every save re-scores against this and the timing audit reads it too.
+        About a second and a half to build, so it is started in the background
+        the moment a track is opened; the lock is for a save that lands first.
         """
-        if state["stem"] is None:
-            stem = Path(require_project().stem_path or require_project().audio_path)
-            samples, _ = load_mono(stem, TARGET_SR)
-            state["stem"] = (samples, vad.analyse(samples, TARGET_SR))
-        return state["stem"]
+        with stem_lock:
+            if state["stem"] is None:
+                project = require_project()
+                stem = Path(project.stem_path or project.audio_path)
+                samples, _ = load_mono(stem, TARGET_SR)
+                state["stem"] = (samples, vad.analyse(samples, TARGET_SR))
+            return state["stem"]
+
+    def warm_stem() -> None:
+        threading.Thread(target=loaded_stem, daemon=True).start()
 
     def switch_to(target: Path) -> None:
         target = Path(target).resolve()
@@ -138,23 +110,10 @@ def create_app(target: Path | str, device: str = "cpu") -> FastAPI:
         state["workdir"] = target
         state["project"] = Project.load(target / "project.json")
         state["stem"] = None          # a different stem needs a fresh decode
+        warm_stem()
 
-    @app.get("/", response_class=HTMLResponse)
-    def index() -> str:
-        return (UI_DIR / "index.html").read_text(encoding="utf-8")
-
-    @app.get("/app.js")
-    def app_js() -> Response:
-        return Response(
-            (UI_DIR / "app.js").read_text(encoding="utf-8"),
-            media_type="application/javascript",
-        )
-
-    @app.get("/styles.css")
-    def styles() -> Response:
-        return Response(
-            (UI_DIR / "styles.css").read_text(encoding="utf-8"), media_type="text/css"
-        )
+    if opened:
+        warm_stem()
 
     @app.get("/api/project")
     def get_project() -> JSONResponse:
@@ -165,34 +124,63 @@ def create_app(target: Path | str, device: str = "cpu") -> FastAPI:
 
     @app.put("/api/project")
     async def put_project(request: Request) -> JSONResponse:
+        """Save the project, scored against the timings it now holds.
+
+        The score is a function of the file, so it is computed on every write
+        rather than kept as a snapshot the file then drifts away from; it
+        costs milliseconds once the stem is in memory. The project comes back
+        so the client can take the fresh scores without touching its history.
+        Everything runs off the event loop, so a save does not stall audio
+        playback or any other request being served concurrently.
+        """
         payload = await request.json()
         project = Project.from_dict(payload)
         state["project"] = project
-        # write_all() already saves project.json as one of its five outputs, so
-        # saving it again first was a pure duplicate write. The disk I/O for all
-        # five files runs off the event loop, so a Save does not stall audio
-        # playback or any other request being served concurrently.
-        await run_in_threadpool(exports.write_all, project, wd())
-        return JSONResponse({"ok": True, "saved": str(project_file())})
 
-    @app.post("/api/rescore")
-    def rescore() -> JSONResponse:
-        project = require_project()
-        samples, act = loaded_stem()
-        card = pipeline.rescore(project, activity=act, samples=samples)
-        project.save(project_file())
-        return JSONResponse(card.to_dict())
+        def write() -> None:
+            try:
+                samples, act = loaded_stem()
+                pipeline.rescore(project, activity=act, samples=samples)
+            except Exception as exc:        # a moved stem must not lose an edit
+                print(f"  not re-scored: {exc}")
+            exports.write_all(project, wd())
 
-    @app.get("/api/audit")
-    def get_audit() -> JSONResponse:
-        if audit_file().exists():
-            return JSONResponse(json.loads(audit_file().read_text(encoding="utf-8")))
-        return JSONResponse({"queue": [], "repairs": [], "never_run": True})
+        await run_in_threadpool(write)
+        return JSONResponse(project.to_dict())
 
-    def saved_audit() -> dict:
-        if audit_file().exists():
-            return json.loads(audit_file().read_text(encoding="utf-8"))
-        return {}
+    @app.post("/api/decisions")
+    async def log_decisions(request: Request) -> JSONResponse:
+        """Append the reviewer's decisions, each with the word's features.
+
+        Never an error to the client: a decision log that could fail a save
+        would be worse than no log. The stem is only decoded if it already is
+        - features that need it are left out otherwise, and the record is
+        written regardless.
+        """
+        try:
+            payload = await request.json()
+        except Exception:
+            return JSONResponse({"ok": False, "written": 0})
+        entries = payload if isinstance(payload, list) else [payload]
+        project = state["project"]
+        if project is None:
+            return JSONResponse({"ok": False, "written": 0})
+        activity = state["stem"][1] if state["stem"] is not None else None
+        audit = project.meta.get("audit")
+        written = 0
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                line, word = int(entry.get("line", -1)), int(entry.get("word", -1))
+            except (TypeError, ValueError):
+                continue
+            record = {k: v for k, v in entry.items() if k != "features"}
+            record["track"] = wd().name
+            record["features"] = decisions.features(project, activity, line, word, audit)
+            if decisions.record(wd(), record):
+                written += 1
+        return JSONResponse({"ok": True, "written": written})
 
     def find_additions(project, act, samples, dismissed) -> list[dict]:
         """Lines that are sung but missing from the lyrics file.
@@ -200,7 +188,7 @@ def create_app(target: Path | str, device: str = "cpu") -> FastAPI:
         The round-trip pass already transcribes the whole stem and keeps what
         no line claimed, so a project aligned since that landed costs nothing
         here. Older projects have only the summary, and the holes get listened
-        to directly - a fraction of the track, once, then cached in audit.json.
+        to directly - a fraction of the track, once, then kept with the project.
         """
         words = None
         saved = roundtrip.RoundTrip.from_dict(project.meta.get("roundtrip"))
@@ -214,53 +202,35 @@ def create_app(target: Path | str, device: str = "cpu") -> FastAPI:
 
     @app.post("/api/audit")
     def run_audit() -> JSONResponse:
-        """Repair the provably-wrong, then hand back what still needs an ear."""
+        """Repair the provably-wrong, then hand back what still needs an ear.
+
+        The audit lands in `project.meta["audit"]`, so the whole project comes
+        back: the repair pass has already edited it.
+        """
         project = require_project()
         stem = Path(project.stem_path or project.audio_path)
         if not stem.exists():
             raise HTTPException(404, "no vocal stem for this project")
 
         samples, act = loaded_stem()
-        result = refine.run(
+        audit = refine.run(
             project, stem, activity=act, samples=samples, device=state["device"]
         )
-        # Dismissals are the user's judgement and outlive a re-run of the audit.
-        previous = saved_audit()
-        dismissed = {
-            a["id"] for a in previous.get("additions", []) if a.get("dismissed")
-        }
-        result["additions"] = find_additions(project, act, samples, dismissed)
-        # write_all() already saves project.json; an explicit save here duplicated it.
+        dismissed = {a["id"] for a in audit["additions"]}
+        audit["additions"] = find_additions(project, act, samples, dismissed)
         exports.write_all(project, wd())
-        audit_file().write_text(json.dumps(result, indent=1), encoding="utf-8")
-        return JSONResponse(result)
+        return JSONResponse(project.to_dict())
 
     @app.post("/api/additions")
-    async def decide_addition(request: Request) -> JSONResponse:
-        """Add a proposed line to the project, or dismiss it for good.
+    async def accept_addition(request: Request) -> JSONResponse:
+        """Add a proposed line to the project.
 
-        Insertion renumbers every line after it, and the review queue, the todo
-        marks and the line proposals are all keyed by line index - so the cached
-        audit is shifted here, in the same breath, rather than left to rot until
-        something reads the wrong lyric.
+        Insertion renumbers every line after it, and everything keyed by line
+        index - the aligners' spans, the round-trip's observations, the audit
+        - moves with it inside Project.insert_line. Dismissing a proposal is
+        only a flag on it, which the client sets and the next save carries.
         """
-        body = await request.json()
-        action = body.get("action")
-        cand = body.get("candidate") or {}
-        audit = saved_audit()
-        additions = audit.get("additions", [])
-
-        if action == "dismiss":
-            for a in additions:
-                if a.get("id") == cand.get("id"):
-                    a["dismissed"] = True
-            audit["additions"] = additions
-            audit_file().write_text(json.dumps(audit, indent=1), encoding="utf-8")
-            return JSONResponse({"ok": True, "audit": audit})
-
-        if action != "accept":
-            raise HTTPException(400, "action must be 'accept' or 'dismiss'")
-
+        cand = (await request.json()).get("candidate") or {}
         project = require_project()
         after = int(cand["after_line"])
         if not (0 <= after < len(project.lines)):
@@ -282,27 +252,14 @@ def create_app(target: Path | str, device: str = "cpu") -> FastAPI:
                 "matched": n,
                 "expected": n,
             }
-
-        def shift(i: int) -> int:
-            return i + 1 if i >= at else i
-
-        for item in audit.get("queue", []):
-            item["line"] = shift(int(item["line"]))
-        audit["line_proposals"] = {
-            str(shift(int(k))): v
-            for k, v in (audit.get("line_proposals") or {}).items()
-        }
-        audit["additions"] = [
-            {**a, "after_line": shift(int(a["after_line"]))}
-            for a in additions
-            if a.get("id") != cand.get("id")
-        ]
+        audit = project.meta.get("audit")
+        if isinstance(audit, dict):
+            audit["additions"] = [
+                a for a in audit.get("additions", []) if a.get("id") != cand.get("id")
+            ]
 
         exports.write_all(project, wd())
-        audit_file().write_text(json.dumps(audit, indent=1), encoding="utf-8")
-        return JSONResponse(
-            {"ok": True, "at": at, "project": project.to_dict(), "audit": audit}
-        )
+        return JSONResponse({"ok": True, "at": at, "project": project.to_dict()})
 
     @app.post("/api/export")
     def export() -> JSONResponse:
@@ -322,18 +279,20 @@ def create_app(target: Path | str, device: str = "cpu") -> FastAPI:
         # weight on the wire. The cache on disk keeps it in case that changes.
         return JSONResponse({k: v for k, v in data.items() if k != "mix_peaks"})
 
+    # FileResponse answers Range requests itself, streaming from disk, which is
+    # what lets the browser seek in the audio.
     @app.get("/media/mix")
-    def media_mix(request: Request) -> Response:
+    def media_mix() -> FileResponse:
         project = require_project()
-        return _ranged(_preview(Path(project.audio_path), wd() / "mix.m4a"), request)
+        return FileResponse(_preview(Path(project.audio_path), wd() / "mix.m4a"))
 
     @app.get("/media/vocals")
-    def media_vocals(request: Request) -> Response:
+    def media_vocals() -> FileResponse:
         project = require_project()
         stem = Path(project.stem_path or project.audio_path)
         if not stem.exists():
             raise HTTPException(404, "no vocal stem for this project")
-        return _ranged(_preview(stem, wd() / "vocals.m4a", stereo=False), request)
+        return FileResponse(_preview(stem, wd() / "vocals.m4a", stereo=False))
 
     # ------------------------------------------------------------ library
 
@@ -439,6 +398,8 @@ def create_app(target: Path | str, device: str = "cpu") -> FastAPI:
         threading.Thread(target=work, daemon=True).start()
         return JSONResponse({"ok": True, "dir": str(target)})
 
+    # The UI itself. Mounted last, so every route above still wins.
+    app.mount("/", StaticFiles(directory=UI_DIR, html=True), name="ui")
     return app
 
 

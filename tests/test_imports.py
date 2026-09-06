@@ -19,8 +19,13 @@ PURE = [
     "song.parse_lyrics",
     "song.project",
     "song.exports",
+    "song.bench",
+    "song.ends",
+    "song.syllables",
+    "song.decisions",
     "song.align.mapping",
     "song.align.gaps",
+    "song.align.repeats",
     "song.video.karaoke",
 ]
 

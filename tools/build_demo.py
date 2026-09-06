@@ -2,7 +2,7 @@
 """Freeze an aligned track into the read-only demo that GitHub Pages serves.
 
 The app is a local server. This writes the same UI out against files instead:
-the project, the analysis payload the server would have sent, the cached audit,
+the project (audit included), the analysis payload the server would have sent,
 and the two audio previews re-encoded down to something reasonable to ship.
 
 Reproducible on purpose - the demo is generated from a real workdir by this
@@ -29,7 +29,17 @@ OUT = ROOT / "docs" / "demo"
 BITRATE = "64k"
 
 
-def encode(src: Path, dst: Path) -> None:
+def encode(src: Path, dst: Path, force: bool = False) -> None:
+    """Re-encode one preview, unless one is already sitting there.
+
+    A UI change is the usual reason to rebuild, and the encoder does not produce
+    the same bytes twice - so re-encoding unchanged audio every time would put a
+    megabyte of meaningless diff in front of a one-line change to app.js. Pass
+    --media to force it when the track itself has actually moved.
+    """
+    if dst.exists() and not force:
+        print(f"  keeping {dst.name} (pass --media to re-encode)")
+        return
     dst.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         ["ffmpeg", "-y", "-loglevel", "error", "-i", str(src),
@@ -38,20 +48,17 @@ def encode(src: Path, dst: Path) -> None:
     )
 
 
-def build(workdir: Path) -> None:
+def build(workdir: Path, media: bool = False) -> None:
     project = workdir / "project.json"
     if not project.exists():
         sys.exit(f"no project.json in {workdir}")
 
     OUT.mkdir(parents=True, exist_ok=True)
+    # The project carries its own audit, so this is the one document.
     shutil.copy(project, OUT / "project.json")
-
-    audit = workdir / "audit.json"
-    (OUT / "audit.json").write_text(
-        audit.read_text(encoding="utf-8") if audit.exists() else
-        json.dumps({"queue": [], "repairs": [], "never_run": True}),
-        encoding="utf-8",
-    )
+    if "audit" not in (json.loads(project.read_text(encoding="utf-8")).get("meta") or {}):
+        print("  note: no audit in this project - run `song audit` first if the "
+              "demo should have a Check timings queue")
 
     # Exactly what /api/analysis sends: the mix peaks are cached on disk but
     # never drawn, and they are half the payload.
@@ -64,7 +71,7 @@ def build(workdir: Path) -> None:
     for name, src in (("mix", workdir / "mix.m4a"), ("vocals", workdir / "vocals.m4a")):
         if not src.exists():
             sys.exit(f"missing {src} - open the track in the app once to cache it")
-        encode(src, OUT / "media" / f"{name}.m4a")
+        encode(src, OUT / "media" / f"{name}.m4a", force=media)
 
     shutil.copy(UI / "app.js", OUT / "app.js")
     shutil.copy(UI / "styles.css", OUT / "styles.css")
@@ -91,4 +98,7 @@ def build(workdir: Path) -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("workdir", help="an aligned track directory")
-    build(Path(ap.parse_args().workdir))
+    ap.add_argument("--media", action="store_true",
+                    help="re-encode the audio previews as well as the app")
+    args = ap.parse_args()
+    build(Path(args.workdir), media=args.media)

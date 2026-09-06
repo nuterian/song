@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .. import syllables
 from ..project import Project
 
 # The frame every coordinate below is expressed in. ffmpeg scales the picture up
@@ -52,6 +53,15 @@ ACCENT = 0xC4490A
 # not a number to grow. The median word here is 582 ms, so a longer drain than
 # this leaves the word before still visibly lit under the word being sung, and
 # two lit words is no lit word.
+# A gap between two words is drawn as a held rest - the fill stops and waits.
+# Below this it is not a rest anybody sang: word ends are measured, and the two
+# aligners disagree about where a word sits by 160 ms at the median on the
+# sample track, so a narrower gap is inside their own error. Drawn as a rest it
+# is a four-frame stall in a moving fill, which reads as a stutter rather than
+# as silence. The project keeps every gap either way; this is only about what
+# gets drawn.
+MIN_REST = 15                # centiseconds
+
 SETTLE_HOLD = 120            # ms the accent holds after the word ends
 SETTLE = 330                 # ...then this long to drain back to ink
 SETTLE_STEPS = 3             # eased, like everything else that moves
@@ -251,24 +261,81 @@ def karaoke_text(line, start_cs: int, state: str = "") -> str:
     end_cs = centis(line.end)
     at = start_cs
     out: list[str] = []
+    ends = _drawn_ends(line, end_cs)
 
     for i, (word, token) in enumerate(zip(line.words, tokens)):
         # Clamp forward only. A project whose word starts ran backwards would
         # otherwise emit a negative \k, which libass reads as an enormous one.
         w_start = min(max(centis(word.start), at), end_cs)
-        w_end = min(max(centis(word.end), w_start), end_cs)
+        w_end = min(max(ends[i], w_start), end_cs)
         if i:
             out.append("{\\k0} ")
         if w_start > at:
             out.append(f"{{\\k{w_start - at}}}")   # the lead-in, or a held rest
+        # The lift and the settle belong to the word - it is the word that
+        # grows and then hands itself back to ink - and the sweep belongs to
+        # the syllables: a held final syllable fills slowly and a run of short
+        # ones fills fast, which is what the singer did and what a karaoke
+        # player shows. The first syllable carries the word's tags; the rest
+        # follow in the same block, because an override lasts until \r.
+        pieces = _syllable_pieces(word, token, w_start, w_end)
+        glyphs, s_start, s_end = pieces[0]
         out.append(
-            f"{{\\r{state}\\kf{w_end - w_start}"
+            f"{{\\r{state}\\kf{s_end - s_start}"
             f"{lift(w_start - start_cs, w_end - start_cs)}"
-            f"{settle(w_end - start_cs)}}}{escape(token)}"
+            f"{settle(w_end - start_cs)}}}{escape(glyphs)}"
         )
+        for glyphs, s_start, s_end in pieces[1:]:
+            out.append(f"{{\\kf{s_end - s_start}}}{escape(glyphs)}")
         at = w_end
 
     return "".join(out)
+
+
+def _syllable_pieces(word, token: str, w_start: int, w_end: int) -> list[tuple[str, int, int]]:
+    """(glyphs, start_cs, end_cs) per syllable, tiling the word exactly.
+
+    The fractions are the word's own (see Word.syllables); quantized to
+    centiseconds here, once, and forced to rise, so two syllables landing on
+    the same centisecond after rounding become one zero-length sweep and a
+    normal one rather than a negative duration. A word with no syllable
+    timing, or whose glyphs do not line up with its syllable letters, is one
+    piece.
+    """
+    parts = [s["text"] for s in word.syllables]
+    if len(parts) < 2 or w_end <= w_start:
+        return [(token, w_start, w_end)]
+    glyphs = syllables.chunks(token, parts)
+    if len(glyphs) != len(parts):
+        return [(token, w_start, w_end)]
+    span = w_end - w_start
+    starts = [w_start + int(round(float(s["at"]) * span)) for s in word.syllables]
+    starts[0] = w_start
+    for k in range(1, len(starts)):
+        starts[k] = min(max(starts[k], starts[k - 1]), w_end)
+    ends = starts[1:] + [w_end]
+    return list(zip(glyphs, starts, ends))
+
+
+def _drawn_ends(line, end_cs: int) -> list[int]:
+    """Word ends in centiseconds, with the gaps too small to be rests closed up.
+
+    A word that stops 60 ms before the next one starts has not been followed by
+    silence; the aligner was simply cautious about its tail. Sweeping through
+    such a gap is both what the audio says and what looks right, so the word
+    before it is drawn as running on to its neighbour.
+
+    Gaps at or above MIN_REST are left alone and become held rests - see the
+    `\\k` in karaoke_text, which is the whole reason word ends are measured
+    rather than derived.
+    """
+    words = line.words
+    ends = [min(centis(w.end), end_cs) for w in words]
+    for i in range(len(words) - 1):
+        nxt = min(centis(words[i + 1].start), end_cs)
+        if 0 < nxt - ends[i] < MIN_REST:
+            ends[i] = nxt
+    return ends
 
 
 def eased(begin: int, until: int, steps: int, stop) -> str:

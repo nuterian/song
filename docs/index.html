@@ -380,7 +380,9 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
   <div class="copy rise">
     <p class="kicker">The whole track</p>
     <h2>One waveform, every line.</h2>
-    <p class="say">Colour means <b>act here</b> and nothing else.</p>
+    <p class="say">Colour means <b>act here</b> and nothing else. Every edit
+      writes itself back and is <b>re-scored on the way</b>, so a flag never
+      describes a timing you have already fixed.</p>
   </div>
   <div class="wide">
     <figure class="rise">
@@ -411,14 +413,14 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
         <pre><code>python -m song                          # open the app
 python -m song track.wav lyrics.txt     # align, then open it
 python -m song audit workdir/my-track   # repair + list what needs an ear
-python -m song score workdir/my-track   # re-run the benchmark on your edits
+python -m song score workdir/my-track   # re-run the benchmark on edits made elsewhere
 python -m song video workdir/my-track   # render karaoke.mp4</code></pre>
         <p>Everything lands in <code>workdir/&lt;track&gt;/</code>:
         <code>lyrics.lrc</code>, <code>lyrics.word.lrc</code>,
         <code>lyrics.srt</code>, <code>.vtt</code>, and
-        <code>project.json</code> — word timings, per-line scores and the
-        scorecard. <code>song video</code> adds <code>lyrics.ass</code> and
-        <code>karaoke.mp4</code>.</p>
+        <code>project.json</code> — word timings, per-line scores, the
+        scorecard and the audit. <code>song video</code> adds
+        <code>lyrics.ass</code> and <code>karaoke.mp4</code>.</p>
         <p>Lyrics input is plain text: one line per lyric line, a blank line
         between sections, a header naming each. Demucs on Apple MPS is broken
         under torch 2.5, so it is CPU throughout.</p>

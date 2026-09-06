@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -130,9 +129,8 @@ def cmd_audit(args) -> int:
         device=args.device, progress=None if args.quiet else lambda m: print(m),
     )
 
-    # write_all() already saves project.json; an explicit save here duplicated it.
+    # The audit is part of the project now, so this is the only write.
     exports.write_all(project, workdir)
-    (workdir / "audit.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
 
     print(f"\n  {result['n_verified']}/{result['n_words']} words agreed on by both "
           f"aligners - nothing to check there")
@@ -149,6 +147,24 @@ def cmd_audit(args) -> int:
     if len(result["queue"]) > args.limit:
         print(f"     ... and {len(result['queue']) - args.limit} more")
     print(f"\n  open the review UI and click \"Check timings\" to work through them\n")
+    return 0
+
+
+def cmd_bench(args) -> int:
+    from . import bench
+
+    workdir = Path(args.workdir)
+    project = Project.load(workdir / "project.json")
+    gold = Path(args.gold) if args.gold else bench.default_gold(project)
+    if not gold.exists():
+        print(f"  no gold file at {gold}", file=sys.stderr)
+        print("  hand-time one in the UI and save it there, or pass --gold", file=sys.stderr)
+        return 1
+    result = bench.compare(Project.load(gold), project)
+    if args.json:
+        print(bench.to_json(result))
+    else:
+        print(bench.format_report(result, gold_name=str(gold), candidate_name=str(workdir)))
     return 0
 
 
@@ -251,6 +267,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_video.set_defaults(func=cmd_video)
 
+    p_bench = sub.add_parser(
+        "bench", help="word start/end error against a hand-timed gold project"
+    )
+    p_bench.add_argument("workdir")
+    p_bench.add_argument(
+        "--gold", metavar="FILE",
+        help="gold project.json (default: examples/gold/<track-slug>.project.json)",
+    )
+    p_bench.add_argument("--json", action="store_true", help="machine-readable output")
+    p_bench.set_defaults(func=cmd_bench)
+
     p_export = sub.add_parser("export", help="rewrite lrc/srt/vtt from project.json")
     p_export.add_argument("workdir")
     p_export.set_defaults(func=cmd_export)
@@ -273,6 +300,7 @@ def main(argv: list[str] | None = None) -> int:
         "export",
         "audit",
         "video",
+        "bench",
     }:
         argv.insert(0, "ui")
 

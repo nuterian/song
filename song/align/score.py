@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .whisper import LineTiming
+from . import roundtrip
 from ..project import Project
 from ..vad import VocalActivity
 
@@ -96,25 +96,73 @@ def _round(x: float) -> float | None:
     return None if x != x else round(float(x), 3)
 
 
-def score_project(
-    project: Project,
+def evidence(
     activity: VocalActivity,
-    reference: dict[int, LineTiming] | None = None,
-    reference_name: str = "ctc",
-    deltas: dict[int, tuple[float, float]] | None = None,
-    rt=None,
-) -> Scorecard:
-    """Score every line in place and return the track scorecard.
+    start: float,
+    end: float,
+    n_words: int,
+    prob: float,
+    rt: "roundtrip.RoundTrip | None" = None,
+    line_index: int | None = None,
+) -> tuple[dict[str, float], dict[str, float]]:
+    """What the audio and the blind transcription say about one placement.
 
-    `rt` is an optional `roundtrip.RoundTrip` - the blind transcription used to
-    corroborate placements independently of anything that was told the lyrics.
+    Everything except cross-aligner agreement, which is symmetric: it says a
+    line is uncertain but cannot say which of two candidates is right. Used
+    by the merge to choose between candidates and by the score to grade the
+    winner, so the two can never drift apart on what "supported" means.
 
-    `deltas` overrides the measured start/end disagreement per line. The
-    pipeline passes the disagreement between the two *pristine* aligner outputs
-    so that merging - which may adopt the reference's own timing for a line -
-    cannot silently report perfect agreement with itself.
+    Returns the terms ramped to 0..1 - `roundtrip` only when the transcription
+    has an opinion - and the raw numbers behind them.
     """
-    reference = reference or {}
+    duration = max(end - start, 1e-6)
+    coverage = activity.coverage(start, end)
+    onset_distance = activity.nearest_onset(start)
+    density = n_words / duration
+    if density < 1.0:
+        density_term = _ramp(density, good=1.0, bad=0.25)
+    elif density > 5.5:
+        density_term = _ramp(density, good=5.5, bad=11.0)
+    else:
+        density_term = 1.0
+    parts = {
+        "coverage": _ramp(coverage, good=0.65, bad=0.15),
+        "onset": _ramp(onset_distance, good=0.12, bad=0.7),
+        "density": density_term,
+        "confidence": _ramp(prob, good=0.6, bad=0.05),
+    }
+    support = rt.support(line_index, start, end) if rt and line_index is not None else None
+    if support is not None:
+        parts["roundtrip"] = support
+    raw = {
+        "coverage": coverage,
+        "onset_distance": onset_distance,
+        "density": density,
+        "prob": prob,
+    }
+    return parts, raw
+
+
+def score_project(project: Project, activity: VocalActivity) -> Scorecard:
+    """Score every line in place, set the project's scorecard, and return it.
+
+    The evidence is the project's own: `meta["aligners"]` holds both pristine
+    aligners' spans and `meta["roundtrip"]` the blind transcription's, so the
+    pipeline's score and `song score` after an edit are the same computation
+    on the same file. Agreement is always the disagreement between the two
+    *pristine* outputs - never between the merge and one of its own inputs,
+    which would report perfect agreement with itself.
+
+    A line somebody has placed by hand has no aligner to disagree with: the
+    human is the reference there, and `song bench` against a gold file is the
+    thing that measures them. The agreement term drops out and the rest are
+    reweighted, rather than flagging a fix because the model it corrected
+    still says otherwise.
+    """
+    stored = project.meta.get("aligners") or {}
+    ctc = stored.get("ctc") or {}
+    whisper = stored.get("whisper") or {}
+    rt = roundtrip.RoundTrip.from_dict(project.meta.get("roundtrip"))
     card = Scorecard(n_lines=len(project.lines))
 
     start_deltas: list[float] = []
@@ -131,71 +179,52 @@ def score_project(
 
         card.n_aligned += 1
         issues: list[str] = []
-        parts: dict[str, float] = {}
         available = dict(WEIGHTS)
 
-        # 1. cross-aligner agreement
-        ref = reference.get(line.index)
+        # 1. cross-aligner agreement: both pristine spans where both exist,
+        #    else the one aligner against the line as it stands. The track's
+        #    disagreement figures are the aligners' benchmark and keep every
+        #    line; only the hand-placed line's own score leaves the term out.
+        key = str(line.index)
+        ref, other = ctc.get(key), whisper.get(key)
         d_start = d_end = None
-        if deltas is not None and line.index in deltas:
-            d_start, d_end = deltas[line.index]
-        elif ref is not None and ref.end > ref.start:
-            d_start = abs(ref.start - line.start)
-            d_end = abs(ref.end - line.end)
-
-        if d_start is not None:
+        if ref is not None and (other is not None or line.source != "manual"):
+            against = other if other is not None else (line.start, line.end)
+            d_start, d_end = abs(ref[0] - against[0]), abs(ref[1] - against[1])
             start_deltas.append(d_start)
             end_deltas.append(d_end)
-            parts["agreement"] = _ramp(d_start, good=0.15, bad=1.2)
-            if d_start > 0.75:
-                issues.append(f"{reference_name} disagrees by {d_start:.2f}s at start")
-        else:
+        if d_start is None or line.source == "manual":
             available.pop("agreement")
+        elif d_start > 0.75:
+            issues.append(f"ctc disagrees by {d_start:.2f}s at start")
 
-        # 2. blind-transcription corroboration
-        support = rt.support(line.index, line.start, line.end) if rt else None
-        if support is not None:
-            parts["roundtrip"] = support
+        # 2-6. everything the audio and the blind transcription can say.
+        n_words = len(line.words) or len(line.text.split())
+        prob = float(np.mean([w.prob for w in line.words])) if line.words else 0.0
+        parts, raw = evidence(activity, line.start, line.end, n_words, prob, rt, line.index)
+        if "agreement" in available:
+            parts["agreement"] = _ramp(d_start, good=0.15, bad=1.2)
+        if "roundtrip" in parts:
             card.n_corroborated += 1
-            if support < 0.45:
+            if parts["roundtrip"] < 0.45:
                 heard = rt.per_line[line.index]
-                issues.append(
-                    f"heard at {heard.start:.2f}-{heard.end:.2f}s, not here"
-                )
+                issues.append(f"heard at {heard.start:.2f}-{heard.end:.2f}s, not here")
         else:
             available.pop("roundtrip")
 
-        # 3. vocal coverage
-        coverage = activity.coverage(line.start, line.end)
+        coverage = raw["coverage"]
         coverages.append(coverage)
-        parts["coverage"] = _ramp(coverage, good=0.65, bad=0.15)
         if coverage < 0.35:
             issues.append(f"only {coverage:.0%} vocal in span")
         gap = activity.longest_gap(line.start, line.end)
         if gap > 1.5:
             issues.append(f"{gap:.1f}s silence inside line")
-
-        # 4. onset proximity
-        onset_distance = activity.nearest_onset(line.start)
-        parts["onset"] = _ramp(onset_distance, good=0.12, bad=0.7)
-        if onset_distance > 0.6:
-            issues.append(f"start {onset_distance:.2f}s from nearest vocal onset")
-
-        # 5. word density
-        n_words = len(line.words) or len(line.text.split())
-        density = n_words / max(line.duration, 1e-6)
-        if density < 1.0:
-            parts["density"] = _ramp(density, good=1.0, bad=0.25)
-            issues.append(f"slow: {density:.1f} words/s")
-        elif density > 5.5:
-            parts["density"] = _ramp(density, good=5.5, bad=11.0)
-            issues.append(f"fast: {density:.1f} words/s")
-        else:
-            parts["density"] = 1.0
-
-        # 6. aligner confidence
-        prob = float(np.mean([w.prob for w in line.words])) if line.words else 0.0
-        parts["confidence"] = _ramp(prob, good=0.6, bad=0.05)
+        if raw["onset_distance"] > 0.6:
+            issues.append(f"start {raw['onset_distance']:.2f}s from nearest vocal onset")
+        if raw["density"] < 1.0:
+            issues.append(f"slow: {raw['density']:.1f} words/s")
+        elif raw["density"] > 5.5:
+            issues.append(f"fast: {raw['density']:.1f} words/s")
 
         # ordering sanity
         if line.start < previous_end - 0.05:
@@ -211,8 +240,8 @@ def score_project(
             "total": round(total, 1),
             "components": {k: round(parts[k], 3) for k in available},
             "coverage": round(coverage, 3),
-            "onset_distance": round(onset_distance, 3),
-            "density": round(density, 2),
+            "onset_distance": round(raw["onset_distance"], 3),
+            "density": round(raw["density"], 2),
             "prob": round(prob, 3),
             "delta_start": _round(d_start) if d_start is not None else None,
             "delta_end": _round(d_end) if d_end is not None else None,
@@ -239,6 +268,7 @@ def score_project(
 
     card.flagged = [ln.index for ln in project.lines if ln.flagged]
     card.n_flagged = len(card.flagged)
+    project.scorecard = card.to_dict()
     return card
 
 

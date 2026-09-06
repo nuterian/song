@@ -64,6 +64,13 @@ def build(
         "mix_peaks": _peaks(mix, TARGET_SR),
         "vocal_peaks": _peaks(stem, TARGET_SR),
         "vocal_spans": _intervals(activity.active, activity.hop),
+        # Where a voice is sounding by Silero's account, when it is installed:
+        # tighter than the energy gate on reverb and pads, and drawn nowhere
+        # yet. Kept in the cache so the UI can offer it without a recompute.
+        "voiced_spans": (
+            [] if activity.voiced is None
+            else _intervals(activity.voiced >= vad.VOICED, activity.hop)
+        ),
         "onsets": np.round(activity.onsets, 3).tolist(),
         "threshold_db": round(activity.threshold_db, 2),
     }

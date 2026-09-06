@@ -28,7 +28,6 @@
       <button id="btn-redo" class="ghost" disabled aria-label="Redo">↷</button>
     </span>
     <button id="btn-help" class="ghost" title="Shortcuts">?</button>
-    <button id="btn-rescore" title="Re-run the benchmark against the current timings">Re-score</button>
     <button id="btn-export">Export</button>
     <button id="btn-save" class="primary">Save<span class="k">⌘S</span></button>
   </div>
@@ -109,6 +108,20 @@
     <span id="place-idx" class="place-idx">—</span>
     <span id="place-text" class="place-text">select a line</span>
     <span id="place-time" class="place-time"></span>
+    <!-- The selected word's span, as numbers you can grab. Same two bounds as
+         the handles on the waveform, same focus, same keys. -->
+    <span id="wordbar" class="wordbar" hidden>
+      <span id="wb-text" class="wb-word"></span>
+      <button id="wb-left" class="wb-b" data-side="left"
+              title="The word's left bound — click to aim ← → at it, drag to move it">
+        <i>[</i><span></span>
+      </button>
+      <span id="wb-dur" class="wb-dur"></span>
+      <button id="wb-right" class="wb-b" data-side="right"
+              title="The word's right bound — click to aim ← → at it, drag to move it">
+        <span></span><i>]</i>
+      </button>
+    </span>
     <span id="hint" class="hint"></span>
     <button id="btn-place" class="place-go" disabled>
       Place at playhead<span class="k">T</span>
@@ -280,7 +293,7 @@
           <span class="rv-key"><i class="sw-now"></i>Now</span>
           <span class="rv-key"><i class="sw-new"></i>Suggested</span>
           <span class="rv-key" id="rv-key-adj" hidden><i class="sw-adj"></i>Adjusted</span>
-          <span id="rv-strip-hint" class="rv-strip-hint">drag it anywhere · ← → to nudge</span>
+          <span id="rv-strip-hint" class="rv-strip-hint">drag either bracket · <kbd>,</kbd> <kbd>.</kbd> pick one · ← → nudge</span>
           <button id="rv-adj-reset" class="ghost" hidden>reset</button>
         </div>
       </div>
@@ -377,8 +390,13 @@
           <dt><kbd>↑</kbd><kbd>↓</kbd></dt><dd>previous / next line</dd>
           <dt><kbd>tab</kbd></dt><dd>next word, rolling into the adjacent line</dd>
           <dt><kbd>shift</kbd><kbd>tab</kbd></dt><dd>previous word</dd>
+          <dt><kbd>alt</kbd><kbd>←</kbd><kbd>→</kbd></dt>
+          <dd>previous / next word — the same walk, on the hand already nudging</dd>
+          <dt><kbd>,</kbd> <kbd>.</kbd></dt>
+          <dd>aim at the word's left / right bound — the one <kbd>←</kbd><kbd>→</kbd> will move</dd>
           <dt><kbd>esc</kbd></dt><dd>deselect the word, back to line editing</dd>
-          <dt class="mouse">click a word</dt><dd>select it, focus the timeline, seek just before it</dd>
+          <dt class="mouse">click a word</dt><dd>anywhere it is drawn — the lyrics, a word cell —
+              selects it, focuses the timeline and seeks just before it</dd>
         </dl>
       </section>
 
@@ -395,13 +413,30 @@
       </section>
 
       <section>
-        <h3>Word timing</h3>
+        <h3>Word bounds</h3>
         <dl>
-          <dt><kbd>←</kbd><kbd>→</kbd></dt><dd>nudge the selected word ±50 ms (<kbd>shift</kbd> ±10 ms)</dd>
+          <dt><kbd>←</kbd><kbd>→</kbd></dt>
+          <dd>move the focused bound ±50 ms — coarse</dd>
+          <dt><kbd>shift</kbd><kbd>←</kbd><kbd>→</kbd></dt>
+          <dd>±10 ms — fine</dd>
+          <dt><kbd>S</kbd> <kbd>E</kbd></dt>
+          <dd>put the left / right bound at the playhead</dd>
           <dt><kbd>W</kbd></dt><dd>tap-along: stamp the word's start, advance a word</dd>
           <dt><kbd>R</kbd></dt><dd>redistribute the line's words evenly</dd>
-          <dt class="mouse">drag a divider</dt><dd>in the word cells along the bottom of the waveform:
-              moves a boundary, snapping to a vocal onset (<kbd>alt</kbd> free)</dd>
+          <dt class="mouse">drag a handle</dt>
+          <dd>the two bracketed bars around the selected word, running the full
+              height of the waveform. Pull one inward and the word gets shorter,
+              leaving a rest; push it outward and it shoves the neighbour along.
+              Snaps to a vocal onset, and shut against a neighbour it comes near
+              (<kbd>alt</kbd> drags free)</dd>
+          <dt class="mouse"><kbd>shift</kbd>-drag</dt>
+          <dd>takes the neighbouring word with it, so a boundary is re-cut
+              without changing the rest either side of it</dd>
+          <dt class="mouse">drag a word edge</dt><dd>in the cells along the bottom: the
+              same edit on any edge on screen, without selecting first</dd>
+          <dt class="mouse">drag a time in the deck</dt>
+          <dd>scrubs that bound 4 ms a pixel (<kbd>shift</kbd> 1 ms) — the fine
+              control a wide zoom cannot give you</dd>
         </dl>
       </section>
 
@@ -410,15 +445,22 @@
         <dl>
           <dt><kbd>⌘Z</kbd></dt><dd>undo — a drag is one step, a burst of nudges folds into one</dd>
           <dt><kbd>⇧⌘Z</kbd></dt><dd>redo</dd>
-          <dt><kbd>⌘S</kbd></dt><dd>save — rewrites every export format</dd>
+          <dt><kbd>⌘S</kbd></dt><dd>save now — edits already write themselves back a
+              moment after you stop</dd>
         </dl>
       </section>
     </div>
 
     <p class="help-note">
-      Only word <em>starts</em> are editable: a word ends where the next begins, so
-      a line of N words has N−1 internal boundaries and gaps are impossible. Word 0's
-      start is the line start.
+      A word ends where the singer stops, not where the next word starts — so a
+      line can hold a rest in the middle of it, and both bounds of a word are
+      real, separate numbers. Words can never overlap: a bound pushed into its
+      neighbour shoves that neighbour along rather than crossing it. The first
+      word's left bound is the line start and the last word's right bound is the
+      line end, which is why dragging either also moves the line's own edge.
+      <em>lyrics.word.lrc</em> carries one timestamp per word and cannot encode a
+      rest — it is the one export that rounds them off; the karaoke video holds
+      them.
     </p>
   </div>
 </dialog>

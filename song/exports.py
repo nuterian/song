@@ -59,9 +59,10 @@ def write_enhanced_lrc(
 ) -> Path:
     """Word-level LRC: [line]<word><word>... - what karaoke players highlight.
 
-    Only word starts are written; a word's end is the next word's start and the
-    last word's end is the line end. That is exactly the model the review UI
-    edits under, so the two cannot disagree.
+    One timestamp per word is all the format has, so this is the one export
+    that cannot carry a rest: a player holds each word lit until the next one
+    starts, whether or not the singer was still singing. The project keeps the
+    real ends and the karaoke video uses them; only this file rounds them off.
     """
     out = []
     if title:

@@ -1,0 +1,1629 @@
+{
+  "version": 1,
+  "audio_path": "examples/Gravity in Motion.wav",
+  "lyrics_path": "examples/lyrics.txt",
+  "duration": 285.8,
+  "workdir": "workdir/gravity-in-motion-rests",
+  "stem_path": "workdir/gravity-in-motion-rests/vocals.wav",
+  "sections": [
+    {
+      "index": 0,
+      "name": "Verse 1",
+      "note": "8 bars, pulsing bass + filtered synth pad",
+      "raw": "Verse 1 (8 bars, pulsing bass + filtered synth pad)",
+      "line_indices": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "index": 1,
+      "name": "Pre-Chorus",
+      "note": "4 bars, hi-hat lift + airy vocal",
+      "raw": "Pre-Chorus (4 bars, hi-hat lift + airy vocal)",
+      "line_indices": [
+        4,
+        5
+      ]
+    },
+    {
+      "index": 2,
+      "name": "Chorus",
+      "note": "8 bars, full drop + lead synth",
+      "raw": "Chorus (8 bars, full drop + lead synth)",
+      "line_indices": [
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "index": 3,
+      "name": "Verse 2",
+      "note": "8 bars, low arps + tight kick groove",
+      "raw": "Verse 2 (8 bars, low arps + tight kick groove)",
+      "line_indices": [
+        10,
+        11,
+        12,
+        13
+      ]
+    },
+    {
+      "index": 4,
+      "name": "Pre-Chorus",
+      "note": "4 bars, filter sweep + vocal stack build",
+      "raw": "Pre-Chorus (4 bars, filter sweep + vocal stack build)",
+      "line_indices": [
+        14,
+        15
+      ]
+    },
+    {
+      "index": 5,
+      "name": "Chorus",
+      "note": "8 bars, sidechain pads + deep female lead",
+      "raw": "Chorus (8 bars, sidechain pads + deep female lead)",
+      "line_indices": [
+        16,
+        17,
+        18,
+        19
+      ]
+    },
+    {
+      "index": 6,
+      "name": "Bridge",
+      "note": "8 bars, half-time drop + reverb tail",
+      "raw": "Bridge (8 bars, half-time drop + reverb tail)",
+      "line_indices": [
+        20,
+        21,
+        22,
+        23
+      ]
+    },
+    {
+      "index": 7,
+      "name": "Final Chorus",
+      "note": "16 bars, layered harmonies + bright lead",
+      "raw": "Final Chorus (16 bars, layered harmonies + bright lead)",
+      "line_indices": [
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "index": 8,
+      "name": "Outro",
+      "note": "4 bars, delayed vocal chop + fade",
+      "raw": "Outro (4 bars, delayed vocal chop + fade)",
+      "line_indices": [
+        32
+      ]
+    }
+  ],
+  "lines": [
+    {
+      "index": 0,
+      "section": 0,
+      "text": "Light breaks through the skyline haze,",
+      "start": 34.5,
+      "end": 38.2,
+      "words": [
+        {
+          "text": "Light",
+          "start": 34.5,
+          "end": 35.08,
+          "prob": 1.0
+        },
+        {
+          "text": "breaks",
+          "start": 35.19,
+          "end": 35.58,
+          "prob": 1.0
+        },
+        {
+          "text": "through",
+          "start": 35.6,
+          "end": 36.17,
+          "prob": 1.0
+        },
+        {
+          "text": "the",
+          "start": 36.18,
+          "end": 36.32,
+          "prob": 1.0
+        },
+        {
+          "text": "skyline",
+          "start": 36.33,
+          "end": 37.3,
+          "prob": 1.0
+        },
+        {
+          "text": "haze,",
+          "start": 37.36,
+          "end": 38.2,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 1,
+      "section": 0,
+      "text": "Feet find rhythm in endless maze,",
+      "start": 38.53,
+      "end": 42.25,
+      "words": [
+        {
+          "text": "Feet",
+          "start": 38.53,
+          "end": 38.95,
+          "prob": 1.0
+        },
+        {
+          "text": "find",
+          "start": 39.05,
+          "end": 39.3,
+          "prob": 1.0
+        },
+        {
+          "text": "rhythm",
+          "start": 39.3,
+          "end": 39.85,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 39.85,
+          "end": 40.5,
+          "prob": 1.0
+        },
+        {
+          "text": "endless",
+          "start": 40.5,
+          "end": 41.0,
+          "prob": 1.0
+        },
+        {
+          "text": "maze,",
+          "start": 41.15,
+          "end": 42.25,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 2,
+      "section": 0,
+      "text": "Velvet air and a spark inside,",
+      "start": 42.42,
+      "end": 45.55,
+      "words": [
+        {
+          "text": "Velvet",
+          "start": 42.42,
+          "end": 43.2,
+          "prob": 1.0
+        },
+        {
+          "text": "air",
+          "start": 43.22,
+          "end": 43.62,
+          "prob": 1.0
+        },
+        {
+          "text": "and",
+          "start": 43.64,
+          "end": 43.86,
+          "prob": 1.0
+        },
+        {
+          "text": "a",
+          "start": 43.9,
+          "end": 44.0,
+          "prob": 1.0
+        },
+        {
+          "text": "spark",
+          "start": 44.02,
+          "end": 44.5,
+          "prob": 1.0
+        },
+        {
+          "text": "inside",
+          "start": 44.55,
+          "end": 45.55,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 3,
+      "section": 0,
+      "text": "Pulling me where the beats collide.",
+      "start": 45.98,
+      "end": 49.62,
+      "words": [
+        {
+          "text": "Pulling",
+          "start": 45.98,
+          "end": 46.46,
+          "prob": 1.0
+        },
+        {
+          "text": "me",
+          "start": 46.48,
+          "end": 46.75,
+          "prob": 1.0
+        },
+        {
+          "text": "where",
+          "start": 46.76,
+          "end": 47.44,
+          "prob": 1.0
+        },
+        {
+          "text": "the",
+          "start": 47.47,
+          "end": 47.6,
+          "prob": 1.0
+        },
+        {
+          "text": "beats",
+          "start": 47.7,
+          "end": 48.34,
+          "prob": 1.0
+        },
+        {
+          "text": "collide.",
+          "start": 48.4,
+          "end": 49.62,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 4,
+      "section": 1,
+      "text": "Every breath becomes devotion,",
+      "start": 51.05,
+      "end": 54.48,
+      "words": [
+        {
+          "text": "Every",
+          "start": 51.05,
+          "end": 51.5,
+          "prob": 1.0
+        },
+        {
+          "text": "breath",
+          "start": 51.56,
+          "end": 52.28,
+          "prob": 1.0
+        },
+        {
+          "text": "becomes",
+          "start": 52.3,
+          "end": 53.2,
+          "prob": 1.0
+        },
+        {
+          "text": "devotion,",
+          "start": 53.25,
+          "end": 54.48,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 5,
+      "section": 1,
+      "text": "Caught within this wild emotion.",
+      "start": 58.62,
+      "end": 62.25,
+      "words": [
+        {
+          "text": "Caught",
+          "start": 58.62,
+          "end": 59.15,
+          "prob": 1.0
+        },
+        {
+          "text": "within",
+          "start": 59.25,
+          "end": 59.65,
+          "prob": 1.0
+        },
+        {
+          "text": "this",
+          "start": 59.68,
+          "end": 60.08,
+          "prob": 1.0
+        },
+        {
+          "text": "wild",
+          "start": 60.2,
+          "end": 60.92,
+          "prob": 1.0
+        },
+        {
+          "text": "emotion.",
+          "start": 60.95,
+          "end": 62.25,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 6,
+      "section": 2,
+      "text": "You're my gravity in motion,",
+      "start": 64.22,
+      "end": 67.95,
+      "words": [
+        {
+          "text": "You're",
+          "start": 64.22,
+          "end": 64.52,
+          "prob": 1.0
+        },
+        {
+          "text": "my",
+          "start": 64.55,
+          "end": 64.92,
+          "prob": 1.0
+        },
+        {
+          "text": "gravity",
+          "start": 64.98,
+          "end": 65.98,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 66.0,
+          "end": 66.74,
+          "prob": 1.0
+        },
+        {
+          "text": "motion,",
+          "start": 66.76,
+          "end": 67.95,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 7,
+      "section": 2,
+      "text": "Spinning worlds in slow explosion,",
+      "start": 67.97,
+      "end": 71.75,
+      "words": [
+        {
+          "text": "Spinning",
+          "start": 67.97,
+          "end": 68.8,
+          "prob": 1.0
+        },
+        {
+          "text": "worlds",
+          "start": 68.82,
+          "end": 69.32,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 69.35,
+          "end": 69.65,
+          "prob": 1.0
+        },
+        {
+          "text": "slow",
+          "start": 69.66,
+          "end": 70.5,
+          "prob": 1.0
+        },
+        {
+          "text": "explosion,",
+          "start": 70.55,
+          "end": 71.75,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 8,
+      "section": 2,
+      "text": "Every pulse is pure emotion,",
+      "start": 71.93,
+      "end": 75.75,
+      "words": [
+        {
+          "text": "Every",
+          "start": 71.93,
+          "end": 72.5,
+          "prob": 1.0
+        },
+        {
+          "text": "pulse",
+          "start": 72.62,
+          "end": 73.15,
+          "prob": 1.0
+        },
+        {
+          "text": "is",
+          "start": 73.18,
+          "end": 73.47,
+          "prob": 1.0
+        },
+        {
+          "text": "pure",
+          "start": 73.6,
+          "end": 74.26,
+          "prob": 1.0
+        },
+        {
+          "text": "emotion,",
+          "start": 74.28,
+          "end": 75.75,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 9,
+      "section": 2,
+      "text": "You're my gravity in motion.",
+      "start": 75.78,
+      "end": 80.58,
+      "words": [
+        {
+          "text": "You're",
+          "start": 75.78,
+          "end": 76.05,
+          "prob": 1.0
+        },
+        {
+          "text": "my",
+          "start": 76.07,
+          "end": 76.45,
+          "prob": 1.0
+        },
+        {
+          "text": "gravity",
+          "start": 76.53,
+          "end": 78.2,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 79.12,
+          "end": 79.6,
+          "prob": 1.0
+        },
+        {
+          "text": "motion.",
+          "start": 79.62,
+          "end": 80.58,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 10,
+      "section": 3,
+      "text": "Silver lights trace across the floor,",
+      "start": 126.36,
+      "end": 130.05,
+      "words": [
+        {
+          "text": "Silver",
+          "start": 126.36,
+          "end": 127.52,
+          "prob": 1.0
+        },
+        {
+          "text": "lights",
+          "start": 127.53,
+          "end": 128.02,
+          "prob": 1.0
+        },
+        {
+          "text": "trace",
+          "start": 128.08,
+          "end": 128.44,
+          "prob": 1.0
+        },
+        {
+          "text": "across",
+          "start": 128.48,
+          "end": 129.05,
+          "prob": 1.0
+        },
+        {
+          "text": "the",
+          "start": 129.1,
+          "end": 129.3,
+          "prob": 1.0
+        },
+        {
+          "text": "floor,",
+          "start": 129.36,
+          "end": 130.05,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 11,
+      "section": 3,
+      "text": "Shadow dancers want something more,",
+      "start": 130.6,
+      "end": 133.9,
+      "words": [
+        {
+          "text": "Shadow",
+          "start": 130.6,
+          "end": 131.4,
+          "prob": 1.0
+        },
+        {
+          "text": "dancers",
+          "start": 131.42,
+          "end": 131.92,
+          "prob": 1.0
+        },
+        {
+          "text": "want",
+          "start": 131.95,
+          "end": 132.33,
+          "prob": 1.0
+        },
+        {
+          "text": "something",
+          "start": 132.35,
+          "end": 133.4,
+          "prob": 1.0
+        },
+        {
+          "text": "more,",
+          "start": 133.42,
+          "end": 133.9,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 12,
+      "section": 3,
+      "text": "Every glance feels electric, raw,",
+      "start": 134.55,
+      "end": 137.58,
+      "words": [
+        {
+          "text": "Every",
+          "start": 134.55,
+          "end": 135.22,
+          "prob": 1.0
+        },
+        {
+          "text": "glance",
+          "start": 135.28,
+          "end": 135.76,
+          "prob": 1.0
+        },
+        {
+          "text": "feels",
+          "start": 135.78,
+          "end": 136.08,
+          "prob": 1.0
+        },
+        {
+          "text": "electric",
+          "start": 136.1,
+          "end": 137.08,
+          "prob": 1.0
+        },
+        {
+          "text": "raw",
+          "start": 137.1,
+          "end": 137.58,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 13,
+      "section": 3,
+      "text": "Lost and found in the sound we draw.",
+      "start": 138.12,
+      "end": 141.5,
+      "words": [
+        {
+          "text": "Lost",
+          "start": 138.12,
+          "end": 138.6,
+          "prob": 1.0
+        },
+        {
+          "text": "and",
+          "start": 138.65,
+          "end": 138.88,
+          "prob": 1.0
+        },
+        {
+          "text": "found",
+          "start": 138.92,
+          "end": 139.42,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 139.43,
+          "end": 139.6,
+          "prob": 1.0
+        },
+        {
+          "text": "the",
+          "start": 139.62,
+          "end": 139.78,
+          "prob": 1.0
+        },
+        {
+          "text": "sound",
+          "start": 139.82,
+          "end": 140.38,
+          "prob": 1.0
+        },
+        {
+          "text": "we",
+          "start": 140.4,
+          "end": 140.7,
+          "prob": 1.0
+        },
+        {
+          "text": "draw.",
+          "start": 140.74,
+          "end": 141.5,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 14,
+      "section": 4,
+      "text": "Bodies close, the night's devotion,",
+      "start": 143.19,
+      "end": 146.86,
+      "words": [
+        {
+          "text": "Bodies",
+          "start": 143.19,
+          "end": 143.66,
+          "prob": 1.0
+        },
+        {
+          "text": "close",
+          "start": 143.7,
+          "end": 144.36,
+          "prob": 1.0
+        },
+        {
+          "text": "the",
+          "start": 144.38,
+          "end": 144.62,
+          "prob": 1.0
+        },
+        {
+          "text": "night's",
+          "start": 144.65,
+          "end": 145.4,
+          "prob": 1.0
+        },
+        {
+          "text": "devotion",
+          "start": 145.41,
+          "end": 146.86,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 15,
+      "section": 4,
+      "text": "We dissolve in pure emotion.",
+      "start": 150.75,
+      "end": 154.62,
+      "words": [
+        {
+          "text": "We",
+          "start": 150.75,
+          "end": 151.1,
+          "prob": 1.0
+        },
+        {
+          "text": "dissolve",
+          "start": 151.15,
+          "end": 152.02,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 152.08,
+          "end": 152.24,
+          "prob": 1.0
+        },
+        {
+          "text": "pure",
+          "start": 152.35,
+          "end": 152.88,
+          "prob": 1.0
+        },
+        {
+          "text": "emotion.",
+          "start": 152.92,
+          "end": 154.62,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 16,
+      "section": 5,
+      "text": "You're my gravity in motion,",
+      "start": 156.38,
+      "end": 160.08,
+      "words": [
+        {
+          "text": "You're",
+          "start": 156.38,
+          "end": 156.7,
+          "prob": 1.0
+        },
+        {
+          "text": "my",
+          "start": 156.72,
+          "end": 157.08,
+          "prob": 1.0
+        },
+        {
+          "text": "gravity",
+          "start": 157.12,
+          "end": 158.1,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 158.12,
+          "end": 158.9,
+          "prob": 1.0
+        },
+        {
+          "text": "motion,",
+          "start": 158.92,
+          "end": 160.08,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 17,
+      "section": 5,
+      "text": "Spinning worlds in slow explosion,",
+      "start": 160.1,
+      "end": 163.82,
+      "words": [
+        {
+          "text": "Spinning",
+          "start": 160.1,
+          "end": 160.95,
+          "prob": 1.0
+        },
+        {
+          "text": "worlds",
+          "start": 160.96,
+          "end": 161.46,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 161.5,
+          "end": 161.83,
+          "prob": 1.0
+        },
+        {
+          "text": "slow",
+          "start": 161.85,
+          "end": 162.6,
+          "prob": 1.0
+        },
+        {
+          "text": "explosion,",
+          "start": 162.62,
+          "end": 163.82,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 18,
+      "section": 5,
+      "text": "Every pulse is pure emotion,",
+      "start": 164.08,
+      "end": 167.85,
+      "words": [
+        {
+          "text": "Every",
+          "start": 164.08,
+          "end": 164.74,
+          "prob": 1.0
+        },
+        {
+          "text": "pulse",
+          "start": 164.8,
+          "end": 165.28,
+          "prob": 1.0
+        },
+        {
+          "text": "is",
+          "start": 165.32,
+          "end": 165.62,
+          "prob": 1.0
+        },
+        {
+          "text": "pure",
+          "start": 165.75,
+          "end": 166.36,
+          "prob": 1.0
+        },
+        {
+          "text": "emotion,",
+          "start": 166.38,
+          "end": 167.85,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 19,
+      "section": 5,
+      "text": "You're my gravity in motion.",
+      "start": 167.95,
+      "end": 172.72,
+      "words": [
+        {
+          "text": "You're",
+          "start": 167.95,
+          "end": 168.22,
+          "prob": 1.0
+        },
+        {
+          "text": "my",
+          "start": 168.25,
+          "end": 168.65,
+          "prob": 1.0
+        },
+        {
+          "text": "gravity",
+          "start": 168.7,
+          "end": 170.15,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 171.28,
+          "end": 171.62,
+          "prob": 1.0
+        },
+        {
+          "text": "motion.",
+          "start": 171.64,
+          "end": 172.72,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 20,
+      "section": 6,
+      "text": "In the silence after heat,",
+      "start": 187.35,
+      "end": 190.58,
+      "words": [
+        {
+          "text": "In",
+          "start": 187.35,
+          "end": 187.62,
+          "prob": 1.0
+        },
+        {
+          "text": "the",
+          "start": 187.65,
+          "end": 187.85,
+          "prob": 1.0
+        },
+        {
+          "text": "silence",
+          "start": 187.86,
+          "end": 189.3,
+          "prob": 1.0
+        },
+        {
+          "text": "after",
+          "start": 189.33,
+          "end": 189.72,
+          "prob": 1.0
+        },
+        {
+          "text": "heat,",
+          "start": 189.76,
+          "end": 190.58,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 21,
+      "section": 6,
+      "text": "Our hearts don't skip, they just repeat,",
+      "start": 190.8,
+      "end": 194.4,
+      "words": [
+        {
+          "text": "Our",
+          "start": 190.8,
+          "end": 190.97,
+          "prob": 1.0
+        },
+        {
+          "text": "hearts",
+          "start": 191.0,
+          "end": 191.36,
+          "prob": 1.0
+        },
+        {
+          "text": "don't",
+          "start": 191.37,
+          "end": 191.54,
+          "prob": 1.0
+        },
+        {
+          "text": "skip,",
+          "start": 191.56,
+          "end": 192.4,
+          "prob": 1.0
+        },
+        {
+          "text": "they",
+          "start": 192.62,
+          "end": 192.86,
+          "prob": 1.0
+        },
+        {
+          "text": "just",
+          "start": 192.9,
+          "end": 193.12,
+          "prob": 1.0
+        },
+        {
+          "text": "repeat,",
+          "start": 193.15,
+          "end": 194.4,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 22,
+      "section": 6,
+      "text": "Floating high, we still belong,",
+      "start": 194.72,
+      "end": 198.28,
+      "words": [
+        {
+          "text": "Floating",
+          "start": 194.72,
+          "end": 195.42,
+          "prob": 1.0
+        },
+        {
+          "text": "high,",
+          "start": 195.45,
+          "end": 196.28,
+          "prob": 1.0
+        },
+        {
+          "text": "we",
+          "start": 196.48,
+          "end": 196.6,
+          "prob": 1.0
+        },
+        {
+          "text": "still",
+          "start": 196.62,
+          "end": 197.02,
+          "prob": 1.0
+        },
+        {
+          "text": "belong,",
+          "start": 197.06,
+          "end": 198.28,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 23,
+      "section": 6,
+      "text": "In this orbit, endlessly strong.",
+      "start": 198.65,
+      "end": 203.35,
+      "words": [
+        {
+          "text": "In",
+          "start": 198.65,
+          "end": 198.9,
+          "prob": 1.0
+        },
+        {
+          "text": "this",
+          "start": 198.92,
+          "end": 199.36,
+          "prob": 1.0
+        },
+        {
+          "text": "orbit,",
+          "start": 199.38,
+          "end": 200.18,
+          "prob": 1.0
+        },
+        {
+          "text": "endlessly",
+          "start": 201.32,
+          "end": 202.4,
+          "prob": 1.0
+        },
+        {
+          "text": "strong.",
+          "start": 202.42,
+          "end": 203.35,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 24,
+      "section": 7,
+      "text": "You're my gravity in motion,",
+      "start": 217.78,
+      "end": 221.48,
+      "words": [
+        {
+          "text": "You're",
+          "start": 217.78,
+          "end": 218.12,
+          "prob": 1.0
+        },
+        {
+          "text": "my",
+          "start": 218.14,
+          "end": 218.58,
+          "prob": 1.0
+        },
+        {
+          "text": "gravity",
+          "start": 218.62,
+          "end": 219.58,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 219.6,
+          "end": 220.36,
+          "prob": 1.0
+        },
+        {
+          "text": "motion,",
+          "start": 220.38,
+          "end": 221.48,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 25,
+      "section": 7,
+      "text": "Spinning worlds in slow explosion,",
+      "start": 221.52,
+      "end": 225.32,
+      "words": [
+        {
+          "text": "Spinning",
+          "start": 221.52,
+          "end": 222.38,
+          "prob": 1.0
+        },
+        {
+          "text": "worlds",
+          "start": 222.4,
+          "end": 222.92,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 222.95,
+          "end": 223.24,
+          "prob": 1.0
+        },
+        {
+          "text": "slow",
+          "start": 223.26,
+          "end": 224.08,
+          "prob": 1.0
+        },
+        {
+          "text": "explosion,",
+          "start": 224.12,
+          "end": 225.32,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 26,
+      "section": 7,
+      "text": "Every pulse is pure emotion,",
+      "start": 225.55,
+      "end": 229.12,
+      "words": [
+        {
+          "text": "Every",
+          "start": 225.55,
+          "end": 226.16,
+          "prob": 1.0
+        },
+        {
+          "text": "pulse",
+          "start": 226.2,
+          "end": 226.7,
+          "prob": 1.0
+        },
+        {
+          "text": "is",
+          "start": 226.75,
+          "end": 227.06,
+          "prob": 1.0
+        },
+        {
+          "text": "pure",
+          "start": 227.17,
+          "end": 227.84,
+          "prob": 1.0
+        },
+        {
+          "text": "emotion,",
+          "start": 227.86,
+          "end": 229.12,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 27,
+      "section": 7,
+      "text": "You're my gravity in motion,",
+      "start": 229.36,
+      "end": 234.48,
+      "words": [
+        {
+          "text": "You're",
+          "start": 229.36,
+          "end": 229.66,
+          "prob": 1.0
+        },
+        {
+          "text": "my",
+          "start": 229.68,
+          "end": 230.08,
+          "prob": 1.0
+        },
+        {
+          "text": "gravity",
+          "start": 230.12,
+          "end": 231.58,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 232.82,
+          "end": 233.18,
+          "prob": 1.0
+        },
+        {
+          "text": "motion,",
+          "start": 233.2,
+          "end": 234.48,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 28,
+      "section": 7,
+      "text": "When the light fades into dawn,",
+      "start": 235.25,
+      "end": 238.6,
+      "words": [
+        {
+          "text": "When",
+          "start": 235.25,
+          "end": 235.63,
+          "prob": 1.0
+        },
+        {
+          "text": "the",
+          "start": 235.65,
+          "end": 235.84,
+          "prob": 1.0
+        },
+        {
+          "text": "light",
+          "start": 235.86,
+          "end": 236.28,
+          "prob": 1.0
+        },
+        {
+          "text": "fades",
+          "start": 236.3,
+          "end": 236.86,
+          "prob": 1.0
+        },
+        {
+          "text": "into",
+          "start": 236.88,
+          "end": 237.72,
+          "prob": 1.0
+        },
+        {
+          "text": "dawn,",
+          "start": 237.75,
+          "end": 238.6,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 29,
+      "section": 7,
+      "text": "Still your rhythm pulls me on,",
+      "start": 239.05,
+      "end": 242.2,
+      "words": [
+        {
+          "text": "Still",
+          "start": 239.05,
+          "end": 239.48,
+          "prob": 1.0
+        },
+        {
+          "text": "your",
+          "start": 239.5,
+          "end": 239.78,
+          "prob": 1.0
+        },
+        {
+          "text": "rhythm",
+          "start": 239.8,
+          "end": 240.62,
+          "prob": 1.0
+        },
+        {
+          "text": "pulls",
+          "start": 240.65,
+          "end": 241.06,
+          "prob": 1.0
+        },
+        {
+          "text": "me",
+          "start": 241.1,
+          "end": 241.62,
+          "prob": 1.0
+        },
+        {
+          "text": "on,",
+          "start": 241.65,
+          "end": 242.2,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 30,
+      "section": 7,
+      "text": "Through the fire, through devotion,",
+      "start": 242.95,
+      "end": 246.35,
+      "words": [
+        {
+          "text": "Through",
+          "start": 242.95,
+          "end": 243.36,
+          "prob": 1.0
+        },
+        {
+          "text": "the",
+          "start": 243.38,
+          "end": 243.52,
+          "prob": 1.0
+        },
+        {
+          "text": "fire,",
+          "start": 243.55,
+          "end": 244.4,
+          "prob": 1.0
+        },
+        {
+          "text": "through",
+          "start": 244.42,
+          "end": 244.98,
+          "prob": 1.0
+        },
+        {
+          "text": "devotion,",
+          "start": 245.02,
+          "end": 246.35,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 31,
+      "section": 7,
+      "text": "You're my gravity in motion.",
+      "start": 249.28,
+      "end": 253.32,
+      "words": [
+        {
+          "text": "You're",
+          "start": 249.28,
+          "end": 249.53,
+          "prob": 1.0
+        },
+        {
+          "text": "my",
+          "start": 249.55,
+          "end": 249.8,
+          "prob": 1.0
+        },
+        {
+          "text": "gravity",
+          "start": 249.85,
+          "end": 251.55,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 251.92,
+          "end": 252.4,
+          "prob": 1.0
+        },
+        {
+          "text": "motion",
+          "start": 252.42,
+          "end": 253.32,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    },
+    {
+      "index": 32,
+      "section": 8,
+      "text": "Gravity in motion... still in motion.",
+      "start": 264.65,
+      "end": 277.0,
+      "words": [
+        {
+          "text": "Gravity",
+          "start": 264.65,
+          "end": 265.9,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 267.2,
+          "end": 267.82,
+          "prob": 1.0
+        },
+        {
+          "text": "motion...",
+          "start": 267.85,
+          "end": 268.35,
+          "prob": 1.0
+        },
+        {
+          "text": "still",
+          "start": 275.28,
+          "end": 275.95,
+          "prob": 1.0
+        },
+        {
+          "text": "in",
+          "start": 275.98,
+          "end": 276.18,
+          "prob": 1.0
+        },
+        {
+          "text": "motion.",
+          "start": 276.2,
+          "end": 277.0,
+          "prob": 1.0
+        }
+      ],
+      "source": "gold",
+      "locked": true,
+      "flagged": false,
+      "score": {}
+    }
+  ],
+  "scorecard": {},
+  "meta": {
+    "gold": {
+      "track": "examples/Gravity in Motion.wav",
+      "made": "2026-09-04",
+      "method": "Every word start and end placed by inspecting the vocal stem's mel spectrogram (0-6 kHz, 5 ms hop), pyin f0 with voicing confidence, and the 10 ms RMS envelope, with the project's Whisper words and two independent CTC passes drawn alongside as candidates. NOT placed by ear: the session that produced this file could not listen to audio. Treat it as a careful visual transcription that a human should verify at 0.25x in the review UI before trusting the last 30 ms of any number.",
+      "conventions": [
+        "A word starts at its first audible consonant: a stop's release burst, a fricative's noise onset, a nasal or glide's voiced onset. A stop closure (the silent gap before the burst) belongs to the previous word's rest, not to the word.",
+        "A word ends where its last phone stops: the onset of the next stop closure, the end of an unvoiced final fricative, or where the envelope of a held vowel falls about 8 dB below its plateau. A reverb tail (fast, ~35 dB/s decay after the harmonics stop) is not the word; a diminuendo (slow decay with the pitch track still confident) is.",
+        "In every 'gravity in motion' the syllable 'mo-' is the pitch wiggle inside the held note and the 'sh' is the energy dip after it; both aligners place 'motion' there too. 'in' before it is the flat note from the pitch step at the end of 'gravity'.",
+        "Two rests are held on a fading note: line 9 (reverb, ended early) and lines 19/27/31 (diminuendo, ended late). Line 31's quiet voiced pickup at 248.7-249.2 s is not in the lyrics and is excluded; the final chorus 'You're my' begins at the loud onset.",
+        "Line 32: 'Gravity' 264.65-265.90, a soft 'in motion...' at 267.2-268.35, 'still in motion.' from the unvoiced 'st' burst at 275.28; the further soft material after 277.0 is not in the lyrics file and is unlabelled."
+      ],
+      "estimated_precision_s": {
+        "clear_onset": 0.03,
+        "legato_boundary": 0.06,
+        "held_note_end": 0.1
+      },
+      "source_workdir": "workdir/gravity-in-motion-rests"
+    }
+  }
+}
