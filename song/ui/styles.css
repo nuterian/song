@@ -1129,6 +1129,11 @@ kbd {
 
 .toast {
   position: fixed;
+  /* Undo the popover defaults: it is placed like any toast, not centred. */
+  inset: auto;
+  margin: 0;
+  overflow: visible;
+  color: var(--text);
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%) translateY(20px) scale(.97);

@@ -151,9 +151,17 @@ function grade(score) {
 function toast(msg, isError) {
   const el = document.getElementById('toast');
   el.textContent = msg;
+  // The toast is a popover so it can rise above an open modal sheet. The
+  // reflow between showing it and lighting it is what lets the fade run.
+  const popover = !!el.showPopover;
+  if (popover && !el.matches(':popover-open')) el.showPopover();
+  void el.offsetWidth;
   el.className = 'toast show' + (isError ? ' err' : '');
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => (el.className = 'toast'), 2400);
+  toast._t = setTimeout(() => {
+    el.className = 'toast';
+    if (popover) setTimeout(() => { if (el.matches(':popover-open')) el.hidePopover(); }, 350);
+  }, 2400);
 }
 
 const timed = () => S.project.lines.filter(l => l.end > l.start);
@@ -3672,6 +3680,12 @@ function markStaticDemo() {
   note.title = 'Everything edits here; saving needs the app on your machine';
   note.innerHTML = 'live demo <span>· read-only</span>';
   bar.parentNode.insertBefore(note, bar);
+  // The one card whose primary action cannot run here says so on the card,
+  // rather than looking like a button that does nothing.
+  RV('rv-add').querySelector('.rv-foot').innerHTML =
+    'In this demo, adding a line needs the app on your machine - it writes the ' +
+    'line into the project and every export, and renumbers everything after it. ' +
+    '<em>Not a line</em> works here.';
 }
 
 /* ---------------------------------------------------------------- boot */

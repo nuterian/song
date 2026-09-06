@@ -465,7 +465,9 @@
   </div>
 </dialog>
 
-<div id="toast" class="toast"></div>
+<!-- A manual popover, so it sits in the top layer above an open modal sheet;
+     a plain fixed element is drawn underneath the sheet and never seen. -->
+<div id="toast" class="toast" popover="manual"></div>
 
 <script src="/app.js"></script>
 </body>
