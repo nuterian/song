@@ -96,6 +96,10 @@ def build(workdir: Path, media: bool = False) -> None:
         "<script src=", "<script>window.SONG_STATIC = './';</script>\n<script src=", 1
     )
     html = html.replace("<title>song</title>", "<title>song — live demo</title>")
+    # The published demo is a page of jugalm.com and is counted like one
+    # (docs/count.js). Injected here and only here: the app this page is made
+    # from runs on your machine and reports to nobody.
+    html = html.replace("</body>", '<script src="../count.js" defer></script>\n</body>', 1)
     (OUT / "index.html").write_text(html, encoding="utf-8")
 
     total = sum(f.stat().st_size for f in OUT.rglob("*") if f.is_file())
