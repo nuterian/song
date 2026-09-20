@@ -5,8 +5,8 @@ detector cannot be a fixed region of the frame. But nothing on screen is anywher
 channels did not put it: `geometry` repeats the shader's arithmetic and says where the
 Sun and each planet are in every frame, and how big, and each detector looks there.
 
-    limb      the Sun's radius, as a fraction of its resting radius     the kick
-    corona    light just outside the limb, over the Sun's poles         the bass
+    limb      the Sun's radius (from its area), over its resting radius   the kick
+    corona    the tallest tongue of the Sun's silhouette, over the usual    the bass
     heart     light in the middle of the Sun's face                     the voice
     plane     light in the plane close round the Sun, to either side    the clap's rings
     planets   light on and close round the planets                      the notes
@@ -67,7 +67,7 @@ def geometry(ch: direct.Channels, rows: np.ndarray, camera: str | None = None) -
 
 
 def signals(ch: direct.Channels, start: float = 0.0, duration: float | None = None, camera: str | None = None,
-            size: tuple[int, int] = (640, 360), fps: int = 60, progress: bool = False) -> dict[str, np.ndarray]:
+            size: tuple[int, int] = (960, 540), fps: int = 60, progress: bool = False) -> dict[str, np.ndarray]:
     """Draw every frame of the window and ask each detector about it. `camera` picks one
     of the baked cameras by feeding its channels to the camera uniforms."""
     w, h = size
@@ -90,7 +90,8 @@ def signals(ch: direct.Channels, start: float = 0.0, duration: float | None = No
     prev = None
     try:
         for k, (t, row) in enumerate(zip(times, rows)):
-            lum = (r.frame(float(t), data[row]).astype(np.float32) / 255.0) @ LUMA
+            img = r.frame(float(t), data[row]).astype(np.float32) / 255.0
+            lum = img @ LUMA
             if prev is not None:
                 out["change"][k] = np.abs(lum - prev).mean()
             prev = lum
@@ -113,25 +114,22 @@ def signals(ch: direct.Channels, start: float = 0.0, duration: float | None = No
                 out["planets"][k] = lum[on_planet].mean()
             sun_seen = abs(g["sun_x"][k]) < w / h / 2 - 0.5 * rest and abs(g["sun_y"][k]) < 0.5 - 0.5 * rest
             if sun_seen:
-                # the limb: the steepest fall of light along the radius, to a fraction of a pixel
-                edges = np.arange(0.55 * rest, 1.75 * rest, 0.5 / h)
-                if len(edges) > 6:
-                    which = np.digitize(d.ravel(), edges)
-                    total = np.bincount(which, weights=lum.ravel(), minlength=len(edges) + 1)[1:-1]
-                    count = np.bincount(which, minlength=len(edges) + 1)[1:-1]
-                    prof = total / np.maximum(count, 1)
-                    fall = -(prof[2:] - prof[:-2])
-                    j = int(np.argmax(fall))
-                    if 0 < j < len(fall) - 1:
-                        y0, y1, y2 = fall[j - 1], fall[j], fall[j + 1]
-                        j = j + 0.5 * (y0 - y2) / min(y0 - 2 * y1 + y2, -1e-9)
-                    out["limb"][k] = (edges[0] + (j + 1.5) * 0.5 / h) / rest
-                # the corona, asked over the Sun's poles: whatever lies in the plane - a clap's
-                # ring being born, the voice's ring - is foreshortened to inside the disc there
-                polar = np.abs(uy) > 1.2 * np.abs(ux)
-                ring = (d > 1.24 * rest) & (d < 1.60 * rest) & polar & ~near_planet
-                if ring.sum() > 12:
-                    out["corona"][k] = lum[ring].mean()
+                # The limb: the Sun's radius from its *area* - the pixels that are the colour of
+                # the Sun (nothing else on screen is that red and that bright: the corona is a
+                # darker band, by design). An area is good to a small fraction of a pixel, and
+                # a flare standing on the limb does not move it.
+                body = (d < 0.90 * rest) | ((d < 1.50 * rest) & (img[..., 0] > 0.86) & (img[..., 1] > 0.40))
+                out["limb"][k] = np.sqrt(body.sum() / np.pi) / (rest * h)
+                # The corona: how much of the dark round the Sun is lit - its silhouette, in
+                # units of the Sun's own disc. A prominence is a tongue of it; a thin ring
+                # passing through adds almost nothing.
+                # ...and asked sector by sector round the Sun, because a prominence is *somewhere*:
+                # the tallest tongue, over the usual one. The kick swells the whole rim alike and
+                # a clap's ring is born all the way round, and neither changes this.
+                lit = (d >= 0.95 * rest) & (d < 2.6 * rest) & (lum > 0.14) & ~body & ~near_planet
+                sector = ((np.arctan2(dy, dx) + np.pi) / (2 * np.pi) * 24).astype(int) % 24
+                per = np.bincount(sector[lit], minlength=24) / (np.pi * (rest * h) ** 2 / 24)
+                out["corona"][k] = per.max() - np.median(per)
                 out["heart"][k] = lum[d < 0.45 * rest].mean() if (d < 0.45 * rest).sum() > 6 else np.nan
             # the plane of the orbits close round the Sun, to either side of it, where a
             # clap's ring is born and where it is seen edge to edge
@@ -201,20 +199,39 @@ def sync(got: dict, ch: direct.Channels, camera: str, start: float = 0.0, durati
     return out
 
 
+OWNER = {"limb": "kick", "corona": "bass", "heart": "voice", "plane": "snare", "planets": "note", "sky": "hat"}
+
+
+def _lift(sig: np.ndarray, fps: float, start: float, events: np.ndarray) -> float:
+    """How far a detector's reading rises across this instrument's hits: the median rise."""
+    dur = len(sig) / fps
+    ev = events[(events > start + 0.1) & (events < start + dur - 0.1)]
+    frames = measure.first_frame(ev, fps, start)
+    frames = frames[(frames >= 2) & (frames < len(sig) - 2)]
+    rise = measure.response(sig, frames)
+    rise = rise[np.isfinite(rise)]
+    return float(np.median(rise)) if len(rise) >= 5 else float("nan")
+
+
 def matrix(got: dict, ch: direct.Channels, camera: str = "static", start: float = 120.0, duration: float = 40.0) -> dict:
-    """Solo each instrument; ask every detector about every instrument's hits."""
+    """Solo each instrument; ask every detector how far it rises on that instrument's hits.
+
+    With one instrument drawn and everything else frozen a detector will notice anything
+    at all, so "did it notice" says little. What matters is *how much*: each column is
+    given as a fraction of what that detector reads for the instrument it belongs to. A
+    column should be 1 in its owner's row and small everywhere else.
+    """
     a = got["arrays"]
     solos = {"kick": "kick", "bass": "bass_note", "voice": "syllable", "snare": "snare", "note": "note", "hat": "hat"}
-    rng = np.random.default_rng(0)
-    table = {}
-    print(f"separation over {start:.0f}-{start + duration:.0f}s ({camera}): row = the one instrument drawn, column = detector asked about that instrument's hits")
-    print("          " + " ".join(f"{d:>8s}" for d in DETECTORS))
+    raw = {}
     for role, ev_name in solos.items():
-        solo = render.solo_channels(ch, role)
-        sig = signals(solo, start, duration, camera)
-        thr = ASK[ev_name][1]
-        ev = a[f"ev_{ev_name}_t"][a[f"ev_{ev_name}_amp"] > thr]
-        table[role] = {d: _recall(sig[d], 60, start, ev, rng)[0] for d in DETECTORS}
+        sig = signals(render.solo_channels(ch, role), start, duration, camera)
+        ev = a[f"ev_{ev_name}_t"][a[f"ev_{ev_name}_amp"] > ASK[ev_name][1]]
+        raw[role] = {d: _lift(sig[d], 60, start, ev) for d in DETECTORS}
+    table = {role: {d: raw[role][d] / max(abs(raw[OWNER[d]][d]), 1e-9) for d in DETECTORS} for role in solos}
+    print(f"separation over {start:.0f}-{start + duration:.0f}s ({camera}): row = the one instrument drawn; column = a detector's rise on its hits, as a fraction of its rise for its own instrument")
+    print("          " + " ".join(f"{d:>8s}" for d in DETECTORS))
+    for role in solos:
         print(f"  {role:8s}" + " ".join(f"{table[role][d]:8.2f}" for d in DETECTORS))
     return table
 

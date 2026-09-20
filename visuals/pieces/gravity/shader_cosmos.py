@@ -74,6 +74,8 @@ PLANET_SIZE = [0.0100, 0.0140, 0.0150, 0.0118, 0.0300, 0.0255, 0.0195, 0.0188]
 # is a paler blue than its sea.
 PLANET_TINT = [(0.577, 0.541, 0.511), (0.924, 0.783, 0.487), (0.426, 0.646, 0.726), (0.772, 0.384, 0.233),
                (0.820, 0.649, 0.487), (0.884, 0.764, 0.509), (0.580, 0.865, 0.900), (0.203, 0.364, 0.864)]
+N_PROM = 4            # prominences in flight: the bass line's notes
+N_WIND = 4            # gusts of solar wind in flight: the voice's syllables
 BELTS = ((0.148, 0.0150, 3), (0.485, 0.0300, 2))       # (inner edge beyond a0, lane width, lanes): asteroids; Kuiper
 
 
@@ -135,9 +137,18 @@ uniform float uCamTurn, uCamTilt, uCamRoll, uCamSpan, uCamX, uCamY;
 {_scalars("uMetA", N_METEORS)}
 {_scalars("uMetS", N_METEORS)}
 {_scalars("uPh", N_PLANETS)}
+{_scalars("uPromT", N_PROM)}
+{_scalars("uPromA", N_PROM)}
+{_scalars("uPromK", N_PROM)}
+{_scalars("uWindT", N_WIND)}
+{_scalars("uWindA", N_WIND)}
+{_scalars("uWindK", N_WIND)}
+uniform float uBrace;              // the bar before a re-entry: 0 -> 1, and gone on the downbeat
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
+const int N_PROM = {N_PROM};
+const int N_WIND = {N_WIND};
 const int N_RINGS = {N_RINGS};
 const int N_SATS = {N_SATS};
 const int N_METEORS = {N_METEORS};
@@ -203,6 +214,16 @@ float edge(float at, float x, float w) {{ return smoothstep(at - w * gAA, at + w
 // coverage of a disc of radius rPx (or a band of half-width rPx about zero); d in output pixels
 float disc(float dPx, float rPx) {{ return 1.0 - smoothstep(rPx - 0.55 * gAA, rPx + 0.55 * gAA, dPx); }}
 
+// Light bent by a ripple of gravity: a point in the frame, pushed straight out from the
+// Sun where a wavefront (one a kick's, one a re-entry's) is passing it. Amplitudes and
+// radii in frame heights. What is drawn there keeps its shape; only where it is changes.
+vec2 lensed(vec2 at, vec2 sun, float a1, float r1, float a2, float r2) {{
+    vec2 dv = at - sun;
+    float dist = length(dv) + 1e-5;
+    float g1 = (dist - r1) / 0.050, g2 = (dist - r2) / 0.100;
+    return at + dv / dist * (a1 * exp(-g1 * g1) + a2 * exp(-g2 * g2));
+}}
+
 // From the plane of the orbits (u, v) and height above it, to the screen and to depth
 // toward the viewer; e and c are the sine and cosine of the camera's height over the plane.
 vec3 toView(vec3 w, float e, float c) {{ return vec3(w.x, w.y * e + w.z * c, -w.y * c + w.z * e); }}
@@ -263,7 +284,11 @@ vec3 starColour(float cls) {{
 // A planet's own colours, by where on it we are: `lat` is -1..1 pole to pole, `q` a
 // point on its surface turning with it, `w` how much of the sphere one pixel covers -
 // every coast and band is resolved against that, so it is one pixel soft at any size.
+float gDrift = 0.0;        // the slow clock, for weather: set once a frame
+
 vec3 surface(int i, float lat, vec3 q, float w) {{
+    // the gas giants do not turn as one: each band slides past its neighbours
+    if (i == 4 || i == 5) q.xz = rot2(0.9 * gDrift * sin(lat * (i == 4 ? 9.0 : 8.0))) * q.xz;
     if (i == 0) return mix(vec3(0.66, 0.62, 0.58), vec3(0.48, 0.45, 0.43), edge(0.53, soft(q * 2.4), 2.0 * w));
     if (i == 1) return mix(vec3(0.96, 0.85, 0.56), vec3(0.89, 0.72, 0.42), edge(0.0, sin(lat * 7.0 + 1.5 * soft(q * 1.5)), 8.0 * w));
     if (i == 2) {{
@@ -272,7 +297,7 @@ vec3 surface(int i, float lat, vec3 q, float w) {{
         c = mix(c, vec3(0.30, 0.66, 0.30), edge(0.54, land, 1.6 * w));
         c = mix(c, vec3(0.78, 0.68, 0.40), edge(0.65, land, 1.6 * w) * (1.0 - smoothstep(0.35, 0.6, abs(lat))));
         c = mix(c, vec3(0.97, 0.98, 1.0), edge(0.835, abs(lat) + 0.10 * land, 1.2 * w));                  // ice
-        float cloud = soft(vec3(rot2(0.9) * q.xz, q.y) * 2.3 + 17.0);
+        float cloud = soft(vec3(rot2(0.9 + 0.8 * gDrift) * q.xz, q.y) * 2.3 + 17.0);       // the weather moves over the land
         return mix(c, vec3(1.0), 0.85 * edge(0.615, cloud, 2.0 * w));
     }}
     if (i == 3) {{
@@ -304,6 +329,7 @@ vec3 cel(vec3 day, float ndl, float rimness, vec3 shade, float w) {{
 void main() {{
     float ss = max(uSS, 1.0);
     gAA = 1.0 / ss;
+    gDrift = TAU * uOrbitSlow;
     float resY = uResolution.y / ss;                                   // the height of the picture, in output pixels
     vec2 p = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;
 
@@ -339,6 +365,20 @@ void main() {{
     vec2 uvW = rot2(-uCamTurn) * dPlane.xy;
     vec3 rd = vec3(uvW.x, dPlane.z, uvW.y);                           // world: x vernal equinox, y ecliptic north
 
+    // The sky answers two things. A kick is mass, and mass bends light: a ripple leaves
+    // the Sun and every star it passes is pushed outward a few pixels and let back - the
+    // stars are moved, not brightened (their brightness is the hats'). And a re-entry:
+    // through the bar before it the sky dims, holding its breath; on the downbeat it
+    // opens - the galaxy's clouds a tone up, the faint stars out - and a slow, deep
+    // ripple crosses it; then it settles over a couple of bars.
+    vec2 sunP = -(rot2(uCamRoll) * vec2(0.0)) - vec2(uCamX, uCamY) / uCamSpan;   // the Sun, in the frame
+    float sunRp = 0.078 * (0.50 + 0.80 * uMass) / uCamSpan;
+    float kAge = uTime - uKickT;
+    float lensKA = kAge < 0.0 ? 0.0 : 0.0036 * uKickA * exp(-kAge / 0.30), lensKR = sunRp + 0.95 * kAge;
+    float lensDA = dropAge < 0.0 ? 0.0 : 0.0070 * uDropA * exp(-dropAge / 1.6), lensDR = sunRp + 0.42 * dropAge;
+    float opened = dropAge < 0.0 ? 0.0 : uDropA * exp(-dropAge / 2.4);
+    float skyGain = (1.0 - 0.38 * uBrace) * (1.0 + 0.60 * opened);
+
     // the Milky Way: five flat tones cut from NASA's map along its own contours, each
     // edge a pixel wide whatever the field is doing there
     float mw = galaxy(rd);
@@ -349,14 +389,14 @@ void main() {{
     // move on: the clouds are there to frame the system, and a pale cloud behind a
     // planet only hides it. Out beyond the orbits they come up to full strength.
     float stage = length(vec2(q.x, q.y / e)) / ((max(0.255, 0.156 / e) + 0.46) * uSpreadSlow);
-    float gM = mix(0.42, 1.0, smoothstep(0.55, 1.25, stage));
+    float gM = min(mix(0.42, 1.0, smoothstep(0.55, 1.25, stage)) * skyGain, 1.0);
     col = mix(col, vec3(0.030, 0.037, 0.078) + kFar * 0.020, edge(0.14, mw, wM) * gM);
     col = mix(col, vec3(0.043, 0.051, 0.102) + kFar * 0.024, edge(0.28, mw, wM) * gM);
     col = mix(col, vec3(0.059, 0.067, 0.126) + kFar * 0.027, edge(0.45, mw, wM) * gM);
     col = mix(col, vec3(0.079, 0.084, 0.150) + kFar * 0.027, edge(0.64, mw, wM) * gM);
     col = mix(col, vec3(0.108, 0.104, 0.168) + kFar * 0.020, edge(0.86, mw, wM) * gM);       // the core of the bulge only
 
-    float starGain = 0.50 + 0.50 * uStars;
+    float starGain = min((0.50 + 0.50 * uStars) * skyGain, 1.0);
     vec2 uvO = octEncode(rd);
     {{
         // the stars too faint for the catalogue: a hashed field, crowded where the galaxy
@@ -366,9 +406,9 @@ void main() {{
         vec3 fd = octDecode((cell + 0.25 + 0.5 * hash22(cell + 0.37)) / FAINT);
         if (hash12(cell + 4.1) < 0.05 + 0.80 * galaxy(fd)) {{
             vec3 fv = toView(vec3(rot2(uCamTurn) * fd.xz, fd.y), e, c);
-            vec2 at = rot2(uCamRoll) * fv.xy / max(-fv.z, 1e-3) * lens;
+            vec2 at = lensed(rot2(uCamRoll) * fv.xy / max(-fv.z, 1e-3) * lens, sunP, 0.7 * lensKA, lensKR, 0.5 * lensDA, lensDR);
             float dPx = length(p - at) * resY;
-            col = mix(col, vec3(0.82, 0.86, 0.96), disc(dPx, 1.05) * (0.22 + 0.26 * hash12(cell + 2.2)) * starGain * step(fv.z, 0.0));
+            col = mix(col, vec3(0.82, 0.86, 0.96), disc(dPx, 1.05) * min((0.22 + 0.26 * hash12(cell + 2.2)) * (1.0 + 0.9 * opened), 1.0) * starGain * step(fv.z, 0.0));
         }}
     }}
     {{
@@ -381,7 +421,7 @@ void main() {{
             float cls = floor((s.w + 2.0) / 100.0), mag = s.w - 100.0 * cls;
             vec3 sv = toView(vec3(rot2(uCamTurn) * s.xz, s.y), e, c);
             if (sv.z > -0.2) continue;
-            vec2 d = (p - rot2(uCamRoll) * sv.xy / (-sv.z) * lens) * resY;                // output pixels from the star
+            vec2 d = (p - lensed(rot2(uCamRoll) * sv.xy / (-sv.z) * lens, sunP, lensKA, lensKR, lensDA, lensDR)) * resY;   // output pixels from the star
             if (abs(d.x) > 26.0 || abs(d.y) > 26.0) continue;
             float h = hash12(s.xz * 91.7 + s.y * 13.1);
             float mine = 1.0 - min(abs(floor(h * 3.0) - uHatK), 1.0);
@@ -415,6 +455,10 @@ void main() {{
         float u = clamp(back / len, 0.0, 1.0);
         float tail = step(0.0, back) * step(back, len) * disc(off, (0.85 + 1.2 * metA[i]) * (1.0 - u) + 0.35);
         col = mix(col, mix(white, kA, smoothstep(0.25, 0.45, u)), tail * (1.0 - smoothstep(0.75, 1.1, age)) * (0.50 + 0.50 * metA[i]));
+        // it is lit the moment it arrives: a small four-pointed glint where it enters, gone in a tenth of a second
+        vec2 g = (p - start) * resY;
+        float glint = (5.0 + 9.0 * metA[i]) * max(1.0 - age / 0.11, 0.0);
+        col = mix(col, white, max(disc(abs(g.y), 0.8) * disc(abs(g.x), glint), disc(abs(g.x), 0.8) * disc(abs(g.y), glint)) * step(0.5, glint));
     }}
 
     // ---- the Sun's size: mass, and the beat - which it swells *into* --------------------------
@@ -433,11 +477,15 @@ void main() {{
     float shove = 0.0;
     for (int i = 0; i < N_RINGS; i++) {{
         float age = uTime - ringT[i];
-        if (age < 0.0 || age > 2.2 || ringA[i] <= 0.0) continue;
+        // A ring goes as far as the clap was loud. The backbeat's crosses the system; a
+        // ghost note's is a ripple that dies near the Sun - or the plane is never still.
+        float loud = smoothstep(0.22, 0.65, ringA[i]);
+        float life = mix(0.50, 2.2, loud);
+        if (age < 0.0 || age > life || ringA[i] <= 0.0) continue;
         float rad = R + 0.035 + 0.66 * pow(age, 0.72);
         float g = (rho - rad) / 0.035;
-        shove += 0.010 * (0.4 + 0.6 * ringA[i]) * exp(-g * g) * exp(-age / 0.5);
-        float a_ = planeRing(q, e, rad, 0.95 + 2.6 * exp(-age / 0.07), pxScene)
+        shove += 0.010 * (0.15 + 0.85 * loud) * exp(-g * g) * exp(-age / 0.5);
+        float a_ = planeRing(q, e, rad, 0.95 + 2.6 * exp(-age / 0.07), pxScene) * (1.0 - smoothstep(0.55 * life, life, age))
                    * clamp((0.40 + 0.60 * ringA[i]) * (0.95 * exp(-age / 0.10) + 0.75 * exp(-age / 0.45)), 0.0, 1.0) * ev;
         vec3 wc = mix(mix(kA, kB, ringM[i]), white, 0.15 + 0.55 * exp(-age / 0.10));
         waveCol = mix(waveCol, wc, step(waveA, a_)); waveA = max(waveA, a_);
@@ -516,13 +564,20 @@ void main() {{
         vec2 orb = rot2(0.95 + uCamTurn) * vec2(ca * (cos(E) - ce), ca * sqrt(1.0 - ce * ce) * sin(E));
         vec2 cs = vec2(orb.x, orb.y * e);
         float closeness = clamp(ca * (1.0 - ce) / max(length(orb), 1e-3), 0.0, 1.0);
-        vec2 away = normalize(cs + 1e-6);
+        vec2 anti = normalize(cs + 1e-6);                                // straight away from the Sun
+        vec2 vel = rot2(0.95 + uCamTurn) * vec2(-sin(E), sqrt(1.0 - ce * ce) * cos(E));
+        vec2 away = normalize(anti - 0.55 * normalize(vec2(vel.x, vel.y * e) + 1e-6));   // dust lags: it bends back along the orbit
         vec2 d = q - cs;
         float back = dot(d, away);
         float len = (0.020 + 0.13 * closeness * closeness) * (0.55 + 0.75 * uField);
         float u = clamp(back / len, 0.0, 1.0);
         float tailA = step(0.0, back) * step(back, len) * disc(abs(dot(d, vec2(-away.y, away.x))) / pxScene, (1.0 + 2.4 * closeness) * (1.0 - 0.85 * u) + 0.3);
         vec3 cc = mix(kB, white, 0.30 * (1.0 - u)); float cA = tailA * (0.75 - 0.45 * u) * lum;
+        // ...and the ion tail: gas, blown dead straight down the solar wind - finer, longer, blue
+        float backI = dot(d, anti), lenI = 1.55 * len;
+        float ion = step(0.0, backI) * step(backI, lenI) * disc(abs(dot(d, vec2(-anti.y, anti.x))) / pxScene, 0.75 * (1.0 - 0.7 * backI / lenI) + 0.15)
+                    * (0.60 - 0.40 * backI / lenI) * lum * smoothstep(0.15, 0.5, closeness);
+        cc = mix(cc, vec3(0.60, 0.80, 1.0), step(cA, ion)); cA = max(cA, ion);
         float head = disc(length(d) / pxScene, 2.0 + 1.2 * closeness);
         cc = mix(cc, white, head); cA = max(cA, head);
         if (orb.y > 0.0) {{ under = mix(under, cc, step(underA, cA)); underA = max(underA, cA); }}
@@ -596,6 +651,7 @@ void main() {{
             }}
             // moons: the Moon; Io and Ganymede; Titan
             int moons = i == 2 ? 1 : i == 4 ? 2 : i == 5 ? 1 : 0;
+            vec3 moonAt[2] = vec3[2](vec3(0.0), vec3(0.0)); float moonSz[2] = float[2](0.0, 0.0);
             for (int m = 0; m < 2; m++) {{
                 if (m >= moons) break;
                 float fm = float(m);
@@ -603,6 +659,7 @@ void main() {{
                 float mr = size * (i == 2 ? 3.2 : i == 4 ? 2.6 + 0.9 * fm : 3.0);
                 vec3 mv = toView(vec3(mr * cos(ma), mr * sin(ma), 0.0), e, c);
                 float msz = max(size * (i == 2 ? 0.27 : 0.17), 1.5 * pxScene);
+                moonAt[m] = mv; moonSz[m] = size * (i == 2 ? 0.27 : 0.17);
                 vec2 md = dq - mv.xy;
                 float moon = disc(length(md) / pxScene, msz / pxScene);
                 moon *= 1.0 - step(mv.z, 0.0) * disc(length(dq) / pxScene, sizePx);      // behind its planet
@@ -623,12 +680,29 @@ void main() {{
                 float lat = dot(n, axis);
                 vec3 e1 = normalize(cross(axis, vec3(0.31, 0.95, 0.10))), e2 = cross(axis, e1);
                 vec3 sq = vec3(rot2(uOrbitSlow * (2.2 + 0.6 * float(i))) * vec2(dot(n, e1), dot(n, e2)), lat).xzy;
-                vec3 day = surface(i, lat, sq, w) * sunlight * lum * (1.0 + 0.14 * kick * ev);
+                vec3 day = surface(i, lat, sq, w) * sunlight * lum;        // (the kick does not light a planet: the planets are the notes')
                 // a note is the planet catching light: its day flares, its night glows its own colour
                 day = mix(day, mix(day, white, 0.60), clamp(1.2 * lit, 0.0, 1.0));
                 float ndl = dot(n, L);
                 vec3 globe = cel(day, ndl, 1.0 - n.z, shade, 1.4 * w);
                 globe += PLANET_TINT[i] * 0.50 * lit * (1.0 - smoothstep(-0.02, 0.10, ndl));
+                // Shadows that fall on it. A moon passing between it and the Sun puts a small
+                // hard spot on its day side, which crosses as the moon does (Io's, on Jupiter);
+                // and Saturn's rings lay a dark band across Saturn.
+                vec3 P = n * size;
+                float dark = 0.0;
+                for (int m = 0; m < 2; m++) {{
+                    if (moonSz[m] <= 0.0) continue;
+                    vec3 toMoon = moonAt[m] - P;
+                    float sunward = dot(toMoon, L);
+                    dark = max(dark, step(0.0, sunward) * (1.0 - edge(moonSz[m], length(toMoon - L * sunward), pxScene)));
+                }}
+                if (i == 5) {{
+                    float sRing = -dot(P, axis) / (dot(L, axis) + (dot(L, axis) < 0.0 ? -1e-4 : 1e-4));
+                    float rkS = length(P + L * sRing) / size;
+                    dark = max(dark, step(0.0, sRing) * step(1.32, rkS) * step(rkS, 2.30) * (1.0 - step(1.92, rkS) * step(rkS, 2.02)));
+                }}
+                globe = mix(globe, globe * 0.22 + shade * 0.75, dark * smoothstep(-0.05, 0.10, ndl));
                 if (i == 2) globe = mix(globe, vec3(0.48, 0.72, 1.0), 0.50 * edge(0.80, 1.0 - n.z, 2.0 * w) * smoothstep(-0.1, 0.3, ndl));   // air
                 pc = mix(pc, globe, cover); pA = max(pA, cover);
             }}
@@ -644,32 +718,104 @@ void main() {{
     col = mix(col, waveCol, waveA * farHalf);
     col = mix(col, under, clamp(underA, 0.0, 1.0));
 
+    // The voice's ring wears each syllable: three short strokes stand out from it, along
+    // the plane, the moment the syllable lands, and draw back in over a quarter of a
+    // second - a crown that flickers with the words. Hard-edged; they go by getting shorter.
+    {{
+        float windT[N_WIND] = {_gather("uWindT", N_WIND)};
+        float windA[N_WIND] = {_gather("uWindA", N_WIND)};
+        float windK[N_WIND] = {_gather("uWindK", N_WIND)};
+        float ringR = R * (1.55 + 1.15 * (0.5 + 0.5 * uPitch)) + 0.012 * uSustain;      // the voice's ring, where it is now
+        vec3 windInk = vivid(mix(mix(kA, white, 0.45), cTint, 0.6 * uTint), 1.2);
+        for (int i = 0; i < N_WIND; i++) {{
+            float age = uTime - windT[i];
+            if (age < 0.0 || age > 0.70 || windA[i] <= 0.0) continue;
+            float out1 = (0.35 + 0.65 * windA[i]) * R * 0.62 * exp(-age / 0.22);
+            if (out1 < 1.5 * pxScene) continue;
+            for (int k = 0; k < 3; k++) {{
+                float phi = TAU * (windK[i] + float(k) / 3.0) + uCamTurn;
+                vec2 dir = vec2(cos(phi), e * sin(phi));                // a radius of the plane, as the screen sees it
+                float along = dot(q, dir) / dot(dir, dir);              // how far out along it this pixel is, in the plane
+                if (along < ringR || along > ringR + out1) continue;
+                float perp = length(q - along * dir) / pxScene;
+                float u = (along - ringR) / out1;                        // 0 on the ring, 1 at the tip
+                col = mix(col, windInk, disc(perp, (0.9 + 1.3 * windA[i]) * (1.0 - 0.75 * u)) * ev);
+            }}
+        }}
+    }}
+
+    float promT[N_PROM] = {_gather("uPromT", N_PROM)};
+    float promA[N_PROM] = {_gather("uPromA", N_PROM)};
+    float promK[N_PROM] = {_gather("uPromK", N_PROM)};
+
     // the corona: one band, in the song's colour, darker than the Sun - a rim of light,
     // not a second, bigger sun
     float out_ = r - R;
-    if (out_ > -2.0 * pxScene && out_ < 0.30) {{
+    if (out_ > -2.0 * pxScene && out_ < 0.30 + R) {{
         float flow = soft(vec3(normalize(q + 1e-5) * 1.3, 0.030 * uBeats));
-        float reach = (0.012 + 0.020 * uBass + 0.014 * uRays * uHold + 0.026 * uSunPulse + 0.04 * uDropA * hit(dropAge, 0.9)) * (0.80 + 0.40 * flow);
+        float reach = (0.012 + 0.020 * uBass + 0.014 * uRays * uHold + 0.008 * uSunPulse + 0.04 * uDropA * hit(dropAge, 0.9)) * (0.80 + 0.40 * flow);
+        // and where a prominence stands the corona stands out with it: the bass line is in
+        // the Sun's silhouette, against the dark, where it can be seen from anywhere
+        float around = atan(q.x, q.y);
+        for (int i = 0; i < N_PROM; i++) {{
+            float age = uTime - promT[i];
+            if (age < 0.0 || age > 0.60 || promA[i] <= 0.0) continue;
+            float dth = abs(mod(around - TAU * promK[i] + PI, TAU) - PI);
+            reach += R * (0.10 + 0.50 * promA[i]) * exp(-dth * dth / 0.032) * (1.0 - 0.55 * exp(-age / 0.040)) * (1.0 - smoothstep(0.20, 0.60, age));
+        }}
         // the song's colour, plainly: this rim is where a section's palette is most seen
         col = mix(col, mix(vec3(1.0, 0.60, 0.24), kBody, 0.78) * 0.80, disc(out_ / pxScene, reach / pxScene) * 0.92 * (0.70 * lum + 0.30 * ev));
     }}
     if (r < R + 2.0 * pxScene) {{
         float mu = sqrt(max(1.0 - (r * r) / (R * R), 0.0));          // 1 at the centre of the disc, 0 at the limb
         float w = pxScene / R;
-        float heat = clamp(0.32 + 0.45 * uBass * amb + 0.55 * kick * ev, 0.0, 1.0);
+        // the bass warms the whole face; the kick flashes the limb - the middle of the face is the voice's
+        float heat = clamp(0.32 + 0.45 * uBass * amb, 0.0, 1.0);
         vec3 surf = mix(vec3(1.0, 0.82, 0.40), vec3(1.0, 0.94, 0.72), heat);
-        vec3 limb = mix(vec3(1.0, 0.57, 0.19), vec3(1.0, 0.72, 0.32), heat);
+        vec3 limb = mix(vec3(1.0, 0.57, 0.19), vec3(1.0, 0.80, 0.42), clamp(heat + 0.85 * kick * ev, 0.0, 1.0));
         // limb darkening, as a real star has, in one clean step
         vec3 s = mix(limb, surf, disc(r / pxScene, 0.86 * R / pxScene));
         vec3 n = vec3(q / R, mu);
         float cells = soft(vec3(rot2(0.006 * uBeats) * n.xz, n.y).xzy * 1.7 + vec3(0.0, 0.0, 0.010 * uBeats));
         s = mix(s, mix(s, white, 0.12), edge(0.575, cells, 2.5 * w) * smoothstep(0.30, 0.60, mu));
         s = mix(s, s * vec3(0.95, 0.91, 0.88), (1.0 - edge(0.285, cells, 2.5 * w)) * smoothstep(0.45, 0.70, mu));
+        // sunspots: a few, in the two belts they keep to, carried round by the Sun's slow turn -
+        // an umbra and a penumbra, two flat tones
+        {{
+            float turn = 0.004 * uBeats;
+            for (int k = 0; k < 4; k++) {{
+                float fk = float(k);
+                float lon = turn + 1.7 * fk + 0.6 * hash11(fk * 3.1 + 0.2), latS = (mod(fk, 2.0) < 0.5 ? 0.30 : -0.24) + 0.08 * hash11(fk * 5.7);
+                vec3 at = vec3(cos(latS) * sin(lon), sin(latS), cos(latS) * cos(lon));
+                if (at.z < 0.15) continue;                                // round the back, or too near the limb to draw cleanly
+                float ang = acos(clamp(dot(n, at), -1.0, 1.0));
+                float big = 0.050 + 0.035 * hash11(fk * 9.3 + 1.1);
+                s = mix(s, s * vec3(0.86, 0.74, 0.62), 1.0 - edge(big, ang, 1.2 * w));
+                s = mix(s, s * vec3(0.62, 0.42, 0.30), 1.0 - edge(0.45 * big, ang, 1.2 * w));
+            }}
+        }}
         // the voice is its heart: white-hot, as wide as the voice is loud
         float heart = R * (0.10 + 0.50 * uVoice + 0.22 * syll) * step(0.02, uVoice + syll);
         vec3 heartInk = mix(mix(white, cTint, 0.30 * uTint), vec3(1.0), 0.25);
         s = mix(s, mix(surf, heartInk, clamp(0.62 + 0.60 * syll, 0.0, 1.0)), disc(r / pxScene, heart / pxScene));
         col = mix(col, s, disc(r / pxScene, R / pxScene));
+    }}
+    // Prominences: the bass line, note by note. Each note throws a loop of the Sun's
+    // own fire off the limb - where round the limb is the note's pitch, how high is how
+    // hard it was played. It is there on its frame, stands a moment, and thins away.
+    if (r > R - 2.0 * pxScene && r < R * 2.1 + 0.05) {{
+        float outside = 1.0 - disc(r / pxScene, R / pxScene);
+        for (int i = 0; i < N_PROM; i++) {{
+            float age = uTime - promT[i];
+            if (age < 0.0 || age > 0.60 || promA[i] <= 0.0) continue;
+            float th = TAU * promK[i];
+            vec2 foot = R * vec2(sin(th), cos(th));                     // the middle of the loop's feet, on the limb
+            float high = R * (0.13 + 0.30 * promA[i]) * (1.0 - 0.55 * exp(-age / 0.040));
+            float going = 1.0 - smoothstep(0.22, 0.60, age);
+            float loop = disc(abs(length(q - foot) - high) / pxScene, (1.0 + 2.4 * promA[i]) * going) * smoothstep(0.0, 0.25, going);
+            vec3 fire = mix(mix(vec3(1.0, 0.50, 0.16), kBody, 0.30), white, 0.55 * exp(-age / 0.07));
+            col = mix(col, fire, loop * outside * ev);
+        }}
     }}
     col = mix(col, waveCol, waveA * (1.0 - farHalf));
     col = mix(col, over, clamp(overA, 0.0, 1.0));

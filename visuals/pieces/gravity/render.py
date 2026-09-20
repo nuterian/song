@@ -67,6 +67,9 @@ ROLES: dict[str, tuple[str, ...]] = {
 # swell of its planet are baked with look-ahead, as levels of their own.
 ROLES["kick"] += ("uSunPulse",)
 ROLES["note"] += tuple(f"uSwell{k}" for k in range(direct.N_SATS))
+ROLES["bass"] += tuple(f"uPromA{k}" for k in range(4))
+ROLES["voice"] += tuple(f"uWindA{k}" for k in range(4))
+ROLES["drop"] += ("uBrace",)
 
 # clocks: frozen in a solo, so that only the soloed instrument moves anything
 CLOCKS = ("uOrbit", "uOrbitSlow", "uDrift", "uBeats") + tuple(f"uPh{i}" for i in range(8))

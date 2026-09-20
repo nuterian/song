@@ -247,6 +247,38 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
         amp = np.array([col[f"uNoteA{slot}"][min(int(np.ceil(x * RATE)), n - 1)] for x in tt])
         extra[f"uSwell{slot}"] = (direct.LERP, anticipating_pulse(tt, np.clip(amp, 0, 1.2), n, 0.045, 0.20))
 
+    # ---- the bass line's notes are prominences; the voice's syllables, gusts of solar wind -------
+    # Where round the limb a prominence stands is its pitch - the twelve pitch classes round
+    # the clock from the tonic at twelve o'clock, so a bass line draws its own shape on the
+    # Sun. The models say what was played; the stem says when.
+    m_arr = mod[0] if mod else {}
+    bt, ba = a["ev_bass_note_t"].astype(np.float64), a["ev_bass_note_amp"].astype(np.float64)
+    where = np.arange(len(bt)) * 0.381966 % 1.0                      # no transcription: golden-angle steps
+    if "bass_t" in m_arr and len(m_arr["bass_t"]):
+        # the note that is sounding when the attack lands - or, failing that, the nearest one
+        mt, me = m_arr["bass_t"], m_arr.get("bass_end", m_arr["bass_t"] + 0.2)
+        j = np.clip(np.searchsorted(mt, bt + 0.06) - 1, 0, len(mt) - 1)
+        sounding = (mt[j] <= bt + 0.06) & (me[j] >= bt - 0.03)
+        near = np.clip(np.searchsorted(mt, bt), 1, len(mt) - 1)
+        near = np.where(np.abs(mt[near - 1] - bt) < np.abs(mt[near] - bt), near - 1, near)
+        j = np.where(sounding, j, near)
+        heard = sounding | (np.abs(mt[j] - bt) < 0.25)
+        tonic = int((mod[1].get("key") or {}).get("tonic", 0)) if len(mod) > 1 and isinstance(mod[1], dict) else 0
+        where = np.where(heard, ((np.round(m_arr["bass_midi"][j]).astype(int) - tonic) % 12) / 12.0, where)
+    keep = ba > 0.12
+    PT, PA = direct.held_events(bt[keep], np.clip(0.25 + 0.75 * ba[keep] / max(np.percentile(ba, 95), 1e-6), 0, 1), n, shader_cosmos.N_PROM)
+    _, PK = direct.held_events(bt[keep], where[keep], n, shader_cosmos.N_PROM)
+    yt, ya = a["ev_syllable_t"].astype(np.float64), a["ev_syllable_amp"].astype(np.float64)
+    keep = ya > 0.25
+    WT, WA = direct.held_events(yt[keep], np.clip(ya[keep], 0, 1), n, shader_cosmos.N_WIND)
+    _, WK = direct.held_events(yt[keep], (np.arange(keep.sum()) * 0.381966 + 0.11) % 1.0, n, shader_cosmos.N_WIND)
+    for k in range(shader_cosmos.N_PROM):
+        extra[f"uPromT{k}"], extra[f"uPromA{k}"], extra[f"uPromK{k}"] = (direct.HOLD, PT[:, k]), (direct.HOLD, PA[:, k]), (direct.HOLD, PK[:, k])
+    for k in range(shader_cosmos.N_WIND):
+        extra[f"uWindT{k}"], extra[f"uWindA{k}"], extra[f"uWindK{k}"] = (direct.HOLD, WT[:, k]), (direct.HOLD, WA[:, k]), (direct.HOLD, WK[:, k])
+    # the bar before a re-entry, the sky holds its breath: up over that bar, gone on the downbeat
+    extra["uBrace"] = (direct.LERP, anticipating_pulse(drop_t, np.clip(drop_a, 0, 1), n, bar, 0.10))
+
     # ---- the planets' phases, and the alignment -------------------------------------------
     # Kepler, for the distances drawn; and each starting longitude chosen so that at the
     # climax they stand in a row to the right of the Sun, in the plane of the screen,

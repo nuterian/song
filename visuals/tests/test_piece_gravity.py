@@ -404,3 +404,66 @@ def test_no_camera_jolts():
         assert j["planet_speed_peak"] < 0.70, (mode, j)
     assert follow.jolt(ch, "hybrid")["slide_peak"] == 0.0        # the hybrid follows nothing
 
+
+def _real_cosmos():
+    from visuals.pieces.gravity import CACHE
+
+    got = listen.load_cached(CACHE)
+    if got is None:
+        pytest.skip("no listening cache for the real track")
+    return got, cosmos.bake(got, models.load_cached(CACHE))
+
+
+def test_a_reentry_is_braced_for_and_the_bass_line_stands_on_the_limb_by_pitch():
+    got, ch = _real_cosmos()
+    brace = ch.data[:, ch.index("uBrace")]
+    bar = 4 * float(got["meta"]["period"])
+    for d in ch.drops:
+        if d["t"] < 2 * bar:
+            continue
+        at = lambda dt: brace[int((d["t"] + dt) * direct.RATE)]
+        assert at(-1.5 * bar) < 0.02 or any(abs(d["t"] - 1.5 * bar - o["t"]) < bar for o in ch.drops)
+        assert at(-0.02) > 0.85 * min(d["strength"], 1.0)          # held, right up to the downbeat
+        assert at(+0.6) < 0.02                                       # and let go on it
+    # where a prominence stands is a pitch class: twelfths of a turn (when the bass was transcribed)
+    k = np.concatenate([ch.data[:, ch.index(f"uPromK{i}")][ch.data[:, ch.index(f"uPromA{i}")] > 0] for i in range(shader_cosmos.N_PROM)])
+    twelfths = np.abs(k * 12 - np.round(k * 12)) < 1e-3
+    assert twelfths.mean() > 0.8, twelfths.mean()
+
+
+def test_a_kick_moves_the_stars_and_does_not_brighten_them():
+    import moderngl
+
+    from visuals.pieces.gravity import render
+
+    got, ch = _real_cosmos()
+    old = render.STYLE
+    render.STYLE = "cosmos"
+    try:
+        r = render.Renderer(640, 360)
+    except Exception as err:                                         # no GL here
+        render.STYLE = old
+        pytest.skip(str(err))
+    try:
+        r.bind(ch.names)
+        t = 130.0
+        row = ch.data[int(t * direct.RATE)].copy()
+        for name in ch.names:                                        # nothing else is happening in the sky
+            if name.startswith(("uHatA", "uCrashA", "uMetA", "uDropA", "uBrace")):
+                row[ch.index(name)] = 0.0
+        row[ch.index("uKickT")] = t - 0.25                            # the ripple is a quarter of a second out
+        lum = lambda img: (img.astype(np.float64) / 255.0) @ np.array([0.2126, 0.7152, 0.0722])
+        row[ch.index("uKickA")] = 0.0
+        still = lum(r.frame(t, row))
+        row[ch.index("uKickA")] = 1.0
+        bent = lum(r.frame(t, row))
+    finally:
+        r.release()
+        render.STYLE = old
+    yy, xx = np.mgrid[0:360, 0:640]
+    far = np.hypot(xx - 320, yy - 180) / 360.0                       # frame heights from the Sun (the static camera centres it)
+    sky = (far > 0.22) & (far < 0.45)                                # where the ripple is, a quarter of a second out
+    moved = np.abs(bent - still)[sky].mean()
+    assert moved > 1e-4                                              # the stars there are somewhere else
+    assert abs(bent[sky].sum() - still[sky].sum()) / still[sky].sum() < 0.02    # and there is no more light than there was
+
