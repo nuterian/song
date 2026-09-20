@@ -16,8 +16,15 @@ const playBtn = document.getElementById("play");
 const seek = document.getElementById("seek");
 const readout = document.getElementById("readout");
 const errorBox = document.getElementById("error");
-const choicesBox = document.getElementById("choices");
-const fpsBox = document.getElementById("fps");
+// A browser may hold an older index.html than the player.js it has just fetched. The
+// controls this script owns are made here if the page does not have them.
+function own(id) {
+  let el = document.getElementById(id);
+  if (!el) { el = document.createElement("span"); el.id = id; document.getElementById("bar").appendChild(el); }
+  return el;
+}
+const choicesBox = own("choices");
+const fpsBox = own("fps");
 
 // The mp4 is rendered at 60, and frame feedback decays once per frame, so the
 // player steps at 60 too. Left to the display's own rate a 120 Hz screen would

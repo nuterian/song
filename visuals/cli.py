@@ -111,6 +111,13 @@ class _RangeHandler(http.server.SimpleHTTPRequestHandler):
     this adds the one case that matters: a single `bytes=start-end`.
     """
 
+    def end_headers(self):  # noqa: N802
+        # Everything here is being worked on. "no-cache" still lets the browser keep a
+        # copy, but makes it ask whether the copy is current - so a page and its script
+        # are never from different days.
+        self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def send_head(self):  # noqa: N802 - the base class spells it this way
         path = self.translate_path(self.path)
         header = self.headers.get("Range", "")
