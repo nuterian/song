@@ -376,3 +376,31 @@ def test_a_trail_is_the_colour_of_the_planet_that_leaves_it():
     line = next(l for l in src.splitlines() if "vec3 tc =" in l)
     assert "PLANET_TINT[i] * sunlight * lum" in line and "kA" not in line and "white" not in line
 
+
+def test_a_fall_has_landed_on_its_moment_and_a_rise_starts_on_its_own():
+    # the floor comes back at 10 s and goes at 20 s: "how wide" falls at 10, rises at 20
+    n = int(30 * direct.RATE)
+    t = np.arange(n) / direct.RATE
+    x = np.where((t >= 10.0) & (t < 20.0), 0.0, 1.0)
+    y = cosmos.arriving(x, 2.0, 4.0)
+    at = lambda s: y[int(s * direct.RATE)]
+    assert at(7.9) > 0.999 and at(10.0) < 0.01                  # drawn in by the downbeat, from two seconds before
+    assert 0.3 < at(9.0) < 0.7
+    assert at(20.0) < 0.01 and 0.3 < at(22.0) < 0.7 and at(24.1) > 0.999   # let go from the moment, over four
+    assert np.abs(np.diff(y, 2)).max() < 1e-4                      # and no corner anywhere
+
+
+def test_no_camera_jolts():
+    from visuals.pieces.gravity import CACHE, follow
+
+    got = listen.load_cached(CACHE)
+    if got is None:
+        pytest.skip("no listening cache for the real track")
+    ch = cosmos.bake(got, models.load_cached(CACHE))
+    for mode in cosmos.MODES:
+        j = follow.jolt(ch, mode)
+        assert j["slide_peak"] < 0.40, (mode, j)               # frame heights a second
+        assert j["zoom_peak"] < 0.45, (mode, j)
+        assert j["planet_speed_peak"] < 0.70, (mode, j)
+    assert follow.jolt(ch, "hybrid")["slide_peak"] == 0.0        # the hybrid follows nothing
+

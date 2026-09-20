@@ -63,6 +63,11 @@ ROLES: dict[str, tuple[str, ...]] = {
     "bass": ("uBass",),
     "drop": ("uDropA",) + tuple(f"uMetA{k}" for k in range(direct.N_METEORS)),
 }
+# The solar system gives mass to two of them: the kick's swell of the Sun and a note's
+# swell of its planet are baked with look-ahead, as levels of their own.
+ROLES["kick"] += ("uSunPulse",)
+ROLES["note"] += tuple(f"uSwell{k}" for k in range(direct.N_SATS))
+
 # clocks: frozen in a solo, so that only the soloed instrument moves anything
 CLOCKS = ("uOrbit", "uOrbitSlow", "uDrift", "uBeats") + tuple(f"uPh{i}" for i in range(8))
 SILENT_IN_SOLO = ("uVoice", "uSustain", "uTint", "uPump")

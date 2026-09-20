@@ -145,6 +145,26 @@ def anticipating_pulse(times: np.ndarray, amps: np.ndarray, n: int, rise: float,
     return out
 
 
+def arriving(x: np.ndarray, before: float, after: float) -> np.ndarray:
+    """A level followed the way a mass would, by something that knows the score.
+
+    Where `x` falls, the output has *finished* falling at that moment, having begun
+    `before` seconds ahead of it; where `x` rises, the output begins to rise at that
+    moment and takes `after` seconds over it. Both are S-curves with no corner in them
+    (a box filter run twice). So the solar system has drawn itself in by the time the
+    floor comes back, lands on the downbeat, and lets go slowly when the floor leaves.
+    """
+    def eased(width: float, shift: float) -> np.ndarray:
+        k = max(int(width * RATE / 2), 1)
+        pad = 2 * k + int(abs(shift) * RATE) + 2
+        y = np.pad(x.astype(np.float64), pad, mode="edge")
+        box = np.ones(k) / k
+        y = np.convolve(np.convolve(y, box, mode="same"), box, mode="same")
+        j = pad + np.arange(len(x)) + int(round(shift * RATE))
+        return y[j]
+    return np.minimum(eased(before, 0.5 * before), eased(after, -0.5 * after))
+
+
 def smootherstep(x: np.ndarray) -> np.ndarray:
     x = np.clip(x, 0.0, 1.0)
     return x * x * x * (x * (x * 6 - 15) + 10)
@@ -205,9 +225,17 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     acts = find_acts(ch.sections, ch.drops)
     hold = col["uHold"]
 
-    # the orbits widen as the floor goes and fall back when it returns - over a bar and
-    # a half, heavily damped: it is the whole solar system moving, and it should look it
-    extra["uSpreadSlow"] = (direct.LERP, direct.spring(1.0 + 0.70 * (1.0 - hold), hz=0.45, damping=0.85))
+    # The orbits widen when the floor goes and draw in when it returns - and it is the
+    # whole solar system moving, so it moves like one. It knows the score: it has drawn in
+    # by the downbeat the floor lands on, having taken the bar before to do it; and when
+    # the floor leaves it takes two bars to let go. A re-entry is that, in three parts:
+    # the draw-in, the hit (which is light: the shock, the flash, the sky), and a release -
+    # the system a little tighter than it rests, easing back over the next two bars.
+    drop_t = np.array([d["t"] for d in ch.drops])
+    drop_a = np.array([d["strength"] for d in ch.drops])
+    reentry = anticipating_pulse(drop_t, drop_a, n, bar, 1.1 * bar)
+    wide = arriving(1.0 - hold, bar, 2 * bar)
+    spread = 1.0 + 0.70 * wide - 0.055 * reentry
 
     # mass does not jump: the Sun and the planets swell *into* their hits
     kt, ka = a["ev_kick_t"], a["ev_kick_amp"]
@@ -237,18 +265,21 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     for i in range(shader_cosmos.N_PLANETS):
         extra[f"uPh{i}"] = (direct.LERP, phases[:, i])
 
-    # ---- the cameras: all three are baked, so a player can change between them as it plays
-    # the re-entry pushes in and lets go - eased, and four times slower than it was
-    push = anticipating_pulse(np.array([d["t"] for d in ch.drops]),
-                              np.array([d["strength"] for d in ch.drops]), n, 0.12, 1.1)
-    breath = 1.0 - 0.070 * push - 0.008 * extra["uSunPulse"][1]
-    cams = cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, extra["uSpreadSlow"][1])
+    # ---- the cameras: all three are baked, so a player can change between them as it plays.
+    # Each has its own solar system, in one respect: a gesture of the whole system - the
+    # spread, the tug of a kick - is sized for the frame it is seen in. Close on Saturn, a
+    # spread that is handsome from afar would throw the Sun across the picture at three
+    # frame-heights a second (it did); so the closer the camera, the less the system heaves.
+    cams = cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread)
+    pulse = extra["uSunPulse"][1]
     for mode, cam in cams.items():
-        cam["uCamSpan"] = cam["uCamSpan"] * breath
+        # a kick tugs the orbits in - by the same small distance *on screen* however close we are
+        cam["uSpreadSlow"] = cam["uSpreadSlow"] * (1.0 - KICK_TUG * np.clip(cam["uCamSpan"], 0.0, 1.0) * pulse)
+        cam["uCamSpan"] = cam["uCamSpan"] * (1.0 - 0.050 * reentry - 0.008 * pulse)
         for name, track in cam.items():
             extra[f"{name}.{mode}"] = (direct.LERP, track)
-    for name, track in cams[CAMERA].items():
-        extra[name] = (direct.LERP, track)
+    for name in PER_CAMERA:
+        extra[name] = (direct.LERP, extra[f"{name}.{CAMERA}"][1])
 
     names = ch.names + list(extra)
     kinds = ch.kinds + [extra[k][0] for k in extra]
@@ -257,12 +288,14 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     out.acts = acts
     out.climax = t_c
     out.variants = {"camera": {"default": CAMERA,
-                               "choices": {mode: {name: f"{name}.{mode}" for name in CAMERA_UNIFORMS} for mode in cams}}}
+                               "choices": {mode: {name: f"{name}.{mode}" for name in PER_CAMERA} for mode in cams}}}
     return out
 
 
 CAMERA_UNIFORMS = ("uCamTurn", "uCamTilt", "uCamRoll", "uCamSpan", "uCamX", "uCamY")
+PER_CAMERA = CAMERA_UNIFORMS + ("uSpreadSlow",)      # what changes when the player changes camera
 MODES = ("static", "hybrid", "cinematic")
+KICK_TUG = 0.030                                     # how far a kick pulls the orbits in, seen from the home distance
 
 
 def _shot(act: Act, e: np.ndarray, tilt_s: float) -> dict:
@@ -295,28 +328,34 @@ def cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, blend_bars
     """Three ways of watching the same system.
 
     static      the picture that worked: the section's tilt and roll, no zoom, no slide.
-    cinematic   a shot per act, cross-faded into the next over eight bars on the bar line.
-    hybrid      the static view, never still: it turns all the way round once in ninety-six
-                bars, and leans two-fifths of the way toward whatever the cinematic one is doing.
+    cinematic   a shot per act. It travels to the next shot during the last bars of this
+                one and *arrives on the bar line* the next act begins on - the move belongs
+                to the build, the downbeat to a settled frame.
+    hybrid      the static framing, never still: it turns all the way round once in
+                ninety-six bars, and at each act leans in or out a little, and tips a
+                little, the way the cinematic one does a lot. It follows nothing.
 
     All three hold the same heading at the climax, so the planets' row is the same event.
+    Each camera's tracks include the spread of the orbits *as that camera sees it*.
     """
     from . import shader_cosmos
 
     n = len(t)
     home = float(np.median(tilt_s))
-    half = 0.5 * blend_bars * bar
     acc = {k: np.zeros(n) for k in ("dturn", "tilt", "lspan", "ox", "oy")}
     weight = np.zeros(n)
     shots = []
-    for a in acts:
+    for k, a in enumerate(acts):
         u = np.clip((t - a.start) / max(a.end - a.start, 1e-6), -0.5, 1.5)
         sh = _shot(a, smootherstep(u), home)
-        rise = smootherstep((t - (a.start - half)) / (2 * half)) if a.index > 0 else np.ones(n)
-        fall = 1.0 - smootherstep((t - (a.end - half)) / (2 * half)) if a.index < len(acts) - 1 else np.ones(n)
+        # the way in: the last bars of the act before, never more than half of it
+        into = min(blend_bars * bar, 0.5 * (acts[k - 1].end - acts[k - 1].start)) if k else 0.0
+        out = min(blend_bars * bar, 0.5 * (a.end - a.start)) if k < len(acts) - 1 else 0.0
+        rise = smootherstep((t - (a.start - into)) / into) if k else np.ones(n)
+        fall = 1.0 - smootherstep((t - (a.end - out)) / out) if k < len(acts) - 1 else np.ones(n)
         w = rise * fall
-        for k in ("dturn", "tilt", "lspan"):
-            acc[k] += w * sh[k]
+        for key in ("dturn", "tilt", "lspan"):
+            acc[key] += w * sh[key]
         acc["ox"] += w * sh["off"][0]
         acc["oy"] += w * sh["off"][1]
         weight += w
@@ -327,40 +366,49 @@ def cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, blend_bars
     # row of planets is one event, so every camera is looking exactly the same way then.
     cin["dturn"] = cin["dturn"] - float(np.interp(t_c, t, cin["dturn"]))
 
-    def on_screen(i, turn, e, toward):
+    def seen_from(lspan):
+        """The spread of the orbits, sized for a frame this wide: whole at the home
+        distance and beyond, and less the closer the camera is."""
+        return 1.0 + (spread - 1.0) * np.clip(np.exp(lspan) / 0.80, 0.0, 1.0) ** 1.5
+
+    def on_screen(i, turn, e, toward, spread_):
         """Where planet i is in the camera's turned frame: across, and up the screen."""
         a0 = np.maximum(0.255, 0.156 / e)
-        r = (a0 + shader_cosmos.ORBIT_STEP[i]) * spread * toward
+        r = (a0 + shader_cosmos.ORBIT_STEP[i]) * spread_ * toward
         th = 2 * np.pi * phases[:, i] + turn
         return r * np.cos(th), r * np.sin(th) * e
 
     # A shot that must hold two bodies is framed from where they are: wide enough for the
     # Sun, its corona and the planet with half as much again round them, and never
-    # cutting either at the edge. Measured with the cinematic camera's own turn and tilt.
+    # cutting either at the edge. Measured with the cinematic camera's own turn and tilt,
+    # and - since how wide the frame is decides how far the orbits spread in it - twice.
     SUN, PLANET = 0.150, 0.045
-    lspan = np.zeros(n)
-    for sh, w in shots:
-        ls = sh["lspan"]
-        if sh.get("fit"):
-            sx, sy = on_screen(sh["subject"], turn0 + cin["dturn"], np.clip(cin["tilt"], 0.2, 0.98), 1.0)
-            wide = np.maximum(sx + PLANET, SUN) - np.minimum(sx - PLANET, -SUN)
-            high = np.maximum(sy + PLANET, SUN) - np.minimum(sy - PLANET, -SUN)
-            ls = np.log(np.maximum(1.45 * high, 1.45 * wide * 9.0 / 16.0))
-        lspan += w / weight * ls
-    cin["lspan"] = lspan
+    for _ in range(2):
+        mine = seen_from(cin["lspan"])
+        lspan = np.zeros(n)
+        for sh, w in shots:
+            ls = sh["lspan"]
+            if sh.get("fit"):
+                sx, sy = on_screen(sh["subject"], turn0 + cin["dturn"], np.clip(cin["tilt"], 0.2, 0.98), 1.0, mine)
+                wide = np.maximum(sx + PLANET, SUN) - np.minimum(sx - PLANET, -SUN)
+                high = np.maximum(sy + PLANET, SUN) - np.minimum(sy - PLANET, -SUN)
+                ls = np.log(np.maximum(1.45 * high, 1.45 * wide * 9.0 / 16.0))
+            lspan += w / weight * ls
+        cin["lspan"] = lspan
 
     def finish(dturn, tilt, lspan, lean, roll):
         turn = turn0 + dturn
         e = np.clip(tilt, 0.20, 0.98)
+        mine = seen_from(lspan)
         # what each shot looks at, on screen in the camera's turned frame, blended like the rest
         tx, ty = np.zeros(n), np.zeros(n)
         for sh, w in shots:
-            if sh["subject"] == -1:
+            if sh["subject"] == -1 or lean == 0.0:
                 continue
             if sh["subject"] == -2:                       # the middle of the row
-                px, py = 0.34 * spread * np.ones(n), np.zeros(n)
+                px, py = 0.34 * mine, np.zeros(n)
             else:
-                px, py = on_screen(sh["subject"], turn, e, sh["toward"])
+                px, py = on_screen(sh["subject"], turn, e, sh["toward"], mine)
                 if sh.get("fit"):                         # the middle of the two of them, edge to edge
                     px = 0.5 * (np.maximum(px + PLANET, SUN) + np.minimum(px - PLANET, -SUN))
                     py = 0.5 * (np.maximum(py + PLANET, SUN) + np.minimum(py - PLANET, -SUN))
@@ -372,12 +420,13 @@ def cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, blend_bars
         # the point that lands in the middle of the frame is this one turned clockwise by roll.
         cr, sr = np.cos(roll), np.sin(roll)
         return {"uCamTurn": turn, "uCamTilt": tilt, "uCamRoll": roll, "uCamSpan": span,
-                "uCamX": cr * sx + sr * sy, "uCamY": -sr * sx + cr * sy}
+                "uCamX": cr * sx + sr * sy, "uCamY": -sr * sx + cr * sy, "uSpreadSlow": mine}
 
     zero = np.zeros(n)
     drift = 2 * np.pi * (t - t_c) / (96.0 * bar)
+    lean_in = np.clip(0.35 * cin["lspan"], np.log(0.85), np.log(1.50))
     return {
         "static": finish(zero, tilt_s, zero, 0.0, roll_s),
-        "hybrid": finish(drift + 0.40 * cin["dturn"], tilt_s + 0.40 * (cin["tilt"] - tilt_s), 0.40 * cin["lspan"], 0.40, roll_s),
+        "hybrid": finish(drift + 0.25 * cin["dturn"], tilt_s + 0.25 * (cin["tilt"] - tilt_s), lean_in, 0.0, roll_s),
         "cinematic": finish(cin["dturn"], cin["tilt"], cin["lspan"], 1.0, 0.5 * roll_s),
     }

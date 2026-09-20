@@ -466,7 +466,7 @@ void main() {{
     // The innermost orbit clears the Sun even at the top of a beat, however far the plane
     // is tipped: a planet behind the Sun, or across its face, is a note nobody saw.
     float a0 = max(0.255, 0.156 / e);
-    float tug = uSpreadSlow * (1.0 - 0.030 * uSunPulse);              // every beat tugs the system in - and it has inertia
+    float tug = uSpreadSlow;                                          // the spread, with every beat's tug on it baked in - sized for this camera's frame
     float noteT[N_SATS] = {_gather("uNoteT", N_SATS)};
     float noteA[N_SATS] = {_gather("uNoteA", N_SATS)};
     float noteM[N_SATS] = {_gather("uNoteM", N_SATS)};
