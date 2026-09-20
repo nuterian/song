@@ -169,8 +169,8 @@ const vec3 PLANET_TINT[N_PLANETS] = vec3[{N_PLANETS}]({", ".join(_vec3(c) for c 
 // An orchestra, not a chorus: each planet answers its note in its own way. How many rings it
 // throws, how far (in its own radii), how quickly they open (seconds), how wide its pool.
 // Mercury flicks; Venus, all atmosphere, blooms; Earth rings twice; Mars is dry and quick;
-// Jupiter rolls out three; Saturn's answer is in its rings; Uranus, on its side, throws its
-// ring upright; Neptune is slow and far-reaching.
+// Jupiter rolls out three; Saturn's answer is in its rings; Uranus rings once, wide;
+// Neptune is slow and far-reaching. All of it in the plane of the orbits.
 const int   PING_N[N_PLANETS]     = int[{N_PLANETS}](1, 1, 2, 1, 3, 0, 1, 1);
 const float PING_REACH[N_PLANETS] = float[{N_PLANETS}](2.2, 2.0, 2.6, 2.3, 2.5, 0.0, 2.8, 3.6);
 const float PING_TAU[N_PLANETS]   = float[{N_PLANETS}](0.06, 0.20, 0.12, 0.08, 0.16, 0.12, 0.13, 0.28);
@@ -692,7 +692,7 @@ void main() {{
             float pool = (1.0 - smoothstep(-0.6, 0.6, (rhoP - size * (1.0 + POOL[i] * (0.5 + 1.2 * pop))) / gP)) * step(0.03, pop);
             float poolA = pool * clamp(2.4 * pop, 0.0, 0.70) * ev;
             pc = mix(pc, own, poolA); pA = max(pA, poolA);
-            vec2 dqR = i == 6 ? dq.yx : dq;                              // Uranus lies on its side, and so does what it throws
+            vec2 dqR = dq;                                               // everything a planet throws lies in the plane of the orbits
             for (int j = 0; j < 3; j++) {{
                 if (j >= PING_N[i]) break;
                 float ageJ = nAge - 0.070 * float(j);                    // one after another
@@ -710,7 +710,10 @@ void main() {{
                 // the bow wave: an arc in the plane, standing off the planet on the side the Sun is
                 vec2 dpl = vec2(dq.x, dq.y / e);
                 float sunward = dot(normalize(dpl + 1e-6), -vec2(cos(th), sin(th)));
-                float bow = planeRing(dq, e, size * (1.9 + 0.9 * (1.0 - struck)), 1.1 + 1.2 * struck, pxScene) * smoothstep(0.30, 0.62, sunward) * struck * ev;
+                // a crescent: thickest on the line to the Sun, thinning and fading to nothing at its ends
+                float taper = smoothstep(0.05, 1.0, sunward);
+                float bow = planeRing(dq, e, size * (1.9 + 0.9 * (1.0 - struck)), (0.25 + 1.35 * struck) * taper * taper, pxScene)
+                            * smoothstep(0.05, 0.55, sunward) * struck * ev;
                 pc = mix(pc, struckInk, step(pA, bow)); pA = max(pA, bow);
             }}
 
@@ -851,14 +854,15 @@ void main() {{
             float age = uTime - promT[i];
             if (age < 0.0 || age > 0.60 || promA[i] <= 0.0) continue;
             float dth = abs(mod(around - TAU * promK[i] + PI, TAU) - PI);
-            tongue += R * (0.13 + 0.48 * promA[i]) * exp(-dth * dth / 0.024) * (1.0 - 0.25 * exp(-age / 0.040)) * (1.0 - smoothstep(0.16, 0.60, age));   // light: there on its frame
+            // a swell of the rim, not a spike: broad, blunt-topped, a third as high as it is wide
+            tongue += R * (0.09 + 0.30 * promA[i]) * exp(-pow(dth / 0.34, 2.6)) * (1.0 - 0.25 * exp(-age / 0.040)) * (1.0 - smoothstep(0.16, 0.60, age));   // light: there on its frame
         }}
         float burst = 0.0;
         for (int i = 0; i < N_FLARE; i++) {{
             float age = uTime - flareT[i];
             if (age < 0.0 || age > 0.9 || flareA[i] <= 0.0) continue;
             float dth = abs(mod(around - TAU * flareK[i] + PI, TAU) - PI);
-            burst += R * 1.25 * flareA[i] * exp(-dth * dth / 0.020) * exp(-age / 0.20);
+            burst += R * 0.80 * flareA[i] * exp(-pow(dth / 0.40, 2.6)) * exp(-age / 0.20);
         }}
         reach += tongue + burst;
         vec3 rim = mix(vec3(1.0, 0.60, 0.24), kBody, 0.78 - 0.30 * uCharge) * (0.80 + 0.12 * uCharge);   // hotter as it charges

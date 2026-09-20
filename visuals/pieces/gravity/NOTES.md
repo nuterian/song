@@ -461,7 +461,8 @@ prominences:
   it. They are now its own colour, lifted, drawn over the outline; and each planet
   answers in its own manner (`PING_N` and friends): Mercury flicks, Venus blooms,
   Earth rings twice, Jupiter rolls out three, Saturn's answer runs out along its
-  rings, Uranus - on its side - throws its ring upright, Neptune is slow and wide. A
+  rings, Neptune is slow and wide. (Uranus threw its ring upright, for its tilt; it read
+  as a wireframe at right angles to everything else, and everything is in the plane now.) A
   note swings a planet's moons out.
 - **What the Sun sends, arrives.** A clap's ring, the re-entry's shock and a flare's
   front are circles in the plane about the Sun, so the moment each reaches an orbit
