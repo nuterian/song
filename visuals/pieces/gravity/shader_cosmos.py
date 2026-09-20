@@ -68,6 +68,12 @@ _PLANET_SLOT = [SLOT_TO_PLANET.index(i) for i in range(N_PLANETS)]
 # ringed Saturn is not a dot and they have to be able to stand in a row.
 ORBIT_STEP = [0.0, 0.040, 0.082, 0.124, 0.222, 0.304, 0.376, 0.440]
 PLANET_SIZE = [0.0100, 0.0140, 0.0150, 0.0118, 0.0300, 0.0255, 0.0195, 0.0188]
+# The mean colour of each planet's surface as `surface()` paints it, measured by
+# `surface_means()` (a test holds the two together). A planet's trail is this colour, and
+# so is the glow of its night side - Earth's is sea, land, ice and cloud together, which
+# is a paler blue than its sea.
+PLANET_TINT = [(0.577, 0.541, 0.511), (0.924, 0.783, 0.487), (0.426, 0.646, 0.726), (0.772, 0.384, 0.233),
+               (0.820, 0.649, 0.487), (0.884, 0.764, 0.509), (0.580, 0.865, 0.900), (0.203, 0.364, 0.864)]
 BELTS = ((0.148, 0.0150, 3), (0.485, 0.0300, 2))       # (inner edge beyond a0, lane width, lanes): asteroids; Kuiper
 
 
@@ -142,8 +148,7 @@ const ivec2 GALAXY_SIZE = ivec2({sky.MILKY_WAY[1]}, {sky.MILKY_WAY[0]});
 const float ORBIT_STEP[N_PLANETS] = float[{N_PLANETS}]({_floats(ORBIT_STEP)});
 const float PLANET_SIZE[N_PLANETS] = float[{N_PLANETS}]({_floats(PLANET_SIZE)});
 const int PLANET_SLOT[N_PLANETS] = int[{N_PLANETS}]({", ".join(str(x) for x in _PLANET_SLOT)});
-const vec3 PLANET_TINT[N_PLANETS] = vec3[{N_PLANETS}](vec3(0.64, 0.60, 0.56), vec3(0.95, 0.84, 0.56), vec3(0.16, 0.48, 0.88),
-    vec3(0.84, 0.40, 0.22), vec3(0.90, 0.76, 0.58), vec3(0.93, 0.83, 0.58), vec3(0.62, 0.89, 0.91), vec3(0.24, 0.42, 0.92));
+const vec3 PLANET_TINT[N_PLANETS] = vec3[{N_PLANETS}]({", ".join(_vec3(c) for c in PLANET_TINT)});
 const vec3 GAL_POLE = {_vec3(_G["pole"])};
 const vec3 GAL_CENTRE = {_vec3(_G["centre"])};
 const vec3 GAL_ACROSS = {_vec3(_G["across"])};
@@ -539,14 +544,16 @@ void main() {{
         vec3 pc = vec3(0.0); float pA = 0.0;
 
         // its trail: no orbit is drawn. A short wake that fades behind it, longer the
-        // faster it goes - its own colour, warmed by the song's
+        // faster it goes - the mean colour of its own surface
         {{
             float behind = mod(th - thW, TAU);
             float reach = (0.32 + 0.95 * pow(0.250 / (ORBIT_STEP[i] + 0.250), 1.5)) * (0.60 + 0.40 * uHold);
             float fade = behind < reach ? pow(1.0 - behind / reach, 1.25) : 0.0;
             float grad = length(vec2(plW.x, plW.y / e)) / max(rhoW, 1e-6);
-            float tr = disc(abs(rhoW - a) / (grad * pxScene), 1.0) * fade * (0.34 + 0.40 * lum);
-            vec3 tc = mix(mix(PLANET_TINT[i], kA, 0.40), white, 0.20);
+            // it thins as it fades, as an inked line does: near the planet it is solid enough
+            // to be the planet's colour and not the sky's seen through it
+            float tr = disc(abs(rhoW - a) / (grad * pxScene), mix(0.60, 1.20, fade)) * mix(fade, sqrt(fade), 0.5) * (0.50 + 0.36 * lum);
+            vec3 tc = PLANET_TINT[i] * sunlight * lum;                 // the planet's own colour, in the planet's own light
             if (plW.y > 0.0) {{ under = mix(under, tc, step(underA, tr)); underA = max(underA, tr); }}
             else {{ over = mix(over, tc, step(overA, tr)); overA = max(overA, tr); }}
         }}
@@ -680,3 +687,52 @@ def vertex_source(header: str = GL_HEADER) -> str:
 
 def fragment_source(header: str = GL_HEADER) -> str:
     return header + FRAGMENT_BODY.lstrip("\n")
+
+
+def surface_means(turns: int = 24):
+    """Each planet's surface, averaged over the disc we see and a full rotation: the
+    shader's own `surface()` drawn on eight spheres side by side. Needs a GL context."""
+    import re
+
+    import moderngl
+    import numpy as np
+
+    src = fragment_source()
+    head = src[:src.index("void main()")]
+    out = re.search(r"out vec4 (\w+);", head).group(1)
+    main = """
+void main() {
+    gAA = 1.0;
+    vec2 uv = gl_FragCoord.xy / uResolution;
+    int i = int(floor(uv.x * 8.0));
+    vec2 d = vec2(fract(uv.x * 8.0), uv.y) * 2.0 - 1.0;
+    float r2 = dot(d, d);
+    if (r2 > 1.0) { OUT = vec4(0.0); return; }
+    vec3 n = vec3(d, sqrt(1.0 - r2));
+    vec3 axis = vec3(0.0, 1.0, 0.0);
+    float lat = dot(n, axis);
+    vec3 e1 = normalize(cross(axis, vec3(0.31, 0.95, 0.10))), e2 = cross(axis, e1);
+    vec3 sq = vec3(rot2(uTime) * vec2(dot(n, e1), dot(n, e2)), lat).xzy;
+    OUT = vec4(surface(i, lat, sq, 0.01), 1.0);
+}
+""".replace("OUT", out)
+    ctx = moderngl.create_standalone_context(require=330)
+    try:
+        prog = ctx.program(vertex_shader=vertex_source(), fragment_shader=head + main)
+        quad = ctx.buffer(np.array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1], dtype="f4").tobytes())
+        vao = ctx.vertex_array(prog, [(quad, "2f", "aPos")])
+        side = 256
+        fbo = ctx.framebuffer([ctx.texture((8 * side, side), 4, dtype="f4")])
+        fbo.use()
+        prog["uResolution"].value = (8.0 * side, float(side))
+        total = np.zeros((8, 3))
+        for a in np.linspace(0.0, 2 * np.pi, turns, endpoint=False):
+            prog["uTime"].value = float(a)
+            vao.render(moderngl.TRIANGLES)
+            img = np.frombuffer(fbo.read(components=4, dtype="f4"), dtype=np.float32).reshape(side, 8 * side, 4)
+            for i in range(8):
+                tile = img[:, i * side:(i + 1) * side]
+                total[i] += tile[tile[..., 3] > 0.5][:, :3].mean(axis=0)
+        return total / turns
+    finally:
+        ctx.release()

@@ -365,3 +365,14 @@ def test_every_uniform_the_3d_shader_declares_is_fed():
     # uSS is the renderer's to set (how many render pixels to an output pixel), not the song's
     fed = set(ch.names) | {"uTime", "uResolution", "uSS"} | set(shader_cosmos.TEXTURES)
     assert declared - fed == set()
+
+
+def test_a_trail_is_the_colour_of_the_planet_that_leaves_it():
+    # the table the trails are drawn from is the measured mean of each surface, not a guess
+    means = shader_cosmos.surface_means()
+    assert np.abs(means - np.array(shader_cosmos.PLANET_TINT)).max() < 0.02
+    # and nothing else is mixed into a trail: not the accent, not white
+    src = shader_cosmos.fragment_source()
+    line = next(l for l in src.splitlines() if "vec3 tc =" in l)
+    assert "PLANET_TINT[i] * sunlight * lum" in line and "kA" not in line and "white" not in line
+
