@@ -425,7 +425,7 @@ void main() {{
             if (abs(d.x) > 26.0 || abs(d.y) > 26.0) continue;
             float h = hash12(s.xz * 91.7 + s.y * 13.1);
             float mine = 1.0 - min(abs(floor(h * 3.0) - uHatK), 1.0);
-            float lift = (tick * mine + shimmer * (0.4 + 0.6 * hash11(h * 7.3))) * step(mag, 4.6);
+            float lift = (tick * mine + shimmer * (0.4 + 0.6 * hash11(h * 7.3))) * step(mag, 5.2);
             float rad = clamp(1.05 + 0.62 * (5.6 - mag), 1.05, 5.2) * (1.0 + 0.55 * lift);
             float a = disc(length(d), rad);
             if (mag < 2.6) {{
@@ -761,7 +761,7 @@ void main() {{
             float age = uTime - promT[i];
             if (age < 0.0 || age > 0.60 || promA[i] <= 0.0) continue;
             float dth = abs(mod(around - TAU * promK[i] + PI, TAU) - PI);
-            reach += R * (0.10 + 0.50 * promA[i]) * exp(-dth * dth / 0.032) * (1.0 - 0.55 * exp(-age / 0.040)) * (1.0 - smoothstep(0.20, 0.60, age));
+            reach += R * (0.14 + 0.58 * promA[i]) * exp(-dth * dth / 0.032) * (1.0 - 0.25 * exp(-age / 0.040)) * (1.0 - smoothstep(0.16, 0.60, age));   // light: there on its frame
         }}
         // the song's colour, plainly: this rim is where a section's palette is most seen
         col = mix(col, mix(vec3(1.0, 0.60, 0.24), kBody, 0.78) * 0.80, disc(out_ / pxScene, reach / pxScene) * 0.92 * (0.70 * lum + 0.30 * ev));
@@ -810,7 +810,7 @@ void main() {{
             if (age < 0.0 || age > 0.60 || promA[i] <= 0.0) continue;
             float th = TAU * promK[i];
             vec2 foot = R * vec2(sin(th), cos(th));                     // the middle of the loop's feet, on the limb
-            float high = R * (0.13 + 0.30 * promA[i]) * (1.0 - 0.55 * exp(-age / 0.040));
+            float high = R * (0.13 + 0.30 * promA[i]) * (1.0 - 0.25 * exp(-age / 0.040));
             float going = 1.0 - smoothstep(0.22, 0.60, age);
             float loop = disc(abs(length(q - foot) - high) / pxScene, (1.0 + 2.4 * promA[i]) * going) * smoothstep(0.0, 0.25, going);
             vec3 fire = mix(mix(vec3(1.0, 0.50, 0.16), kBody, 0.30), white, 0.55 * exp(-age / 0.07));

@@ -376,3 +376,76 @@ grid. This version is frozen in `snapshots/` and tagged `piece-v3-cel`. Its sync
 been checked solo (diagonal 1.00 / 1.00 / 0.98 / 0.84 / 0.97 on the printed draft) but
 the full measurement has not been re-run since the print came out.
 
+
+
+# Version 4: the solar system, seen three ways
+
+`--style cosmos`. Version 3's picture with the placeholders taken out: the eight
+planets in their own colours, their moons, Saturn's rings, two belts, a comet; five
+thousand stars from the Yale Bright Star Catalogue at their true places; the Milky Way
+cut in flat tones out of NASA's all-sky map. The song's palette is in the *light* -
+corona, ripples, the voice's ring - and never repaints a planet. Everything a hit
+throws lies in the plane of the orbits, on the axis of the gravity it rides. No orbit
+is drawn; each planet leaves a short trail in the mean colour of its own surface
+(measured from `surface()` by `surface_means()`, held by a test - the first table was
+typed by hand and had Earth the colour of its sea).
+
+## Perspective was the mistake
+
+The first build was a perspective ray tracer with a flying camera, and it was turned
+down flat: spheres off-centre became eggs, the plane ran to a horizon, thin things
+crawled (edge shimmer 0.097 against v3's 0.047), and the shots were poor. It was
+rebuilt orthographic - an orrery's camera, which turns, tilts, rolls, zooms and slides
+and distorts nothing - outward from v3's composition. Every edge is resolved against
+the size of a pixel *where that edge is*; shimmer 0.014. The sky alone is seen
+through a lens, because it is infinitely far.
+
+## Three cameras in one bundle
+
+`static` (the section's tilt and roll; no zoom, no slide), `cinematic` (a shot per
+act) and `hybrid` are all baked, as `uCam*.{mode}`, and the player remaps the camera
+uniforms live. Acts come from merging sections on boundary strength (`find_acts`);
+nothing is keyed to this song's bar numbers. The planets' starting longitudes are
+solved so that they stand in a row at the climax, and all three cameras face the same
+way at that moment.
+
+## What "jarring" turned out to be
+
+`follow.jolt()` measures it from the channels alone. Close on Saturn, the re-entry's
+spread of the orbits - handsome from the home distance - slid the scene at 1.7
+frame-heights a second; every camera's re-entry push zoomed at 100 %/s; and the hybrid,
+a 40 % blend of the cinematic one, held no subject at all (Saturn wandered over 1.5
+frame-heights). So:
+
+- `arriving()`: the spread knows the score. It has *finished* drawing in on the
+  downbeat the floor returns on, having taken the bar before; it lets go over two.
+  A re-entry is draw-in / hit / release, and the hit itself is light.
+- A gesture of the whole system is sized for the frame it is seen in: the spread
+  and the kick's tug are baked per camera (`uSpreadSlow.{mode}`), less the closer in.
+- Shots arrive on the bar line instead of cross-fading through it.
+- The hybrid is the static framing with a slow turn and a gentle lean. It follows nothing.
+
+Slide peak 169 -> 34 %/s, zoom peak 104 -> 27-39 %/s, fastest planet across the frame
+255 -> 51 %/s. A test holds the limits.
+
+## Detectors that follow the bodies
+
+`measure` watches a fixed, centred Sun. `follow.geometry()` repeats the shader's
+arithmetic and says where the Sun and each planet are in every frame of any camera
+(checked against rendered frames: a quarter of a planet's radius), and each detector
+looks there. Two lessons:
+
+- With one instrument drawn and everything else frozen, a detector notices anything
+  at all; "did it notice" made a matrix of ones. The matrix now reports *how far* a
+  detector rises, as a fraction of its rise for its own instrument.
+- The Sun's radius is measured from the area of Sun-coloured pixels, and the bass
+  from the tallest tongue of the corona's silhouette over the usual one, sector by
+  sector - because a kick swells the whole rim alike and a prominence is somewhere.
+
+What it found in the first cosmos build: bass notes and syllables moved nothing, and
+the kick's light fell on the planets (the notes') and the Sun's face (the voice's).
+Each now has its own: prominences placed round the limb by pitch class; strokes
+standing out of the voice's ring; and for the kick, mass bends light - a ripple leaves
+the Sun and *moves* the stars it passes without brightening them (brightness is the
+hats'; a test holds both halves). A re-entry dims the sky through the bar before and
+opens it on the downbeat.

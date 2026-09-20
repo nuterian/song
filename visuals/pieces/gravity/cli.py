@@ -84,6 +84,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "measure":
+        if args.style == "cosmos":
+            # the camera moves, so the detectors follow the bodies; and first, from the
+            # channels alone, how hard each camera moves the picture
+            import json
+
+            from . import follow, render
+            got = _listen()
+            ch = render.bake(got)
+            report = {"jolt": [follow.jolt(ch, m) for m in _cosmos.MODES]}
+            for j in report["jolt"]:
+                print(f"  {j['camera']:9s} slide peak {100 * j['slide_peak']:5.1f} %/s   zoom peak {100 * j['zoom_peak']:5.1f} %/s   "
+                      f"turn peak {j['turn_peak_deg']:4.1f} deg/s   fastest planet {100 * j['planet_speed_peak']:5.1f} %/s")
+            report["sync"] = [follow.sync(got, ch, args.camera)]
+            out.mkdir(parents=True, exist_ok=True)
+            (out / f"sync-{args.camera}.json").write_text(json.dumps(report, indent=1))
+            return 0
         from . import measure
         return measure.main(_listen(), args.video)
 
@@ -108,6 +124,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "matrix":
+        if args.style == "cosmos":
+            from . import follow, render
+            got = _listen()
+            follow.matrix(got, render.bake(got), args.camera, args.start, args.duration)
+            return 0
         from . import measure
         measure.matrix(_listen(), args.start, args.duration)
         return 0
