@@ -467,3 +467,59 @@ def test_a_kick_moves_the_stars_and_does_not_brighten_them():
     assert moved > 1e-4                                              # the stars there are somewhere else
     assert abs(bent[sky].sum() - still[sky].sum()) / still[sky].sum() < 0.02    # and there is no more light than there was
 
+
+def test_flares_fire_on_played_notes_on_the_beat_at_a_rate_found_from_the_song():
+    period, bar = 0.5, 2.0
+    n = int(120 * direct.RATE)
+    beats = np.arange(0.0, 120.0, period)
+    for every in (0.25, 0.125):                     # a sparse bass line and a relentless one
+        t = np.arange(8.0, 100.0, every) + 0.003
+        amp = 0.5 + 0.5 * np.sin(np.arange(len(t))) ** 2
+        ft, fa, fk, charge = cosmos.flares(t, amp, (np.arange(len(t)) % 12) / 12.0, beats, n, bar)
+        assert all(np.abs(beats - x).min() < 0.040 for x in ft)             # on the beat
+        assert all(np.abs(t - x).min() < 1e-9 for x in ft)                   # and each one a played note
+        bars_playing = len(np.unique(np.floor(t / bar)))
+        assert 0.6 * bars_playing / 2 <= len(ft) <= 1.4 * bars_playing / 2   # about one in two bars, however busy the line
+        for x in ft:                                                         # the discharge spends the charge
+            assert charge[int(np.ceil(x * direct.RATE)) + 1] < 0.25
+        assert charge.max() <= 1.0 and charge[: int(7 * direct.RATE)].max() == 0.0
+
+
+def test_a_planet_is_struck_when_a_ring_from_the_sun_reaches_it():
+    from visuals.pieces.gravity import follow, render
+
+    got, ch = _real_cosmos()
+    old = render.STYLE
+    render.STYLE = "cosmos"
+    try:
+        r = render.Renderer(1280, 720)
+    except Exception as err:
+        render.STYLE = old
+        pytest.skip(str(err))
+    try:
+        r.bind(ch.names)
+        t, planet = 130.0, 4
+        k = int(t * direct.RATE)
+        row = ch.data[k].copy()
+        for name in ch.names:
+            if name.startswith(("uRingA", "uNoteA", "uFlareA", "uDropA", "uSwell", "uPromA")):
+                row[ch.index(name)] = 0.0
+        g = follow.geometry(ch, np.array([k]))
+        e = float(g["e"][0])
+        orbit = (max(0.255, 0.156 / e) + shader_cosmos.ORBIT_STEP[planet]) * float(row[ch.index("uSpreadSlow")])
+        sun = 0.078 * (0.50 + 0.80 * float(row[ch.index("uMass")])) * (1.0 + 0.22 * float(row[ch.index("uSunPulse")]))
+        reach_age = (max(orbit - sun - 0.035, 0.0) / 0.66) ** (1.0 / 0.72)
+        row[ch.index("uRingT0")] = t - reach_age - 0.03                     # the ring got there a thirtieth of a second ago
+        yy, xx = np.mgrid[0:720, 0:1280]
+        fx, fy = (xx + 0.5 - 640) / 720, -(yy + 0.5 - 360) / 720
+        on = np.hypot(fx - g["planet_x"][0, planet], fy - g["planet_y"][0, planet]) < 0.9 * g["planet_r"][0, planet]
+        assert on.sum() > 50
+        lum = lambda img: (img.astype(np.float64) / 255.0) @ np.array([0.2126, 0.7152, 0.0722])
+        calm = lum(r.frame(t, row))[on].mean()
+        row[ch.index("uRingA0")] = 1.0
+        struck = lum(r.frame(t, row))[on].mean()
+    finally:
+        r.release()
+        render.STYLE = old
+    assert struck > 1.03 * calm, (calm, struck)
+

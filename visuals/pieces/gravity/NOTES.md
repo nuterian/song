@@ -449,3 +449,65 @@ standing out of the voice's ring; and for the kick, mass bends light - a ripple 
 the Sun and *moves* the stars it passes without brightening them (brightness is the
 hats'; a test holds both halves). A re-entry dims the sky through the bar before and
 opens it on the downbeat.
+
+## An orchestra, not a chorus
+
+"Think of this as an orchestra of dancing celestial bodies ... each contributes in
+their own unique way." Three things followed from that and from watching the first
+prominences:
+
+- **What a planet gives off is the planet's.** Its pool and rings were in the song's
+  accent and its dark outline was drawn over them, so they read as something laid on
+  it. They are now its own colour, lifted, drawn over the outline; and each planet
+  answers in its own manner (`PING_N` and friends): Mercury flicks, Venus blooms,
+  Earth rings twice, Jupiter rolls out three, Saturn's answer runs out along its
+  rings, Uranus - on its side - throws its ring upright, Neptune is slow and wide. A
+  note swings a planet's moons out.
+- **What the Sun sends, arrives.** A clap's ring, the re-entry's shock and a flare's
+  front are circles in the plane about the Sun, so the moment each reaches an orbit
+  can be worked out; at that moment the planet is struck - its sunward side flashes
+  and a bow wave stands off it toward the Sun. A test sets a ring to arrive and looks.
+- **Charge, and the flare.** The bass line charges the corona (`uCharge`: it stands
+  further out and hotter as it builds). Past a threshold, the next bass note *that
+  lands on a beat* discharges it: one great tongue from where that note's prominence
+  stands, the limb flashes, and a front fans out across a third of the plane, striking
+  the planets in its way, which ring. The threshold is found by bisection as the one
+  at which the song fires about once in two bars of the time its bass is playing
+  (`cosmos.flares`; 69 here) - so a sparse line and a relentless one both get events.
+  The loop of fire that stood on each prominence is gone: it read as a stray circle.
+
+## Where version 4 stands
+
+Whole song, 960x540, every frame (`--style cosmos --camera <mode> measure`), recall
+against the 95th percentile of the same detector where nothing of that kind happened:
+
+|              | first cosmos build (static) | static | cinematic | onset |
+|--------------|-----------------------------|--------|-----------|-------|
+| kick         | 0.56                        | 0.91   | 0.96      | -37 ms (it swells *into* the hit) |
+| clap         | 1.00                        | 1.00   | 0.94      | -17 ms |
+| voice        | 0.75                        | 0.84   | 0.87      | -17 ms |
+| notes        | 0.54                        | 0.76   | 0.65      | -15 ms |
+| bass notes   | 0.03                        | 0.59   | 0.48      | -13 ms |
+| hats         | 0.48                        | 0.54   | 0.61      | -15 ms |
+| crash        | 0.29                        | 0.29   | 0.31      | +31 ms |
+
+(The first column used the earlier limb and corona detectors, so kick and bass are not
+like for like; the others are.)
+
+These were measured *before* the flare and the planets' strikes went in, and those cost
+something. On the same 60 seconds (100-160 s, static), before and after: kick 0.96 ->
+0.84, clap 0.90 -> 0.82, voice 0.89 -> 0.89, notes 0.78 -> 0.61, bass 0.75 -> 0.56,
+hats 0.84 -> 0.61. Part of that is the point - a planet now also answers what the Sun
+sends it, so "the planets moved" no longer means "a note was played" - and part is a
+corona with more going on in it. The detectors were made robust to the new things
+(the limb from the median sector, since a tongue's hot core is the Sun's colour; the
+corona measured beyond that limb; the clap's ring looked for from 1.9 radii out), and
+the whole-song table has not been re-run since.
+Not met: bass at 0.8 (a sixteenth-note bass line at the same pitch re-strikes a tongue
+that is already standing); hats and crashes, which coincide with everything else on
+the beat; and hits standing six times above the floor in every act - the backbeat's
+rings cross the whole system all through the opening and closing acts, and that is
+the floor (x2.6-3.2 there, x6-9 in the quiet acts). Nothing answers late but the
+crash, whose shooting star takes two frames to grow.
+
+4.7 ms a frame at 1080p and 7.7 at 1440p on the M4: a quarter to a half of the budget.

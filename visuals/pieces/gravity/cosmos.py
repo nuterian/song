@@ -165,6 +165,75 @@ def arriving(x: np.ndarray, before: float, after: float) -> np.ndarray:
     return np.minimum(eased(before, 0.5 * before), eased(after, -0.5 * after))
 
 
+def flares(note_t: np.ndarray, note_a: np.ndarray, note_k: np.ndarray, beats: np.ndarray, n: int, bar: float,
+           every_bars: float = 2.0, leak_bars: float = 4.0) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Integrate and fire. Each bass note adds its loudness to a charge that leaks away
+    over `leak_bars`; when the charge is over the threshold *and a note lands on a beat*,
+    it fires on that note and the charge is spent. So a flare is always a played note, on
+    the beat, and it comes when the bass has been insisting for a while.
+
+    The threshold is not a number chosen for this song. It is found, by bisection, as the
+    one at which the song fires about once in `every_bars` bars of the time its bass line
+    is actually playing - so a sparse bass line and a relentless one both get flares that
+    are events, neither a strobe nor a rarity.
+
+    Returns the flares' times, sizes (0..1) and places (the note's place round the limb),
+    and the charge as a level 0..1 at RATE: what the corona shows building.
+    """
+    if len(note_t) == 0:
+        return np.zeros(0), np.zeros(0), np.zeros(0), np.zeros(n)
+    amp = note_a / max(float(np.percentile(note_a, 90)), 1e-6)
+    on_beat = np.abs(note_t[:, None] - beats[None, :]).min(axis=1) < 0.040 if len(beats) else np.ones(len(note_t), bool)
+    tau = leak_bars * bar
+    # the time the bass is playing: bars that have a note in them
+    playing = len(np.unique(np.floor(note_t / bar))) * bar
+    want = max(playing / (every_bars * bar), 1.0)
+
+    def run(theta: float):
+        q, last, fired, spent = 0.0, note_t[0], [], []
+        for i, (t, a_) in enumerate(zip(note_t, amp)):
+            q = q * np.exp(-(t - last) / tau) + a_
+            last = t
+            if q >= theta and on_beat[i]:
+                fired.append(i)
+                spent.append(q)
+                q = 0.0
+        return fired, spent
+
+    lo, hi = 0.5, float(amp.sum())
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        if len(run(mid)[0]) > want:
+            lo = mid
+        else:
+            hi = mid
+    theta = 0.5 * (lo + hi)
+    fired, spent = run(theta)
+    fired = np.array(fired, dtype=int)
+    # the charge, as it would be read off a gauge: 0 empty, 1 at the threshold
+    level = np.zeros(n)
+    q, last, j = 0.0, 0.0, 0
+    order = np.argsort(note_t)
+    idx = np.ceil(note_t[order] * RATE).astype(int)
+    steps = np.zeros(n)
+    fire_at = set(fired.tolist())
+    t_axis = np.arange(n) / RATE
+    decay = np.exp(-1.0 / (tau * RATE))
+    note_at = {}
+    for i, k in zip(order, idx):
+        if 0 <= k < n:
+            note_at.setdefault(int(k), []).append(int(i))
+    for k in range(n):
+        q *= decay
+        for i in note_at.get(k, ()):
+            q += amp[i]
+            if i in fire_at:
+                q = 0.0
+        level[k] = q
+    size = np.clip(np.array(spent) / max(theta, 1e-6), 1.0, 1.6) / 1.6 if len(spent) else np.zeros(0)
+    return note_t[fired], size, note_k[fired], np.clip(level / max(theta, 1e-6), 0.0, 1.0)
+
+
 def smootherstep(x: np.ndarray) -> np.ndarray:
     x = np.clip(x, 0.0, 1.0)
     return x * x * x * (x * (x * 6 - 15) + 10)
@@ -276,6 +345,19 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
         extra[f"uPromT{k}"], extra[f"uPromA{k}"], extra[f"uPromK{k}"] = (direct.HOLD, PT[:, k]), (direct.HOLD, PA[:, k]), (direct.HOLD, PK[:, k])
     for k in range(shader_cosmos.N_WIND):
         extra[f"uWindT{k}"], extra[f"uWindA{k}"], extra[f"uWindK{k}"] = (direct.HOLD, WT[:, k]), (direct.HOLD, WA[:, k]), (direct.HOLD, WK[:, k])
+    # ---- charge, and the flare ----------------------------------------------------------------------
+    # The bass line charges the corona; past a threshold it discharges - a flare, thrown out
+    # along the plane from where that note's prominence stands, which crosses the system
+    # and strikes whatever planets lie in its way. The threshold is the song's own: see
+    # `flares`. The charge is drawn (the corona stands further out and hotter as it builds,
+    # and snaps back on the discharge), so a flare is seen coming.
+    fl_t, fl_a, fl_k, charge = flares(bt, ba, where, a["beats"].astype(np.float64), n, bar)
+    FT, FA = direct.held_events(fl_t, fl_a, n, shader_cosmos.N_FLARE)
+    _, FK = direct.held_events(fl_t, fl_k, n, shader_cosmos.N_FLARE)
+    for k in range(shader_cosmos.N_FLARE):
+        extra[f"uFlareT{k}"], extra[f"uFlareA{k}"], extra[f"uFlareK{k}"] = (direct.HOLD, FT[:, k]), (direct.HOLD, FA[:, k]), (direct.HOLD, FK[:, k])
+    extra["uCharge"] = (direct.LERP, charge)
+
     # the bar before a re-entry, the sky holds its breath: up over that bar, gone on the downbeat
     extra["uBrace"] = (direct.LERP, anticipating_pulse(drop_t, np.clip(drop_a, 0, 1), n, bar, 0.10))
 
@@ -318,6 +400,7 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     data = np.concatenate([ch.data, np.stack([extra[k][1] for k in extra], axis=1).astype(np.float32)], axis=1)
     out = direct.Channels(names, kinds, data, ch.drops, ch.duration, ch.sections, ch.info)
     out.acts = acts
+    out.flares = fl_t
     out.climax = t_c
     out.variants = {"camera": {"default": CAMERA,
                                "choices": {mode: {name: f"{name}.{mode}" for name in PER_CAMERA} for mode in cams}}}

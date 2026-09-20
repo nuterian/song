@@ -119,23 +119,27 @@ def signals(ch: direct.Channels, start: float = 0.0, duration: float | None = No
                 # darker band, by design). An area is good to a small fraction of a pixel, and
                 # a flare standing on the limb does not move it.
                 body = (d < 0.90 * rest) | ((d < 1.50 * rest) & (img[..., 0] > 0.86) & (img[..., 1] > 0.40))
-                out["limb"][k] = np.sqrt(body.sum() / np.pi) / (rest * h)
-                # The corona: how much of the dark round the Sun is lit - its silhouette, in
-                # units of the Sun's own disc. A prominence is a tongue of it; a thin ring
-                # passing through adds almost nothing.
-                # ...and asked sector by sector round the Sun, because a prominence is *somewhere*:
-                # the tallest tongue, over the usual one. The kick swells the whole rim alike and
-                # a clap's ring is born all the way round, and neither changes this.
-                lit = (d >= 0.95 * rest) & (d < 2.6 * rest) & (lum > 0.14) & ~body & ~near_planet
                 sector = ((np.arctan2(dy, dx) + np.pi) / (2 * np.pi) * 24).astype(int) % 24
+                # ...sector by sector, and the *median* sector: a tongue of flame has a hot core the
+                # colour of the Sun, and it stands in one or two sectors; the limb is in all of them
+                wedge = np.bincount(sector[body], minlength=24)
+                out["limb"][k] = np.sqrt(24 * np.median(wedge) / np.pi) / (rest * h)
+                # The corona: how much of the dark round the Sun is lit - its silhouette, in units
+                # of the Sun's disc - and again sector by sector, because a prominence is
+                # *somewhere*: the tallest sector over the usual one. The kick swells the whole rim
+                # alike and a clap's ring is born all the way round, and neither changes this.
+                # (Everything beyond the limb counts, hot core and all.)
+                lit = (d >= (out["limb"][k] + 0.03) * rest) & (d < 2.6 * rest) & (lum > 0.14) & ~near_planet
                 per = np.bincount(sector[lit], minlength=24) / (np.pi * (rest * h) ** 2 / 24)
                 out["corona"][k] = per.max() - np.median(per)
                 out["heart"][k] = lum[d < 0.45 * rest].mean() if (d < 0.45 * rest).sum() > 6 else np.nan
             # the plane of the orbits close round the Sun, to either side of it, where a
             # clap's ring is born and where it is seen edge to edge
-            plane = (rho > 1.30 * rest) & (rho < 3.2 * rest) & (d > 1.30 * rest) & (np.abs(ux) > 1.4 * np.abs(uy)) & ~near_planet
+            # (from 1.9 radii out: a new ring is there within its second frame, and the corona's
+            # tongues are not. Thin lines, so: the share of the region that is lit, not its mean.)
+            plane = (rho > 1.90 * rest) & (rho < 3.4 * rest) & (np.abs(ux) > 1.4 * np.abs(uy)) & ~near_planet
             if plane.sum() > 40:
-                out["plane"][k] = lum[plane].mean()
+                out["plane"][k] = (lum[plane] > 0.20).mean()
             far = (rho > 1.08 * g["outer"][k]) & ~near_planet
             if far.sum() > 400:
                 out["sky"][k] = np.where(lum[far] > 0.30, lum[far], 0.0).mean()

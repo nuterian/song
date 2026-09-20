@@ -68,6 +68,7 @@ ROLES: dict[str, tuple[str, ...]] = {
 ROLES["kick"] += ("uSunPulse",)
 ROLES["note"] += tuple(f"uSwell{k}" for k in range(direct.N_SATS))
 ROLES["bass"] += tuple(f"uPromA{k}" for k in range(4))
+ROLES["bass"] += tuple(f"uFlareA{k}" for k in range(2)) + ("uCharge",)
 ROLES["voice"] += tuple(f"uWindA{k}" for k in range(4))
 ROLES["drop"] += ("uBrace",)
 
