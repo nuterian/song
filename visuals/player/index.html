@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>visuals</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0; height: 100%; background: #08080a; color: #b9b9c4;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  body { display: grid; grid-template-rows: 1fr auto; }
+  #stage { display: grid; place-items: center; min-height: 0; padding: 16px; }
+  canvas {
+    width: 100%; max-width: 1280px; aspect-ratio: 16 / 9; height: auto;
+    background: #000; border-radius: 2px; display: block;
+  }
+  #bar {
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+    padding: 10px 16px; border-top: 1px solid #1c1c22;
+  }
+  button {
+    font: inherit; color: #e7e7ef; background: #1c1c24; border: 1px solid #2c2c36;
+    border-radius: 2px; padding: 5px 14px; cursor: pointer;
+  }
+  button:hover { background: #262630; }
+  #seek { flex: 1 1 220px; min-width: 160px; accent-color: #8a7ad0; }
+  #readout { color: #7c7c8a; white-space: nowrap; }
+  #error { padding: 16px; color: #e08a8a; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <div id="stage"><canvas id="gl" width="1280" height="720"></canvas></div>
+  <div id="bar">
+    <button id="play">play</button>
+    <input id="seek" type="range" min="0" max="1" step="0.001" value="0">
+    <span id="readout">loading</span>
+  </div>
+  <div id="error" hidden></div>
+  <audio id="audio" preload="auto"></audio>
+  <script type="module" src="player.js"></script>
+</body>
+</html>
