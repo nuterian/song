@@ -1,0 +1,15 @@
+# This tool's own virtualenv. It is separate from the root one on purpose: the
+# renderer needs moderngl and nothing the song tool needs, and later milestones
+# will pull a different torch than the aligners are pinned to.
+.venv/
+__pycache__/
+*.py[cod]
+
+.DS_Store
+
+# Per-song derived features. Everything here is recomputed from a song workdir
+# and runs to megabytes per track. Recreate with:  python -m visuals render <workdir>
+cache/
+
+# Renders, staged player assets and extracted frames.
+out/

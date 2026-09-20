@@ -1,0 +1,15 @@
+# Pinned for macOS arm64 + Python 3.12, installed into visuals/.venv.
+#
+# numpy is held below 2.0 for the same reason the root requirements hold it
+# there: milestone 2 brings in torch and librosa, and the 1.26 ABI is what that
+# combination is validated against. Pinning it now means the venv does not have
+# to be rebuilt then.
+numpy==1.26.4
+
+# Headless OpenGL. On macOS moderngl's standalone context comes up on CGL and
+# reports "4.1 Metal", which is the newest desktop GL Apple ships; see the
+# shader-dialect note in DESIGN.md for why that is enough to run GLSL ES 3.0
+# shaders written for WebGL2.
+moderngl==5.12.0
+
+pytest==8.3.4
