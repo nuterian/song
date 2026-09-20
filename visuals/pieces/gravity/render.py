@@ -44,7 +44,10 @@ def data_textures() -> dict[str, np.ndarray]:
         return {}
     if not CATALOGUE.exists():
         raise SystemExit(f"no star catalogue at {CATALOGUE}; see the docstring of sky.py")
-    return {"uStarTex": sky.build(CATALOGUE)["texture"]}
+    galaxy = CATALOGUE.parent / "milkyway_2020_4k_gal_print.jpg"
+    if not galaxy.exists():
+        raise SystemExit(f"no Milky Way map at {galaxy}; see sky.milky_way")
+    return {"uStarTex": sky.build(CATALOGUE)["texture"], "uGalaxyTex": sky.milky_way(galaxy)[..., None]}
 
 
 FULLSCREEN = np.array([-1.0, -1.0, 3.0, -1.0, -1.0, 3.0], dtype="f4")
@@ -61,7 +64,7 @@ ROLES: dict[str, tuple[str, ...]] = {
     "drop": ("uDropA",) + tuple(f"uMetA{k}" for k in range(direct.N_METEORS)),
 }
 # clocks: frozen in a solo, so that only the soloed instrument moves anything
-CLOCKS = ("uOrbit", "uOrbitSlow", "uDrift", "uBeats", "uYears")
+CLOCKS = ("uOrbit", "uOrbitSlow", "uDrift", "uBeats") + tuple(f"uPh{i}" for i in range(8))
 SILENT_IN_SOLO = ("uVoice", "uSustain", "uTint", "uPump")
 
 
@@ -69,7 +72,7 @@ SILENT_IN_SOLO = ("uVoice", "uSustain", "uTint", "uPump")
 # of the audio held still, the clocks running - any step in the picture is a step
 # in a decision, and there should not be one.
 SECTION_LEVEL = tuple(f"uC{role}{c}" for role in direct.PALETTE_ROLES for c in "RGB") + (
-    "uRays", "uBands", "uStars", "uTilt", "uIncl")
+    "uRays", "uBands", "uStars", "uTilt", "uIncl", "uCamTilt", "uCamRoll")
 
 
 def sections_only(ch: direct.Channels) -> direct.Channels:
@@ -112,7 +115,11 @@ def solo_channels(ch: direct.Channels, role: str) -> direct.Channels:
 
 
 class Renderer:
-    def __init__(self, width: int, height: int) -> None:
+    def __init__(self, width: int, height: int, supersample: int = 1) -> None:
+        """`supersample` says these pixels are that many to an output pixel along a side:
+        the frame is meant to be scaled down by it afterwards. A shader that knows about
+        it (`uSS`) keeps its sizes in output pixels, so the scaled-down frame is the same
+        picture with its edges resolved from more samples."""
         self.size = (width, height)
         self.ctx = moderngl.create_standalone_context(require=330)
         sh = shader_module()
@@ -123,9 +130,11 @@ class Renderer:
         self.tex = self.ctx.texture((width, height), 4, dtype="f1")
         self.fbo = self.ctx.framebuffer(color_attachments=[self.tex])
         self.prog["uResolution"].value = (float(width), float(height))
+        if "uSS" in self.prog:
+            self.prog["uSS"].value = float(supersample)
         self.textures = []
         for unit, (name, arr) in enumerate(data_textures().items()):
-            tex = self.ctx.texture((arr.shape[1], arr.shape[0]), 4, arr.astype("f4").tobytes(), dtype="f4")
+            tex = self.ctx.texture((arr.shape[1], arr.shape[0]), arr.shape[2], arr.astype("f4").tobytes(), dtype="f4")
             tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
             tex.use(unit)
             if name in self.prog:
@@ -238,10 +247,11 @@ def export(got: dict, ch: direct.Channels, out_dir: Path) -> None:
     for name, arr in data_textures().items():
         file = f"{name}.bin"
         (out_dir / file).write_bytes(arr.astype("<f4").tobytes())
-        plan["textures"].append({"name": name, "file": file, "width": int(arr.shape[1]), "height": int(arr.shape[0])})
+        plan["textures"].append({"name": name, "file": file, "width": int(arr.shape[1]),
+                                 "height": int(arr.shape[0]), "channels": int(arr.shape[2])})
     if getattr(ch, "acts", None):
         plan["acts"] = [{"start": a.start, "end": a.end, "function": a.function,
-                         "subject": cosmos.PLANETS[a.subject][0] if a.subject >= 0 else None} for a in ch.acts]
+                         "subject": a.subject if a.subject >= 0 else None} for a in ch.acts]
     (out_dir / "frames.bin").write_bytes(ch.data.astype("<f4").tobytes())
     (out_dir / "plan.json").write_text(json.dumps(plan, indent=1) + "\n")
     src, dst = WORKDIR / "mix.m4a", out_dir / "mix.m4a"

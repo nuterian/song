@@ -140,7 +140,8 @@ async function main() {
     const tex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE1 + unit);
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, spec.width, spec.height, 0, gl.RGBA, gl.FLOAT, raw);
+    if ((spec.channels || 4) === 1) gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, spec.width, spec.height, 0, gl.RED, gl.FLOAT, raw);
+    else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, spec.width, spec.height, 0, gl.RGBA, gl.FLOAT, raw);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);

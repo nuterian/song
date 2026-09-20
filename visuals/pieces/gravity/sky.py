@@ -114,3 +114,39 @@ def build(catalogue: Path) -> dict:
     return {"texture": tex, "stars": int(keep.sum()), "dropped_listings": dropped,
             "fullest_cell": int(filled.max()), "galaxy": galactic_frame(),
             "grid": GRID, "per_cell": PER_CELL}
+
+
+MILKY_WAY = (512, 1024)       # rows (galactic latitude, +90 at the top), columns (longitude, 0 in the middle, increasing leftward)
+
+
+def milky_way(image: Path) -> np.ndarray:
+    """The galaxy's brightness over the whole sky, 0..1, as a smooth field.
+
+    From NASA's Deep Star Maps 2020 (svs.gsfc.nasa.gov/4851, public domain), the
+    Milky-Way-only layer in galactic coordinates: the real bulge, the real rift, both
+    Magellanic Clouds. It is blurred a little and kept smooth on purpose. The picture
+    is not drawn from it - a sampled photograph would be soft - the shader cuts flat
+    tones out of it along its contours, so the edges are its own and as sharp as the
+    screen, and the shape is the sky's.
+    """
+    import subprocess
+
+    from scipy import ndimage
+
+    h, w = MILKY_WAY
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(image), "-vf", f"scale={w}:{h}:flags=area",
+                          "-pix_fmt", "gray", "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+    img = np.frombuffer(raw, dtype=np.uint8).reshape(h, w).astype(np.float64) / 255.0
+    # longitude wraps; latitude does not
+    img = ndimage.gaussian_filter(img, sigma=(1.6, 1.6), mode=("nearest", "wrap"))
+    lo, hi = np.percentile(img, 35), np.percentile(img, 99.7)
+    return np.clip((img - lo) / (hi - lo), 0.0, 1.0).astype(np.float32) ** 0.85
+
+
+def galactic_lb(direction: np.ndarray) -> tuple[float, float]:
+    """Galactic longitude and latitude, degrees, of a world-axes direction."""
+    g = galactic_frame()
+    d = np.asarray(direction, dtype=float)
+    b = np.degrees(np.arcsin(np.clip(d @ np.array(g["pole"]), -1, 1)))
+    l = np.degrees(np.arctan2(d @ np.array(g["across"]), d @ np.array(g["centre"]))) % 360.0
+    return float(l), float(b)

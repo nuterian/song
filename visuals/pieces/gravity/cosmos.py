@@ -1,29 +1,32 @@
-"""The solar system as a place, and a camera moving through it: everything the 3D
-shader is handed that the flat ones were not.
+"""The solar system as a place, and an orrery's camera on it: what the `cosmos` shader
+is handed that the flat ones were not.
 
-**The place.** The Sun and the eight planets, with their real periods relative to
-one another and their real order and character. Distances and sizes are compressed
-(a power of about a third on the distances, a little more on the radii), as every orrery
-compresses them, because drawn to scale the solar system is a point of light and a
-great deal of nothing - and hard enough that the Sun is still the biggest thing in a
-frame that holds Saturn. One Earth year is sixty-four bars, so Mercury goes round in
-half a minute and Neptune, rightly, hardly moves at all.
+**The place.** The planets' phases. Their periods follow Kepler's third law for the
+distances the picture draws them at, so every one of them visibly moves and the inner
+ones lap the outer. The one piece of stagecraft is the alignment: a planet's starting
+longitude is a free choice, so each is chosen such that the eight stand in a row, out
+to the right of the Sun and half-lit, at the song's climax - wherever the measurements
+put it.
 
 **Light is instant; mass is not.** A hit still lands on its frame - but as light: a
 flash, a glint, a ring. Anything heavy that moves because of a hit (the Sun swelling,
-a planet swelling) is given a rise that *ends* on the hit. That is possible because
-nothing here is live: the whole song is known, so a body can begin to move a twentieth
-of a second before the beat and arrive exactly on it, which is both smoother and
-tighter than answering afterwards. The big transitions are slowed the same way - the
-orbits fall back in over a bar and a half, not a third of a second - because they
-were, it was said, too quick to appreciate.
+a planet swelling, the tug on the orbits) is given a rise that *ends* on the hit. That
+is possible because nothing here is live: the whole song is known, so a body can begin
+to move a twentieth of a second before the beat and arrive exactly on it, which is
+both smoother and tighter than answering afterwards. The big transitions are slowed
+the same way - the orbits fall back in over a bar and a half, not a third of a second
+- because they were, it was said, too quick to appreciate.
 
 **Acts.** Sections are merged along the song until a handful of acts remain, by how
-strong each boundary is; each act's measured character gives it a function - approach,
-intimate, wide, eclipse, alignment, pull back - and each function is a way of moving
-the camera. Nothing names a bar of this song. The one piece of stagecraft is the
-alignment: the planets' starting longitudes are free, so they are chosen such that the
-planets draw into line at the song's climax, wherever the measurements put it.
+strong each boundary is, and each act's measured character gives it a function -
+approach, intimate, wide, eclipse, alignment, pull back. Nothing names a bar of this
+song.
+
+**The camera** is an orrery's: it turns about the Sun, tilts over the plane, rolls,
+zooms and slides, in parallel projection, so nothing it does distorts anything. In
+`fixed` mode it is the view of the picture that worked - the section's tilt and roll,
+no zoom, no slide - turned once, to whichever way puts the most of the Milky Way
+behind the Sun. `cinematic` mode moves it by act.
 """
 
 from __future__ import annotations
@@ -35,39 +38,7 @@ import numpy as np
 from . import colour, decide, direct
 from .listen import RATE
 
-EARTH_YEAR_BARS = 64.0
-
-#            name       a (AU)  period (yr)  radius (Earth = 1)
-PLANETS = (("Mercury",  0.387,    0.2408,      0.383),
-           ("Venus",    0.723,    0.6152,      0.949),
-           ("Earth",    1.000,    1.0000,      1.000),
-           ("Mars",     1.524,    1.8808,      0.532),
-           ("Jupiter",  5.203,   11.862,      11.21),
-           ("Saturn",   9.537,   29.457,       9.45),
-           ("Uranus",  19.19,    84.01,        4.01),
-           ("Neptune", 30.07,   164.8,         3.88))
-N_PLANETS = len(PLANETS)
-EARTH_RADIUS = 0.036                      # world units; Earth's orbit is 1
-SUN_RADIUS = 0.22
-DISTANCE_POWER = 0.35                     # how hard distances are compressed: Neptune at 3.3, not 30
-
-# Which planet a note lights. Notes are ranked low to high into eight slots; big bodies
-# take the low ones, as big things do.
-SLOT_TO_PLANET = (4, 5, 7, 6, 2, 1, 3, 0)
-
-
-def orbit_radius(a_au: float) -> float:
-    return float(a_au ** DISTANCE_POWER)
-
-
-def body_radius(r_earths: float) -> float:
-    return float(EARTH_RADIUS * r_earths ** 0.45)
-
-
-ORBIT = np.array([orbit_radius(p[1]) for p in PLANETS])
-RADIUS = np.array([body_radius(p[3]) for p in PLANETS])
-PERIOD = np.array([p[2] for p in PLANETS])
-
+CAMERA = "fixed"            # or "cinematic"; set by the command line
 
 # ------------------------------------------------------------------------ acts
 
@@ -150,7 +121,7 @@ def find_acts(sections: list, drops: list[dict], most: int = 7, fewest: int = 4,
                 acts[i].function = "intimate"
         for a in acts:
             if a.function in ("intimate", "eclipse"):
-                a.subject = next(subjects, 2)
+                a.subject = next(subjects, 2)                 # a planet index, Mercury = 0
     return acts
 
 
@@ -181,72 +152,38 @@ def smootherstep(x: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------- camera
 
 
-def _orbit_cam(centre: np.ndarray, az: np.ndarray, el: np.ndarray, dist: np.ndarray) -> np.ndarray:
-    return centre + dist[:, None] * np.stack([np.cos(el) * np.cos(az), np.sin(el), np.cos(el) * np.sin(az)], axis=1)
+def best_turn(tilt: float, catalogue_dir) -> float:
+    """Which way to face: the turn that puts the most of the Milky Way in the frame,
+    weighted toward the middle of it, at this tilt. Measured on NASA's map with the
+    shader's own projection - the sky is where it is; all that can be chosen is where to
+    stand."""
+    from . import sky
 
-
-def shot(act: Act, u: np.ndarray, planets: np.ndarray, idx: np.ndarray, fan: float) -> tuple:
-    """Camera position, target and field of view through an act; u is 0..1 across it
-    (and runs a little beyond both ends, so neighbouring shots can be blended)."""
-    n = len(u)
-    sun = np.zeros((n, 3))
-    e = smootherstep(u)
-    deg = np.radians
-    if act.function == "approach":
-        return (_orbit_cam(sun, deg(-150 + 35 * e), deg(14 + 10 * e), 11.0 - 6.0 * e), sun, np.full(n, 38.0))
-    if act.function == "pullback":
-        return (_orbit_cam(sun, deg(60 + 50 * e), deg(28 + 30 * e), 4.8 * np.exp(2.3 * e)), sun, np.full(n, 40.0))
-    if act.function == "alignment":
-        # Seen from the side, not from beyond Neptune looking in: from out there every
-        # planet shows its night side. Side on, they are a row of half-lit worlds with the
-        # Sun at one end of it.
-        along = np.array([np.cos(fan), 0.0, np.sin(fan)])
-        mid = sun + along * 1.55
-        az = fan + deg(90.0 - 16.0 * (e - 0.4))
-        return (_orbit_cam(mid, az, deg(9.0 + 7.0 * e), 5.2 - 0.7 * e), mid, np.full(n, 36.0))
-    if act.function in ("intimate", "eclipse"):
-        P = planets[idx, act.subject]                               # (n, 3)
-        out_dir = P / np.linalg.norm(P, axis=1, keepdims=True)
-        side = np.stack([-out_dir[:, 2], np.zeros(n), out_dir[:, 0]], axis=1)
-        r = RADIUS[act.subject]
-        if act.function == "eclipse":
-            # behind the planet, drifting across the line to the Sun so that the Sun
-            # goes behind its disc and comes out the other side
-            off = (0.9 - 1.8 * e)[:, None] * r * side
-            pos = P + out_dir * (7.0 * r) + off + np.array([0.0, 1.5 * r, 0.0])      # a little above the plane: in it, every ring is a line
-            return pos, sun, np.full(n, 24.0)
-        # round it, from its twilight side to its day side, the planet a third of the way
-        # across the frame and the Sun far off across the rest of it
-        ang = deg(115.0 - 75.0 * e)
-        pos = P + (np.cos(ang)[:, None] * -out_dir + np.sin(ang)[:, None] * side) * (8.0 * r) \
-            + np.array([0.0, 1.6 * r, 0.0])
-        look = P - out_dir * (2.2 * r) - side * (1.2 * r)
-        return pos, look, np.full(n, 36.0)
-    # wide: the whole inner system and the giants, from above and to one side, turning slowly
-    return (_orbit_cam(sun, deg(20 + 40 * e + 25 * act.index), deg(32 - 6 * e), np.full(n, 4.8)), sun, np.full(n, 40.0))
-
-
-def camera_path(acts: list[Act], t: np.ndarray, planets: np.ndarray, fan: float, bar: float,
-                blend_bars: float = 10.0) -> tuple:
-    """Each act's shot, cross-faded into the next over `blend_bars` centred on the
-    boundary. Long, because a move this large wants watching."""
-    n = len(t)
-    idx = np.arange(n)
-    pos, tgt, fov = np.zeros((n, 3)), np.zeros((n, 3)), np.zeros(n)
-    weight = np.zeros(n)
-    half = 0.5 * blend_bars * bar
-    for a in acts:
-        u = (t - a.start) / max(a.end - a.start, 1e-6)
-        p, g, f = shot(a, u, planets, idx, fan)
-        rise = smootherstep((t - (a.start - half)) / (2 * half)) if a.index > 0 else np.ones(n)
-        fall = 1.0 - smootherstep((t - (a.end - half)) / (2 * half)) if a.index < len(acts) - 1 else np.ones(n)
-        w = rise * fall
-        pos += w[:, None] * p
-        tgt += w[:, None] * g
-        fov += w * f
-        weight += w
-    weight = np.maximum(weight, 1e-6)
-    return pos / weight[:, None], tgt / weight[:, None], fov / weight
+    image = catalogue_dir / "milkyway_2020_4k_gal_print.jpg"
+    if not image.exists():
+        return 0.0
+    field = sky.milky_way(image)
+    g = sky.galactic_frame()
+    pole, centre, across = (np.array(g[k]) for k in ("pole", "centre", "across"))
+    e, c = tilt, np.sqrt(1 - tilt * tilt)
+    ys, xs = np.meshgrid(np.linspace(-0.5, 0.5, 27), np.linspace(-0.889, 0.889, 48), indexing="ij")
+    v = np.stack([xs, ys, np.full_like(xs, -1.30)], axis=-1)
+    v /= np.linalg.norm(v, axis=-1, keepdims=True)
+    u_, v_, up = v[..., 0], v[..., 1] * e - v[..., 2] * c, v[..., 1] * c + v[..., 2] * e
+    weight = np.exp(-(xs ** 2 + ys ** 2) / 0.35)
+    best, best_score = 0.0, -1.0
+    for turn in np.radians(np.arange(0, 360, 3)):
+        ct, st = np.cos(-turn), np.sin(-turn)
+        x, z = ct * u_ - st * v_, st * u_ + ct * v_
+        d = np.stack([x, up, z], axis=-1)
+        b = np.arcsin(np.clip(d @ pole, -1, 1))
+        l = np.arctan2(d @ across, d @ centre)
+        col = ((0.5 - l / (2 * np.pi)) * field.shape[1]).astype(int) % field.shape[1]
+        row = np.clip(((0.5 - b / np.pi) * field.shape[0]).astype(int), 0, field.shape[0] - 1)
+        score = float((field[row, col] * weight).sum())
+        if score > best_score:
+            best, best_score = float(turn), score
+    return best
 
 
 # ------------------------------------------------------------------------ bake
@@ -254,6 +191,8 @@ def camera_path(acts: list[Act], t: np.ndarray, planets: np.ndarray, fan: float,
 
 def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     """Everything `direct` bakes, plus the place and the camera."""
+    from . import ROOT, shader_cosmos
+
     ch = direct.direct(got, mod)
     a, meta = got["arrays"], got["meta"]
     n, period = int(meta["n"]), float(meta["period"])
@@ -263,30 +202,11 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     extra: dict[str, tuple[str, np.ndarray]] = {}
 
     acts = find_acts(ch.sections, ch.drops)
-
-    # the clock the planets keep: Earth years, a little slower when the floor is gone
     hold = col["uHold"]
-    years = np.cumsum((0.60 + 0.40 * hold) / (EARTH_YEAR_BARS * bar)) / RATE
-    extra["uYears"] = (direct.LERP, years)
 
     # the orbits widen as the floor goes and fall back when it returns - over a bar and
     # a half, heavily damped: it is the whole solar system moving, and it should look it
-    spread = direct.spring(1.0 + 0.28 * (1.0 - hold), hz=0.42, damping=0.85)
-    extra["uSpreadSlow"] = (direct.LERP, spread)
-
-    # the alignment: choose where each planet starts so that they stand in a line, seen
-    # from a camera with the galaxy's centre behind the Sun, at the climax
-    climax = next((x for x in acts if x.function == "alignment"), acts[len(acts) // 2])
-    t_c = climax.start + 0.30 * (climax.end - climax.start)
-    fan = np.radians(87.0)
-    years_c = float(np.interp(t_c, t, years))
-    theta0 = fan + np.radians((np.arange(N_PLANETS) - 3.5) * 2.2) - 2 * np.pi * years_c / PERIOD
-    theta = theta0[None, :] + 2 * np.pi * years[:, None] / PERIOD[None, :]
-    r = ORBIT[None, :] * spread[:, None]
-    planets = np.stack([r * np.cos(theta), np.zeros_like(theta), r * np.sin(theta)], axis=2)   # (n, 8, 3)
-    for i in range(N_PLANETS):
-        extra[f"uP{i}X"] = (direct.LERP, planets[:, i, 0])
-        extra[f"uP{i}Z"] = (direct.LERP, planets[:, i, 2])
+    extra["uSpreadSlow"] = (direct.LERP, direct.spring(1.0 + 0.70 * (1.0 - hold), hz=0.45, damping=0.85))
 
     # mass does not jump: the Sun and the planets swell *into* their hits
     kt, ka = a["ev_kick_t"], a["ev_kick_amp"]
@@ -298,33 +218,42 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
         amp = np.array([col[f"uNoteA{slot}"][min(int(np.ceil(x * RATE)), n - 1)] for x in tt])
         extra[f"uSwell{slot}"] = (direct.LERP, anticipating_pulse(tt, np.clip(amp, 0, 1.2), n, 0.045, 0.20))
 
-    # the re-entry pushes the lens in and lets it go - eased, and four times slower than it was
+    # ---- the camera -----------------------------------------------------------------
+    tilt, roll = col["uTilt"].copy(), col["uIncl"].copy()
+    turn = np.full(n, best_turn(float(np.median(tilt)), ROOT / "visuals" / "cache" / "catalogues"))
+    # the re-entry pushes in and lets go - eased, and four times slower than it was
     push = anticipating_pulse(np.array([d["t"] for d in ch.drops]),
                               np.array([d["strength"] for d in ch.drops]), n, 0.12, 1.1)
+    span = 1.0 - 0.070 * push - 0.008 * extra["uSunPulse"][1]
+    cx, cy = np.zeros(n), np.zeros(n)
+    if CAMERA == "cinematic":
+        turn, tilt, roll, span, cx, cy = cinematic(acts, t, bar, turn, tilt, roll, span)
+    for name, track in (("uCamTurn", turn), ("uCamTilt", tilt), ("uCamRoll", roll), ("uCamSpan", span),
+                        ("uCamX", cx), ("uCamY", cy)):
+        extra[name] = (direct.LERP, track)
 
-    pos, tgt, fov = camera_path(acts, t, planets, fan, bar)
-    fov = fov * (1.0 - 0.10 * push)
-    for k, axis in enumerate("XYZ"):
-        extra[f"uCam{axis}"] = (direct.LERP, pos[:, k])
-        extra[f"uTgt{axis}"] = (direct.LERP, tgt[:, k])
-    extra["uFov"] = (direct.LERP, fov)
-
-    # a comet: a long ellipse, true Kepler motion, then the same compression of distance
-    ce, ca, cperiod = 0.90, 9.0, 27.0
-    M = 2 * np.pi * (years + 0.46 * cperiod) / cperiod
-    E = M.copy()
-    for _ in range(12):
-        E -= (E - ce * np.sin(E) - M) / (1 - ce * np.cos(E))
-    cx, cz = ca * (np.cos(E) - ce), ca * np.sqrt(1 - ce * ce) * np.sin(E)
-    rr = np.hypot(cx, cz)
-    squeeze = rr ** DISTANCE_POWER / np.maximum(rr, 1e-6) * spread
-    lean = np.radians(200.0)
-    extra["uCometX"] = (direct.LERP, squeeze * (cx * np.cos(lean) - cz * np.sin(lean)))
-    extra["uCometZ"] = (direct.LERP, squeeze * (cx * np.sin(lean) + cz * np.cos(lean)))
+    # ---- the planets' phases, and the alignment -------------------------------------------
+    # Kepler, for the distances drawn; and each starting longitude chosen so that at the
+    # climax they stand in a row to the right of the Sun, in the plane of the screen, half-lit
+    rate = np.array([(0.250 / (0.250 + s_)) ** 1.5 for s_ in shader_cosmos.ORBIT_STEP])
+    climax = next((x for x in acts if x.function == "alignment"), acts[len(acts) // 2])
+    t_c = climax.start + 0.30 * (climax.end - climax.start)
+    clock = col["uOrbitSlow"]
+    clock_c, turn_c = float(np.interp(t_c, t, clock)), float(np.interp(t_c, t, turn))
+    fan = np.radians((np.arange(shader_cosmos.N_PLANETS) - 3.5) * 1.4)
+    for i in range(shader_cosmos.N_PLANETS):
+        extra[f"uPh{i}"] = (direct.LERP, rate[i] * (clock - clock_c) + (fan[i] - turn_c) / (2 * np.pi))
 
     names = ch.names + list(extra)
     kinds = ch.kinds + [extra[k][0] for k in extra]
     data = np.concatenate([ch.data, np.stack([extra[k][1] for k in extra], axis=1).astype(np.float32)], axis=1)
     out = direct.Channels(names, kinds, data, ch.drops, ch.duration, ch.sections, ch.info)
     out.acts = acts
+    out.climax = t_c
     return out
+
+
+def cinematic(acts, t, bar, turn, tilt, roll, span):
+    """Not yet. The shots are to be agreed from a shot sheet before anything is animated;
+    until then cinematic is the fixed camera."""
+    return turn, tilt, roll, span, np.zeros(len(t)), np.zeros(len(t))

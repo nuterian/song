@@ -245,7 +245,8 @@ def test_every_uniform_the_shader_declares_is_fed():
     # re-entry - colour floods in over half a second - which is about 0.02 of full
     # range per grid step. A decision arriving as a step would be ten times that.
     for name in SECTION_LEVEL:
-        assert np.abs(np.diff(ch.data[:, ch.index(name)])).max() < 0.03, name
+        if name in ch.names:                   # the camera's are only baked for the cosmos style
+            assert np.abs(np.diff(ch.data[:, ch.index(name)])).max() < 0.03, name
 
 
 def test_no_star_is_cut_off_and_every_arm_is_whole():
@@ -332,16 +333,15 @@ def test_acts_cover_the_song_and_the_planets_align_at_the_climax():
     assert [a.function for a in acts].count("alignment") == 1
     for a, b in zip(acts[:-1], acts[1:]):
         assert a.end == pytest.approx(b.start)
-    # at the climax the eight planets stand within a narrow fan of longitude
-    climax = next(a for a in acts if a.function == "alignment")
-    i = int((climax.start + 0.30 * (climax.end - climax.start)) * direct.RATE)
-    lon = np.array([np.arctan2(ch.data[i, ch.index(f"uP{k}Z")], ch.data[i, ch.index(f"uP{k}X")]) for k in range(8)])
-    spread = np.degrees(np.ptp(np.unwrap(lon)))
-    assert spread < 20.0
-    # and the camera is a camera, not a teleporter: its speed never steps
-    cam = np.stack([ch.data[:, ch.index(f"uCam{c}")] for c in "XYZ"], axis=1).astype(np.float64)
-    speed = np.linalg.norm(np.diff(cam, axis=0), axis=1) * direct.RATE
-    assert np.abs(np.diff(speed)).max() * direct.RATE < 25.0
+    # at the climax the eight planets stand in a row: within a narrow fan, out to the
+    # right of the Sun as the camera sees them
+    i = int(ch.climax * direct.RATE)
+    lon = np.array([2 * np.pi * ch.data[i, ch.index(f"uPh{k}")] + ch.data[i, ch.index("uCamTurn")] for k in range(8)])
+    lon = (lon + np.pi) % (2 * np.pi) - np.pi
+    assert np.degrees(np.abs(lon).max()) < 8.0
+    # and the camera is an orrery's: it never jumps
+    for name in ("uCamTurn", "uCamTilt", "uCamRoll", "uCamSpan", "uCamX", "uCamY"):
+        assert np.abs(np.diff(ch.data[:, ch.index(name)])).max() < 0.01, name
 
 
 def test_every_uniform_the_3d_shader_declares_is_fed():
