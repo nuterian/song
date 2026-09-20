@@ -16,6 +16,8 @@ const playBtn = document.getElementById("play");
 const seek = document.getElementById("seek");
 const readout = document.getElementById("readout");
 const errorBox = document.getElementById("error");
+const choicesBox = document.getElementById("choices");
+const fpsBox = document.getElementById("fps");
 
 // The mp4 is rendered at 60, and frame feedback decays once per frame, so the
 // player steps at 60 too. Left to the display's own rate a 120 Hz screen would
@@ -161,10 +163,23 @@ async function main() {
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-  const W = canvas.width;
-  const H = canvas.height;
-  const targets = [makeTarget(gl, W, H), makeTarget(gl, W, H)];
-  let front = 0;
+  // The canvas is drawn at the display's own resolution, not at a fixed size stretched
+  // to fit: on a dense screen a stretched 720p canvas is every pixel made four, and no
+  // shader can look sharp through that. Capped, so a 5K window does not ask for 5K.
+  let W = 0, H = 0, targets = [], front = 0;
+  function fit() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    let w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientWidth * dpr * 9 / 16);
+    const cap = Number(params.get("maxheight")) || 1440;
+    if (h > cap) { w = Math.round(cap * 16 / 9); h = cap; }
+    if (w === W && h === H) return;
+    for (const old of targets) { gl.deleteFramebuffer(old.fbo); gl.deleteTexture(old.tex); }
+    W = canvas.width = w; H = canvas.height = h;
+    gl.activeTexture(gl.TEXTURE0);
+    targets = [makeTarget(gl, W, H), makeTarget(gl, W, H)];
+    front = 0;
+    lastDrawn = -1;
+  }
 
   audio.src = base + plan.audio_file;
   seek.max = String(plan.duration);
@@ -172,6 +187,32 @@ async function main() {
   const values = new Float32Array(grid.stride);
   const perFrame = new Set(plan.per_frame);
   let lastDrawn = -1;
+  fit();
+  new ResizeObserver(fit).observe(canvas);
+
+  // Variants: the same piece with some uniforms fed from other channels - three cameras,
+  // say, all baked into the one grid. Choosing one re-points those uniforms and nothing
+  // else, so it can be done while the song plays.
+  const feeds = new Map();                         // uniform name -> the channel that feeds it, if not its own
+  for (const [kind, spec] of Object.entries(plan.variants || {})) {
+    const group = document.createElement("span");
+    group.className = "choice";
+    group.innerHTML = `<span>${kind}</span>`;
+    const pick = (name) => {
+      for (const [uniform, channel] of Object.entries(spec.choices[name])) feeds.set(uniform, grid.names.indexOf(channel));
+      for (const b of group.querySelectorAll("button")) b.classList.toggle("on", b.dataset.name === name);
+      const url = new URL(location.href); url.searchParams.set(kind, name); history.replaceState(null, "", url);
+      lastDrawn = -1;
+    };
+    for (const name of Object.keys(spec.choices)) {
+      const b = document.createElement("button");
+      b.textContent = name; b.dataset.name = name;
+      b.addEventListener("click", () => pick(name));
+      group.appendChild(b);
+    }
+    choicesBox.appendChild(group);
+    pick(spec.choices[params.get(kind)] ? params.get(kind) : spec.default);
+  }
 
   function sectionAt(t) {
     for (const s of plan.sections) if (t >= s.start && t < s.end) return s;
@@ -201,8 +242,9 @@ async function main() {
     if (uniforms.uPrev) gl.uniform1i(uniforms.uPrev, 0);
     if (uniforms.uResolution) gl.uniform2f(uniforms.uResolution, W, H);
     for (let c = 0; c < grid.stride; c++) {
-      const loc = uniforms[grid.names[c]];
-      if (loc) gl.uniform1f(loc, values[c]);
+      const name = grid.names[c];
+      const loc = uniforms[name];
+      if (loc) gl.uniform1f(loc, feeds.has(name) && feeds.get(name) >= 0 ? values[feeds.get(name)] : values[c]);
     }
     for (const d of dataTextures) {
       gl.activeTexture(gl.TEXTURE0 + d.unit);
@@ -228,7 +270,15 @@ async function main() {
       (morph < 0.999 ? `  morphing ${(morph * 100).toFixed(0)}%` : "");
   }
 
+  // frames actually drawn per second, and the slowest gap between two of them
+  let shown = 0, slowest = 0, lastTick = performance.now(), windowStart = lastTick;
   function tick() {
+    const now = performance.now();
+    slowest = Math.max(slowest, now - lastTick); lastTick = now; shown++;
+    if (now - windowStart >= 1000) {
+      fpsBox.textContent = audio.paused ? `${W}x${H}` : `${Math.round(shown * 1000 / (now - windowStart))} fps  ${slowest.toFixed(0)} ms`;
+      shown = 0; slowest = 0; windowStart = now;
+    }
     const t = audio.currentTime;
     if (lastDrawn < 0 || t < lastDrawn || t - lastDrawn >= STEP) {
       if (lastDrawn >= 0 && (t < lastDrawn || t - lastDrawn > 0.5)) clearFeedback();

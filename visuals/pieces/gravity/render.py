@@ -72,7 +72,7 @@ SILENT_IN_SOLO = ("uVoice", "uSustain", "uTint", "uPump")
 # of the audio held still, the clocks running - any step in the picture is a step
 # in a decision, and there should not be one.
 SECTION_LEVEL = tuple(f"uC{role}{c}" for role in direct.PALETTE_ROLES for c in "RGB") + (
-    "uRays", "uBands", "uStars", "uTilt", "uIncl", "uCamTilt", "uCamRoll")
+    "uRays", "uBands", "uStars", "uTilt", "uIncl") + cosmos.CAMERA_UNIFORMS
 
 
 def sections_only(ch: direct.Channels) -> direct.Channels:
@@ -249,6 +249,8 @@ def export(got: dict, ch: direct.Channels, out_dir: Path) -> None:
         (out_dir / file).write_bytes(arr.astype("<f4").tobytes())
         plan["textures"].append({"name": name, "file": file, "width": int(arr.shape[1]),
                                  "height": int(arr.shape[0]), "channels": int(arr.shape[2])})
+    if getattr(ch, "variants", None):
+        plan["variants"] = ch.variants
     if getattr(ch, "acts", None):
         plan["acts"] = [{"start": a.start, "end": a.end, "function": a.function,
                          "subject": a.subject if a.subject >= 0 else None} for a in ch.acts]

@@ -53,7 +53,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--start", type=float, default=120.0)
     p.add_argument("--duration", type=float, default=40.0)
 
+    ap.add_argument("--camera", choices=("static", "hybrid", "cinematic"), default="static",
+                    help="cosmos only: which camera an mp4 is rendered with (the player can switch between all three)")
     args = ap.parse_args(argv)
+    from . import cosmos as _cosmos
+    _cosmos.CAMERA = args.camera
     from . import out_dir
     out = out_dir(args.style)
     if args.cmd in ("render", "stage", "measure", "matrix", "smooth"):

@@ -339,9 +339,17 @@ def test_acts_cover_the_song_and_the_planets_align_at_the_climax():
     lon = np.array([2 * np.pi * ch.data[i, ch.index(f"uPh{k}")] + ch.data[i, ch.index("uCamTurn")] for k in range(8)])
     lon = (lon + np.pi) % (2 * np.pi) - np.pi
     assert np.degrees(np.abs(lon).max()) < 8.0
-    # and the camera is an orrery's: it never jumps
-    for name in ("uCamTurn", "uCamTilt", "uCamRoll", "uCamSpan", "uCamX", "uCamY"):
-        assert np.abs(np.diff(ch.data[:, ch.index(name)])).max() < 0.01, name
+    # three cameras are baked, and each is an orrery's: it never jumps. (Zoom is judged
+    # as a ratio - a step of 0.02 means nothing at a span of 3 and a lot at 0.25.)
+    for mode in cosmos.MODES:
+        for name in cosmos.CAMERA_UNIFORMS:
+            x = ch.data[:, ch.index(f"{name}.{mode}")].astype(np.float64)
+            step = np.abs(np.diff(np.log(x))) if name == "uCamSpan" else np.abs(np.diff(x))
+            assert step.max() < 0.012, (mode, name, step.max())
+    # and all three are looking the same way at the climax, so the row is one event
+    headings = [ch.data[i, ch.index(f"uCamTurn.{mode}")] for mode in cosmos.MODES]
+    assert np.ptp(headings) < 1e-3
+    assert set(ch.variants["camera"]["choices"]) == set(cosmos.MODES)
 
 
 def test_every_uniform_the_3d_shader_declares_is_fed():

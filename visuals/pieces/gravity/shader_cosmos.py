@@ -340,11 +340,16 @@ void main() {{
     float wM = max(fwidth(mw), 1e-4);                                 // (a derivative is already per render pixel)
     wM *= ss;                                                          // ...so undo what edge() will do to it
     vec3 col = space * (1.0 - 0.35 * smoothstep(0.40, 1.05, length(p)));
-    col = mix(col, vec3(0.034, 0.042, 0.088) + kFar * 0.024, edge(0.14, mw, wM));
-    col = mix(col, vec3(0.052, 0.061, 0.120) + kFar * 0.030, edge(0.28, mw, wM));
-    col = mix(col, vec3(0.076, 0.085, 0.156) + kFar * 0.034, edge(0.45, mw, wM));
-    col = mix(col, vec3(0.108, 0.113, 0.192) + kFar * 0.034, edge(0.64, mw, wM));
-    col = mix(col, vec3(0.160, 0.150, 0.222) + kFar * 0.026, edge(0.86, mw, wM));       // the core of the bulge only
+    // Darker than a first try had it, and darker again across the stage the planets
+    // move on: the clouds are there to frame the system, and a pale cloud behind a
+    // planet only hides it. Out beyond the orbits they come up to full strength.
+    float stage = length(vec2(q.x, q.y / e)) / ((max(0.255, 0.156 / e) + 0.46) * uSpreadSlow);
+    float gM = mix(0.42, 1.0, smoothstep(0.55, 1.25, stage));
+    col = mix(col, vec3(0.030, 0.037, 0.078) + kFar * 0.020, edge(0.14, mw, wM) * gM);
+    col = mix(col, vec3(0.043, 0.051, 0.102) + kFar * 0.024, edge(0.28, mw, wM) * gM);
+    col = mix(col, vec3(0.059, 0.067, 0.126) + kFar * 0.027, edge(0.45, mw, wM) * gM);
+    col = mix(col, vec3(0.079, 0.084, 0.150) + kFar * 0.027, edge(0.64, mw, wM) * gM);
+    col = mix(col, vec3(0.108, 0.104, 0.168) + kFar * 0.020, edge(0.86, mw, wM) * gM);       // the core of the bulge only
 
     float starGain = 0.50 + 0.50 * uStars;
     vec2 uvO = octEncode(rd);
@@ -537,8 +542,8 @@ void main() {{
         // faster it goes - its own colour, warmed by the song's
         {{
             float behind = mod(th - thW, TAU);
-            float reach = (0.18 + 0.55 * pow(0.250 / (ORBIT_STEP[i] + 0.250), 1.5)) * (0.55 + 0.45 * uHold);
-            float fade = behind < reach ? pow(1.0 - behind / reach, 1.5) : 0.0;
+            float reach = (0.32 + 0.95 * pow(0.250 / (ORBIT_STEP[i] + 0.250), 1.5)) * (0.60 + 0.40 * uHold);
+            float fade = behind < reach ? pow(1.0 - behind / reach, 1.25) : 0.0;
             float grad = length(vec2(plW.x, plW.y / e)) / max(rhoW, 1e-6);
             float tr = disc(abs(rhoW - a) / (grad * pxScene), 1.0) * fade * (0.34 + 0.40 * lum);
             vec3 tc = mix(mix(PLANET_TINT[i], kA, 0.40), white, 0.20);
@@ -600,6 +605,10 @@ void main() {{
             }}
             if (ringA_ > 0.0 && ringFront < 0.5) {{ pc = mix(pc, ringC, step(pA, ringA_)); pA = max(pA, ringA_); }}
 
+            // a keyline: a thin dark edge, as an inked drawing has, so that a planet
+            // stands off whatever is behind it - a cloud of the galaxy, a ring, a trail
+            float keyline = disc(length(dq) / pxScene, sizePx + 1.7);
+            pc = mix(pc, space * 0.55, step(pA, keyline * 0.92)); pA = max(pA, keyline * 0.92);
             if (rel < 1.0 + 1.5 / max(sizePx, 1.0)) {{
                 float cover = disc(length(dq) / pxScene, sizePx);
                 vec3 n = vec3(dq / size, sqrt(max(1.0 - rel * rel, 0.0)));

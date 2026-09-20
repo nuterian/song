@@ -27,6 +27,13 @@
   button:hover { background: #262630; }
   #seek { flex: 1 1 220px; min-width: 160px; accent-color: #8a7ad0; }
   #readout { color: #7c7c8a; white-space: nowrap; }
+  #fps { color: #5c5c6a; white-space: nowrap; min-width: 9ch; text-align: right; }
+  .choice { display: flex; gap: 0; align-items: center; }
+  .choice span { color: #5c5c6a; margin-right: 8px; }
+  .choice button { border-radius: 0; margin-left: -1px; padding: 5px 12px; color: #9a9aa8; }
+  .choice button:first-of-type { border-radius: 2px 0 0 2px; }
+  .choice button:last-of-type { border-radius: 0 2px 2px 0; }
+  .choice button.on { background: #3a3358; border-color: #5b4f8c; color: #f2f0ff; position: relative; }
   #error { padding: 16px; color: #e08a8a; white-space: pre-wrap; }
 </style>
 </head>
@@ -35,7 +42,9 @@
   <div id="bar">
     <button id="play">play</button>
     <input id="seek" type="range" min="0" max="1" step="0.001" value="0">
+    <span id="choices"></span>
     <span id="readout">loading</span>
+    <span id="fps"></span>
   </div>
   <div id="error" hidden></div>
   <audio id="audio" preload="auto"></audio>
