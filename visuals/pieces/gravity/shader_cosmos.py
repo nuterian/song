@@ -22,8 +22,10 @@ thousand naked-eye stars from the Yale Bright Star Catalogue at their true place
 magnitudes and colours; and the Milky Way, cut in flat tones out of NASA's all-sky map
 - its real bulge, its real rift, both Magellanic Clouds.
 
-The song's palette is in the *light* - the corona, the ripples, the trails, the
-voice's ring, the lyric's tint - and never repaints a planet.
+Nothing changes colour with the song. For a while the song's palette was in the
+*light* - corona, ripples, the voice's ring - and a green corona is not the solar
+system. The colours are the solar system's and they stay: a warm Sun and corona, light
+that is gold going to white, shadow and sky the deep blue of space. The song animates.
 
 Ripples lie in the plane of the orbits: a clap's ring, a planet's ping and pool, the
 voice's ring and the re-entry's shock are circles in the ecliptic, seen as ellipses,
@@ -366,12 +368,16 @@ void main() {{
 
 {_palette_locals()}
     vec3 white = vec3(1.0, 0.985, 0.95);
-    vec3 cTint = pow(vec3(uTintR, uTintG, uTintB), vec3(1.0 / 2.2));
-    vec3 kField = vivid(cField, 1.5), kFar = vivid(cFar, 1.4), kBody = vivid(cBody, 1.8);
-    vec3 kA = vivid(cAccent, 1.6), kB = vivid(cAccent2, 1.6);
+    // Nothing here changes colour with the song. This is the solar system, and it is the
+    // colour it is: a warm Sun in a warm corona, light that is gold going to white, shadow
+    // and sky the deep blue of space. The song moves things; it does not repaint them. (The
+    // section palettes are still baked, and the other styles use them; this one does not.)
+    vec3 cTint = vec3(1.0, 0.95, 0.86);
+    vec3 kField = vec3(0.40, 0.46, 0.74), kFar = vec3(0.20, 0.30, 0.50), kBody = vec3(1.0, 0.56, 0.22);
+    vec3 kA = vec3(1.0, 0.84, 0.54), kB = vec3(0.98, 0.93, 0.84);        // light from the Sun: gold, and a paler gold
     vec3 space = vec3(0.018, 0.023, 0.052) + kFar * 0.030;
     vec3 shade = mix(space, kField, 0.22);                            // the colour of shadow: never grey, never black
-    vec3 sunlight = mix(vec3(1.0, 0.97, 0.90), kBody, 0.12);          // the song is in the light
+    vec3 sunlight = vec3(1.0, 0.96, 0.88);                            // sunlight
 
     // ---- the sky: the one thing seen through a lens, because it is infinitely far --------
     float lens = SKY_LENS / pow(uCamSpan, 0.18);                      // it answers a zoom a little, as far things do
@@ -604,7 +610,7 @@ void main() {{
         float len = (0.020 + 0.13 * closeness * closeness) * (0.55 + 0.75 * uField);
         float u = clamp(back / len, 0.0, 1.0);
         float tailA = step(0.0, back) * step(back, len) * disc(abs(dot(d, vec2(-away.y, away.x))) / pxScene, (1.0 + 2.4 * closeness) * (1.0 - 0.85 * u) + 0.3);
-        vec3 cc = mix(kB, white, 0.30 * (1.0 - u)); float cA = tailA * (0.75 - 0.45 * u) * lum;
+        vec3 cc = mix(vec3(0.96, 0.92, 0.80), white, 0.30 * (1.0 - u)); float cA = tailA * (0.75 - 0.45 * u) * lum;
         // ...and the ion tail: gas, blown dead straight down the solar wind - finer, longer, blue
         float backI = dot(d, anti), lenI = 1.55 * len;
         float ion = step(0.0, backI) * step(backI, lenI) * disc(abs(dot(d, vec2(-anti.y, anti.x))) / pxScene, 0.75 * (1.0 - 0.7 * backI / lenI) + 0.15)
@@ -864,12 +870,16 @@ void main() {{
             float dth = abs(mod(around - TAU * flareK[i] + PI, TAU) - PI);
             burst += R * 0.80 * flareA[i] * exp(-pow(dth / 0.40, 2.6)) * exp(-age / 0.20);
         }}
+        tongue = 0.50 * R * (1.0 - exp(-tongue / (0.50 * R)));         // the same note played again and again does not pile up into a spike
         reach += tongue + burst;
-        vec3 rim = mix(vec3(1.0, 0.60, 0.24), kBody, 0.78 - 0.30 * uCharge) * (0.80 + 0.12 * uCharge);   // hotter as it charges
+        vec3 rim = mix(vec3(0.80, 0.40, 0.15), vec3(0.95, 0.52, 0.19), uCharge);                       // always warm; hotter as it charges
         // the song's colour, plainly: this rim is where a section's palette is most seen
         col = mix(col, rim, disc(out_ / pxScene, reach / pxScene) * 0.92 * (0.70 * lum + 0.30 * ev));
+        // The core of a tongue is the limb itself standing out: the limb's own tone, running
+        // on from it with no seam, and tapering to nothing at its ends instead of being cut.
         float core = 0.52 * tongue + 0.70 * burst;
-        col = mix(col, mix(vec3(1.0, 0.66, 0.28), white, 0.20 + 0.50 * clamp(burst / R, 0.0, 1.0)), disc(out_ / pxScene, core / pxScene) * step(1.5 * pxScene, core) * ev);
+        vec3 limbTone = mix(vec3(1.0, 0.57, 0.19), vec3(1.0, 0.80, 0.42), clamp(0.32 + 0.45 * uBass * amb + 0.85 * kick * ev, 0.0, 1.0));
+        col = mix(col, mix(limbTone, white, 0.55 * clamp(burst / R, 0.0, 1.0)), disc(out_ / pxScene, core / pxScene) * smoothstep(0.0, 2.0 * pxScene, core));
     }}
     if (r < R + 2.0 * pxScene) {{
         float mu = sqrt(max(1.0 - (r * r) / (R * R), 0.0));          // 1 at the centre of the disc, 0 at the limb

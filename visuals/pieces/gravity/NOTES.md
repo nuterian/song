@@ -512,3 +512,15 @@ the floor (x2.6-3.2 there, x6-9 in the quiet acts). Nothing answers late but the
 crash, whose shooting star takes two frames to grow.
 
 4.7 ms a frame at 1080p and 7.7 at 1440p on the M4: a quarter to a half of the budget.
+
+## ...and the colours stopped changing
+
+Version 4 began with the song's palette "living in the light": the planets their own
+colours, the corona, ripples and rings the section's. Seen for long enough, a green
+corona is not the solar system. The decision was reversed: in this style nothing
+changes colour with the song - a warm Sun in a warm corona, light that is gold going to
+white, shadow and sky the deep blue of space. The song animates; it does not repaint.
+(`decide`'s palettes are still baked, and the other styles still use them.) A tongue's
+hot core became the limb's own tone running on from the limb, because as a paler patch
+it sat apart from the Sun it was meant to be part of; and tongues are blunt, and do not
+pile into a spike when the same note is played again and again.
