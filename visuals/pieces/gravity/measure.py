@@ -39,6 +39,7 @@ W, H = 480, 270
 # Regions, as radius in units of frame height - the shader's own unit.
 REGIONS = {
     "core": (0.0, 0.030),      # the voice's light
+    "heart": (0.0, 0.062),     # ...and the disc it swells in, when the light is an ink and saturates
     "edge": (0.088, 0.135),    # where the body's edge goes when the kick lands
     "near": (0.140, 0.230),    # where a ring is born
     "field": (0.145, 0.70),    # rings, lines, satellites
@@ -94,9 +95,18 @@ def body_radius(video: Path) -> np.ndarray:
         # light or a ring being born can fall as far, but over five bins or more;
         # the body's rim falls in one or two. So: the fall that most exceeds its
         # own surroundings three bins either side.
+        # ...and, of the hard edges, the innermost that has the dark beyond it. A
+        # clap's ring, printed as ink, is as hard an edge as the rim, but it is always
+        # outside it; the voice's heart is a hard edge *inside* the star, but past it
+        # there is still star, and past the rim there is not.
         lo, hi = int(0.030 / width), int(0.160 / width)
         sharp = g[lo:hi] - 0.5 * (g[lo - 3:hi - 3] + g[lo + 3:hi + 3])
-        i = lo + int(np.argmin(sharp))
+        inside = np.maximum.accumulate(prof)[lo:hi]
+        beyond = ndimage.uniform_filter1d(prof, 4, origin=-2)[lo + 3:hi + 3]
+        ok = (sharp <= 0.45 * sharp.min()) & (beyond < 0.62 * inside)
+        i = lo + int(np.argmax(ok)) if ok.any() else lo + int(np.argmin(sharp))
+        while i + 1 < hi and sharp[i + 1 - lo] < sharp[i - lo]:
+            i += 1
         # parabolic refinement of the steepest point
         if 0 < i < len(g) - 1:
             d = g[i - 1] - 2 * g[i] + g[i + 1]
@@ -126,7 +136,7 @@ def frame_signals(video: Path) -> dict[str, np.ndarray]:
     fieldbins = (np.arange(96) * 0.9 / 96 >= 0.17) & (np.arange(96) * 0.9 / 96 < 0.62)
 
     out: dict[str, list] = {k: [] for k in ("lum", "motion", "core", "edge", "near", "field",
-                                            "peak", "sparks", "points", "detail", "radial", "ring")}
+                                            "peak", "sparks", "points", "detail", "radial", "ring", "heart")}
     prev = None
     prev_prof = None
     for f in decode(video):
@@ -142,7 +152,9 @@ def frame_signals(video: Path) -> dict[str, np.ndarray]:
         narrow = prof - ndimage.median_filter(prof, 13, mode="nearest")
         out["ring"].append(float(narrow[ringbins].max()))
         resid = (f.ravel() - prof[rbin])[masks["field"].ravel()]
-        out["points"].append(float(np.partition(resid, -12)[-12:].mean()))
+        # the brightest sixty pixels, not the brightest dozen: on a printed page a
+        # dozen pixels are always at full ink, and what a note adds is *area* of it
+        out["points"].append(float(np.partition(resid, -60)[-60:].mean()))
         out["radial"].append(0.0 if prev_prof is None
                              else float(np.abs(prof - prev_prof)[fieldbins].mean()))
         prev, prev_prof = f, prof
@@ -192,8 +204,10 @@ def colour_signals(video: Path) -> dict[str, np.ndarray]:
         h[rmax] = ((g - b)[rmax] / c[rmax]) % 6.0
         h[gmax] = (b - r)[gmax] / c[gmax] + 2.0
         h[bmax] = (r - g)[bmax] / c[bmax] + 4.0
+        # the paper is nine tenths of a printed frame and has a breath of colour in
+        # it; it is what the inks are on, not one of them, so it does not vote
         hist = np.bincount(np.minimum((h / 6.0 * HUE_BINS).astype(int), HUE_BINS - 1),
-                           weights=c, minlength=HUE_BINS)
+                           weights=np.maximum(c - 0.08, 0.0), minlength=HUE_BINS)
         hues.append(hist / max(hist.sum(), 1e-9))
         chroma_mean.append(float(c.mean()))
     proc.wait()
@@ -345,6 +359,57 @@ def matrix(got: dict, start: float = 120.0, duration: float = 40.0) -> dict:
     return table
 
 
+# ------------------------------------------------------------------ smoothness
+
+
+def smoothness(got: dict) -> dict:
+    """Render the whole song with only the section-level decisions moving, and look
+    for a step. Reported as the largest frame-to-frame change against the median one,
+    overall and at each section boundary: in a ramp the boundary frame is an ordinary
+    frame; in a cut it is tens of times the median."""
+    from . import CACHE, models, render
+
+    video = render.render(got, OUT / "solo", start=0.0, duration=got["meta"]["duration"] - 0.01,
+                          size=(640, 360), crf=18, solo="sections", quiet=True)
+    ch = direct.direct(got, models.load_cached(CACHE))
+    step, prev = [], None
+    keep: dict[int, np.ndarray] = {}
+    wanted = {int(s_.start * 60) + d for s_ in ch.sections[1:] for d in (-480, 480)}
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(video),
+           "-vf", "scale=320:180:flags=area", "-pix_fmt", "rgb24", "-f", "rawvideo", "-"]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    size = 320 * 180 * 3
+    while True:
+        buf = proc.stdout.read(size)
+        if len(buf) < size:
+            break
+        f = np.frombuffer(buf, dtype=np.uint8).astype(np.float32) / 255.0
+        if prev is not None:
+            step.append(float(np.abs(f - prev).mean()))
+        if len(step) in wanted:
+            keep[len(step)] = f
+        prev = f
+    proc.wait()
+    step = np.asarray(step)
+    med = float(np.median(step))
+    worst = int(np.argmax(step))
+    print(f"smoothness, with only section decisions live: median frame-to-frame change {med:.5f}; "
+          f"largest anywhere {step.max():.5f} = {step.max() / med:.2f}x the median, at {(worst + 1) / 60:.2f}s")
+    out = {"median": med, "max_ratio": float(step.max() / med), "boundaries": []}
+    for s in ch.sections[1:]:
+        f0 = int(s.start * 60)
+        around = step[max(f0 - 30, 0): f0 + 30]
+        a_, b_ = keep.get(f0 - 480), keep.get(f0 + 480)
+        cut = float(np.abs(a_ - b_).mean() / med) if a_ is not None and b_ is not None else float("nan")
+        out["boundaries"].append({"bar": s.bar0, "t": s.start, "ratio": float(around.max() / med),
+                                  "a_cut_would_be": cut})
+    print("   at each section boundary: largest change within half a second, x median "
+          "(and what cutting between the two sections' looks would have been):")
+    print("   " + "  ".join(f"bar {b['bar']}: {b['ratio']:.1f} ({b['a_cut_would_be']:.0f})"
+                            for b in out["boundaries"]))
+    return out
+
+
 # ------------------------------------------------------------------------ main
 
 
@@ -372,7 +437,8 @@ def main(got: dict, video: str | None, start: float = 0.0, save: bool = True) ->
         except ValueError:
             pass
     a, meta = got["arrays"], got["meta"]
-    ch = direct.direct(got)
+    from . import CACHE, models
+    ch = direct.direct(got, models.load_cached(CACHE))
     fps = probe_fps(video)
     sig = frame_signals(video)
     n = len(sig["lum"])
@@ -389,6 +455,9 @@ def main(got: dict, video: str | None, start: float = 0.0, save: bool = True) ->
         "syllable": a["ev_syllable_t"][a["ev_syllable_amp"] > 0.30],
         "drop": np.array([d["t"] for d in ch.drops]),
     }
+    # a crash throws a shooting star (and rings the stars): an event, though no
+    # detector here is dedicated to it
+    crash = a["ev_crash_t"][a["ev_crash_amp"] > 0.9]
 
     print("\nlag and coverage   (onset: where the stacked response is half way up, relative")
     print("                    to the audio event; negative is the picture first)")
@@ -406,7 +475,7 @@ def main(got: dict, video: str | None, start: float = 0.0, save: bool = True) ->
 
     # precision: the moments the picture *starts* doing something - the largest
     # rises in its motion - and whether the audio had anything under each of them
-    allev = np.sort(np.concatenate(list(events.values())))
+    allev = np.sort(np.concatenate(list(events.values()) + [crash]))
     jump = np.diff(sig["lum"], prepend=sig["lum"][0])
     rise = np.maximum(np.diff(sig["motion"], prepend=sig["motion"][0]), 0.0)
     peaks, _ = signal.find_peaks(rise, distance=3)
@@ -416,8 +485,16 @@ def main(got: dict, video: str | None, start: float = 0.0, save: bool = True) ->
     t_lo, t_hi = start + (top - 0.5) / fps, start + (top + 1.0) / fps
     i = np.searchsorted(allev, t_lo)
     explained = float(np.mean((i < len(allev)) & (allev[np.minimum(i, len(allev) - 1)] <= t_hi)))
+    # ...and against every attack `listen` found, however quiet: a soft syllable is
+    # below the list above, and the voice's light still, rightly, answers it
+    every = np.sort(np.concatenate([a[f"ev_{k}_t"] for k in ("kick", "snare", "hat", "note", "syllable", "crash")]
+                                   + [events["drop"]]))
+    j = np.searchsorted(every, t_lo)
+    explained_any = float(np.mean((j < len(every)) & (every[np.minimum(j, len(every) - 1)] <= t_hi)))
     print(f"\nprecision: of the {len(top)} sharpest visual onsets, "
-          f"{100 * explained:.0f}% have an audio event in the frame they appear in")
+          f"{100 * explained:.0f}% have a listed audio event in the frame they appear in; "
+          f"{100 * explained_any:.0f}% have an attack of any size")
+    report["precision_any"] = explained_any
     report["precision"] = explained
 
     # impact: the biggest steps, against the re-entries

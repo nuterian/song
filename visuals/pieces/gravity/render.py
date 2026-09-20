@@ -19,7 +19,15 @@ from pathlib import Path
 import moderngl
 import numpy as np
 
-from . import AUDIO, TRACK, WORKDIR, direct, shader
+from . import AUDIO, CACHE, TRACK, WORKDIR, direct, models, shader, shader_ink
+
+# Which shader draws. Set once by the command line; everything that renders reads it.
+STYLE = "glow"
+
+
+def shader_module(style: str | None = None):
+    return shader_ink if (style or STYLE) == "ink" else shader
+
 
 FULLSCREEN = np.array([-1.0, -1.0, 3.0, -1.0, -1.0, 3.0], dtype="f4")
 
@@ -28,32 +36,60 @@ FULLSCREEN = np.array([-1.0, -1.0, 3.0, -1.0, -1.0, 3.0], dtype="f4")
 ROLES: dict[str, tuple[str, ...]] = {
     "kick": ("uKickA",),
     "snare": tuple(f"uRingA{k}" for k in range(direct.N_RINGS)),
-    "hat": ("uHatA",),
+    "hat": ("uHatA", "uCrashA"),
     "note": tuple(f"uNoteA{k}" for k in range(direct.N_SATS)),
-    "voice": ("uVoice", "uSyllA", "uPitch"),
+    "voice": ("uVoice", "uSyllA", "uPitch", "uSustain", "uTint"),
     "bass": ("uBass",),
-    "drop": ("uDropA",),
+    "drop": ("uDropA",) + tuple(f"uMetA{k}" for k in range(direct.N_METEORS)),
 }
-STILL_AT_MEDIAN = ("uMass", "uSpread", "uBass", "uSynth", "uVoice", "uPitch", "uField",
-                   "uAir", "uHue", "uWarm", "uExposure")
+# clocks: frozen in a solo, so that only the soloed instrument moves anything
+CLOCKS = ("uOrbit", "uOrbitSlow", "uDrift", "uBeats")
+SILENT_IN_SOLO = ("uVoice", "uSustain", "uTint", "uPump")
+
+
+# What a section decides. With only these live - every hit silenced, every follower
+# of the audio held still, the clocks running - any step in the picture is a step
+# in a decision, and there should not be one.
+SECTION_LEVEL = tuple(f"uC{role}{c}" for role in direct.PALETTE_ROLES for c in "RGB") + (
+    "uRays", "uBands", "uStars", "uTilt", "uIncl")
+
+
+def sections_only(ch: direct.Channels) -> direct.Channels:
+    data = ch.data.copy()
+    sizes = {name for names in ROLES.values() for name in names}
+    for c, (name, kind) in enumerate(zip(ch.names, ch.kinds)):
+        if name in SECTION_LEVEL or name in CLOCKS:
+            continue
+        if kind == direct.HOLD:
+            if name in sizes:
+                data[:, c] = 0.0
+        elif name in SILENT_IN_SOLO:
+            data[:, c] = 0.0
+        else:
+            data[:, c] = np.median(ch.data[:, c])
+    return direct.Channels(ch.names, ch.kinds, data, ch.drops, ch.duration, ch.sections, ch.info)
 
 
 def solo_channels(ch: direct.Channels, role: str) -> direct.Channels:
+    if role == "sections":
+        return sections_only(ch)
     if role not in ROLES:
         raise SystemExit(f"--solo takes one of {sorted(ROLES)}")
     data = ch.data.copy()
     live = set(ROLES[role])
-    for other, names in ROLES.items():
-        for name in names:
-            if name not in live and name not in STILL_AT_MEDIAN:
-                data[:, ch.index(name)] = 0.0    # an event's size: no size, no event
-    for name in STILL_AT_MEDIAN:
-        if name not in live:
-            c = ch.index(name)
-            data[:, c] = 0.0 if name in ("uVoice",) else np.median(ch.data[:, c])
-    # the orbits keep turning in a solo; freeze them so only the role moves
-    c = ch.index("uOrbit")
-    data[:, c] = ch.data[len(ch.data) // 2, c]
+    sizes = {name for names in ROLES.values() for name in names}
+    for c, (name, kind) in enumerate(zip(ch.names, ch.kinds)):
+        if name in live:
+            continue
+        if name in CLOCKS:
+            data[:, c] = ch.data[len(ch.data) // 2, c]
+        elif kind == direct.HOLD:
+            if name in sizes:
+                data[:, c] = 0.0                  # an event's size: no size, no event
+        elif name in SILENT_IN_SOLO:
+            data[:, c] = 0.0
+        else:
+            data[:, c] = np.median(ch.data[:, c])  # every level, palette included, held still
     return direct.Channels(ch.names, ch.kinds, data, ch.drops, ch.duration)
 
 
@@ -61,8 +97,9 @@ class Renderer:
     def __init__(self, width: int, height: int) -> None:
         self.size = (width, height)
         self.ctx = moderngl.create_standalone_context(require=330)
-        self.prog = self.ctx.program(vertex_shader=shader.vertex_source(),
-                                     fragment_shader=shader.fragment_source())
+        sh = shader_module()
+        self.prog = self.ctx.program(vertex_shader=sh.vertex_source(),
+                                     fragment_shader=sh.fragment_source())
         quad = self.ctx.buffer(FULLSCREEN.tobytes())
         self.vao = self.ctx.vertex_array(self.prog, [(quad, "2f", "aPos")])
         self.tex = self.ctx.texture((width, height), 4, dtype="f1")
@@ -96,7 +133,7 @@ def render(got: dict, out_dir: str | Path, start: float = 0.0, duration: float |
            solo: str | None = None, quiet: bool = False) -> Path:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    ch = direct.direct(got)
+    ch = direct.direct(got, models.load_cached(CACHE))
     if solo:
         ch = solo_channels(ch, solo)
     total = ch.duration - start if duration is None else min(duration, ch.duration - start)
@@ -142,6 +179,16 @@ def render(got: dict, out_dir: str | Path, start: float = 0.0, duration: float |
     return out_path
 
 
+def stage(got: dict, out_dir: str | Path) -> Path:
+    """Only what the browser player needs - the shader and the baked channels - and
+    no mp4. Seconds rather than minutes, which is what trying a look wants."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    Renderer(64, 36).release()              # compile it here first: a GLSL error is better read now
+    export(got, direct.direct(got, models.load_cached(CACHE)), out_dir)
+    return out_dir
+
+
 def export(got: dict, ch: direct.Channels, out_dir: Path) -> None:
     """plan.json + frames.bin + audio, in the format visuals/player already reads."""
     meta = got["meta"]
@@ -153,11 +200,13 @@ def export(got: dict, ch: direct.Channels, out_dir: Path) -> None:
         "version": 1, "track": TRACK, "duration": ch.duration, "tempo": meta["tempo"],
         "meter": 4, "seed": 0, "grid": ch.header(), "per_frame": ["uTime"],
         "sections": sections,
-        "program": {"key": "gravity-in-motion-piece",
-                    "fragment": shader.fragment_source(shader.WEBGL_HEADER)},
-        "vertex": shader.vertex_source(shader.WEBGL_HEADER),
+        "program": {"key": f"gravity-in-motion-{STYLE}",
+                    "fragment": shader_module().fragment_source(shader.WEBGL_HEADER)},
+        "vertex": shader_module().vertex_source(shader.WEBGL_HEADER),
         "frames_file": "frames.bin", "audio_file": "mix.m4a",
         "drops": ch.drops,
+        "plan": [{"bars": [s.bar0, s.bar1], "state": s.state, "hue": s.hue, "axes": s.axes}
+                 for s in (ch.sections or [])],
     }
     (out_dir / "frames.bin").write_bytes(ch.data.astype("<f4").tobytes())
     (out_dir / "plan.json").write_text(json.dumps(plan, indent=1) + "\n")

@@ -19,4 +19,18 @@ scipy==1.14.1
 librosa==0.10.2.post1
 soundfile==0.12.1
 
+# Small local models, for pieces (visuals/pieces/gravity/models.py). All permissive
+# licences. torch is 2.6 rather than the root's 2.5.1 because transformers will not
+# torch.load a pickle checkpoint on anything older (CVE-2025-32434), and CLAP's
+# only checkpoint is a pickle. basic-pitch itself is not installed - its pip package
+# stops at Python 3.11 - only its 230 KB nmp.onnx, fetched to visuals/cache/models/
+# from github.com/spotify/basic-pitch at tag v0.4.0 and run with onnxruntime.
+torch==2.6.0
+torchaudio==2.6.0
+onnxruntime==1.30.0
+transformers==4.57.6
+swift-f0==0.2.0
+beat-this==1.1.0
+lv-chordia==1.1.0
+
 pytest==8.3.4

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from . import AUDIO, CACHE, OUT, STEMS_DIR, WORKDIR
+from . import AUDIO, CACHE, MODELS, OUT, STEMS_DIR, WORKDIR
 
 
 def _listen(force: bool = False) -> dict:
@@ -21,6 +21,8 @@ def _listen(force: bool = False) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m visuals.pieces.gravity")
+    ap.add_argument("--style", choices=("glow", "ink"), default="glow",
+                    help="glow: soft light on black. ink: printed, cel-shaded space")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("listen", help="stems -> events and streams")
@@ -39,11 +41,28 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("measure", help="decode the mp4 and check it against the audio")
     p.add_argument("--video", default=None)
 
+    p = sub.add_parser("models", help="notes, melody, chords, mood, lyrics - from small local models")
+    p.add_argument("--force", action="store_true")
+
+    sub.add_parser("stage", help="export to the browser player only: no mp4, a few seconds")
+
+    sub.add_parser("smooth", help="only section decisions live: is there a step anywhere?")
+
     p = sub.add_parser("matrix", help="solo each instrument; which detectors does it move?")
     p.add_argument("--start", type=float, default=120.0)
     p.add_argument("--duration", type=float, default=40.0)
 
     args = ap.parse_args(argv)
+    from . import out_dir
+    out = out_dir(args.style)
+    if args.cmd in ("render", "stage", "measure", "matrix", "smooth"):
+        from . import measure as _m, render as _r
+        _r.STYLE = args.style
+        _m.OUT = out
+        if args.style == "ink":
+            # printed, the voice's light is an ink and saturates at the centre; it is
+            # looked for in the disc it swells in instead
+            _m.ROLE_REGION["syllable"] = "heart"
 
     if args.cmd == "listen":
         from . import report
@@ -53,15 +72,35 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "render":
         from . import render
         w, h = (int(v) for v in args.size.lower().split("x"))
-        out = render.render(_listen(), OUT if args.out is None else args.out,
+        made = render.render(_listen(), out if args.out is None else args.out,
                             start=args.start, duration=args.duration,
                             size=(w, h), fps=args.fps, crf=args.crf, solo=args.solo)
-        print(out)
+        print(made)
         return 0
 
     if args.cmd == "measure":
         from . import measure
         return measure.main(_listen(), args.video)
+
+    if args.cmd == "models":
+        from . import models
+        if args.force or models.load_cached(CACHE) is None:
+            arrays, meta = models.run(_listen(), AUDIO, STEMS_DIR, WORKDIR, MODELS)
+            models.save(arrays, meta, CACHE)
+        from . import report
+        report.print_models(_listen(), *models.load_cached(CACHE))
+        return 0
+
+    if args.cmd == "stage":
+        from . import render
+        staged = render.stage(_listen(), out)
+        print(f"staged {staged}\n  python -m visuals serve   ->   http://localhost:8765/player/?track={staged.name}")
+        return 0
+
+    if args.cmd == "smooth":
+        from . import measure
+        measure.smoothness(_listen())
+        return 0
 
     if args.cmd == "matrix":
         from . import measure

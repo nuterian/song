@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from visuals.pieces.gravity import direct, listen, shader
+from visuals.pieces.gravity import colour, direct, listen, models, shader, shader_ink
 
 SR = 48000
 
@@ -94,19 +94,54 @@ def test_the_spring_overshoots_once_and_settles():
     assert abs(x[-1] - 1.0) < 0.005      # ...and ends up there
 
 
-def test_both_dialects_are_one_source():
-    gl, web = shader.fragment_source(shader.GL_HEADER), shader.fragment_source(shader.WEBGL_HEADER)
+@pytest.mark.parametrize("sh", [shader, shader_ink], ids=["glow", "ink"])
+def test_both_dialects_are_one_source(sh):
+    gl, web = sh.fragment_source(sh.GL_HEADER), sh.fragment_source(sh.WEBGL_HEADER)
     assert gl.split("\n", 1)[1] == web.split("\n", 1)[1]
     assert "uPrev" not in gl             # no feedback: any frame can be drawn cold
 
 
+def test_the_printed_style_blurs_nothing():
+    """Sharpness is a rule of the ink style, so it is checked in the source: no
+    gaussian falloff may reach the page as light. `exp(-x*x` is allowed where it
+    shapes a *displacement* (the shove of a passing wave) or feeds a posterize()."""
+    import re
+
+    body = shader_ink.FRAGMENT_BODY
+    for line in body.splitlines():
+        if re.search(r"exp\(-\s*\(?[a-z_.]+\s*\*\s*[a-z_.]+", line) and "col = lay" in line:
+            assert "posterize" in line, line.strip()
+
+
+@pytest.mark.parametrize("style", ["glow", "ink"])
+def test_each_style_compiles_and_draws(style):
+    pytest.importorskip("moderngl")
+    from visuals.pieces.gravity import render
+
+    render.STYLE = style
+    try:
+        r = render.Renderer(160, 90)
+    except Exception as exc:
+        render.STYLE = "glow"
+        pytest.skip(f"no headless GL: {exc}")
+    try:
+        ch = _one_kick_channels(0.5)
+        r.bind(ch.names)
+        frame = r.frame(0.6, ch.rows(np.array([0.6]))[0])
+        assert frame.shape == (90, 160, 3) and frame.max() > 40 and np.isfinite(frame).all()
+    finally:
+        r.release()
+        render.STYLE = "glow"
+
+
 def _one_kick_channels(t_kick: float) -> direct.Channels:
     n = 2 * direct.RATE
-    names = ["uMass", "uKickT", "uKickA", "uExposure", "uSpread", "uHue"]
-    kinds = [direct.LERP, direct.HOLD, direct.HOLD, direct.LERP, direct.LERP, direct.LERP]
+    names = ["uMass", "uKickT", "uKickA", "uExposure", "uSpread", "uTilt", "uCBodyR", "uCBodyG", "uCBodyB"]
+    kinds = [direct.LERP, direct.HOLD, direct.HOLD] + [direct.LERP] * 6
     KT, KA = direct.held_events(np.array([t_kick]), np.array([1.0]), n)
-    data = np.stack([np.full(n, 1.0), KT[:, 0], KA[:, 0], np.full(n, 0.8),
-                     np.full(n, 1.0), np.full(n, 0.7)], axis=1).astype(np.float32)
+    data = np.stack([np.full(n, 1.0), KT[:, 0], KA[:, 0], np.full(n, 0.8), np.full(n, 1.0),
+                     np.full(n, 0.56), np.full(n, 0.8), np.full(n, 0.6), np.full(n, 0.9)],
+                    axis=1).astype(np.float32)
     return direct.Channels(names, kinds, data, [], n / direct.RATE)
 
 
@@ -129,3 +164,129 @@ def test_a_hit_is_on_screen_when_it_arrives_and_never_after(t_kick):
     on_screen_from = jump / fps
     assert on_screen_from <= t_kick + 1e-9                   # never late
     assert t_kick - on_screen_from < 1.0 / fps + 1e-9        # and less than a frame early
+
+
+# ---------------------------------------------------------------- colour and ramps
+
+
+def test_oklch_lands_on_known_colours_and_stays_in_gamut():
+    assert np.allclose(colour.oklch_to_linear_rgb(1.0, 0.0, 0.0), [1, 1, 1], atol=1e-3)
+    assert np.allclose(colour.oklch_to_linear_rgb(0.62796, 0.25768, 29.234 / 360), [1, 0, 0], atol=2e-3)
+    wild = colour.oklch_to_linear_rgb(np.full(50, 0.7), np.full(50, 0.4), np.linspace(0, 1, 50))
+    assert wild.min() >= 0.0 and wild.max() <= 1.0
+
+
+def test_a_decision_becomes_a_ramp_with_no_step_and_hue_goes_the_short_way():
+    rate, n = 120, 120 * 12
+    starts = np.array([0.0, 4.0, 8.0])
+    level = colour.hold_then_ramp(np.array([0.0, 1.0, 0.2]), starts, n, rate, ramp_seconds=2.0)
+    assert np.abs(np.diff(level)).max() < 1.5 / (2.0 * rate) * 2      # never faster than the ramp allows
+    assert abs(level[int(6.0 * rate)] - 1.0) < 1e-6                   # and it does arrive
+    hue = colour.hold_then_ramp(np.array([0.95, 0.05, 0.05]), starts, n, rate, 2.0, circular=True)
+    crossing = hue[int(3.0 * rate): int(5.0 * rate)]
+    assert crossing.min() >= 0.95 - 1e-6 and crossing.max() <= 1.05 + 1e-6   # through 1.0, not back through 0.5
+
+
+def test_easing_hues_out_of_the_mud_keeps_their_order():
+    h = np.linspace(0.0, 1.0, 2001)
+    assert (np.diff(direct.avoid_murk(h)) > 0).all()
+
+
+def test_fifths():
+    # from A: E is one fifth up, D one down, Eb is the far side
+    assert list(direct.fifths_from(9, np.array([9, 4, 2, 3]))) == [0, 1, -1, 6]
+
+
+# --------------------------------------------------------------------- the models
+
+
+def test_notes_are_read_off_the_posteriors():
+    frames = 400
+    note, onset = np.zeros((frames, 88)), np.zeros((frames, 88))
+    a3 = 57 - models.BP_MIDI_LOW
+    onset[100, a3] = 0.9
+    note[100:140, a3] = 0.8                          # one A3, forty frames long
+    onset[200, a3 + 3] = 0.9
+    note[200:202, a3 + 3] = 0.8                      # too short to be a note
+    got = models.decode_notes({"note": note, "onset": onset})
+    assert list(got["midi"]) == [57]
+    rate = models.BP_SR / models.BP_HOP
+    assert abs(got["t"][0] - 100 / rate) < 1e-9 and abs(got["end"][0] - 140 / rate) < 2 / rate
+
+
+def test_a_model_names_a_note_and_the_stem_says_when():
+    attacks = np.array([1.000, 1.480, 1.960])
+    named = np.array([1.012, 1.455, 2.300])
+    assert list(models.snap(named, attacks)) == [1.000, 1.480, 2.300]
+
+
+def test_key_from_a_natural_minor_scale():
+    scale = np.array([57, 59, 60, 62, 64, 65, 67, 69, 57, 64, 57])       # A B C D E F G A, leaning on A and E
+    assert models.key_from_notes(scale, np.ones(len(scale)))["name"] == "A minor"
+
+
+def test_every_uniform_the_shader_declares_is_fed():
+    import re
+
+    from visuals.pieces.gravity import CACHE
+
+    got = listen.load_cached(CACHE)
+    if got is None:
+        pytest.skip("no listening cache for the real track")
+    ch = direct.direct(got, models.load_cached(CACHE))
+    fed = set(ch.names) | {"uTime", "uResolution"}
+    for sh in (shader, shader_ink):
+        declared = set(re.findall(r"\bu[A-Z][A-Za-z0-9]*", sh.fragment_source()))
+        assert declared - fed == set(), sh.__name__
+    # and the section-level channels really are step-free
+    from visuals.pieces.gravity.render import SECTION_LEVEL
+
+    # The fastest thing these are allowed to do is follow the floor coming back at a
+    # re-entry - colour floods in over half a second - which is about 0.02 of full
+    # range per grid step. A decision arriving as a step would be ten times that.
+    for name in SECTION_LEVEL:
+        assert np.abs(np.diff(ch.data[:, ch.index(name)])).max() < 0.03, name
+
+
+def test_no_star_is_cut_off_and_every_arm_is_whole():
+    """Sky only, five moments. Each four-pointed star is found as a blob; its four arms
+    must reach about equally far from its core. An arm cut short is a star drawn by a
+    cell it does not fit in, or one whose existence was decided per pixel across the
+    edge of a cluster - both of which happened."""
+    pytest.importorskip("moderngl")
+    from scipy import ndimage
+
+    from visuals.pieces.gravity import CACHE, render
+
+    got = listen.load_cached(CACHE)
+    if got is None:
+        pytest.skip("no listening cache for the real track")
+    render.STYLE = "ink"
+    try:
+        r = render.Renderer(1920, 1080)
+    except Exception as exc:
+        render.STYLE = "glow"
+        pytest.skip(f"no headless GL: {exc}")
+    try:
+        ch = render.sections_only(direct.direct(got, models.load_cached(CACHE)))
+        ch.data[:, ch.index("uSpread")] = 60.0           # the system off screen: sky only
+        r.bind(ch.names)
+        checked = 0
+        for t in (20.0, 100.3, 136.27, 200.0, 260.0):
+            f = r.frame(t, ch.rows(np.array([t]))[0]).astype(np.float32).max(axis=2)
+            lab, n = ndimage.label(f > 70)
+            for sl, i in zip(ndimage.find_objects(lab), range(1, n + 1)):
+                m = lab[sl] == i
+                h, w = m.shape
+                if max(h, w) < 14 or sl[0].start < 40 or sl[1].start < 40 or sl[0].stop > 1040 or sl[1].stop > 1880:
+                    continue
+                if np.hypot((sl[1].start + sl[1].stop) / 2 - 960, (sl[0].start + sl[0].stop) / 2 - 540) < 240:
+                    continue                             # the star itself
+                cy, cx = np.unravel_index(np.argmax(ndimage.distance_transform_edt(m)), m.shape)
+                arms = np.array([cx, w - 1 - cx, cy, h - 1 - cy], dtype=float)
+                checked += 1
+                assert arms.min() >= 0.6 * arms.max() - 1, (t, sl, arms)
+        assert checked >= 20
+    finally:
+        r.release()
+        render.STYLE = "glow"

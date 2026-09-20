@@ -31,7 +31,7 @@ from scipy import ndimage, signal
 
 RATE = 120          # the grid streams live on; matches visuals.listen.RATE
 ENV_RATE = 1000     # envelopes used for timing attacks
-VERSION = 6
+VERSION = 7
 
 STEMS = ("drums", "bass", "other", "vocals")
 
@@ -301,6 +301,8 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
         keep = ~((gap < 0.025) & (snare.amp < 1.2 * near_amp))
         snare = Onsets(snare.t[keep], snare.amp[keep])
     say(f"drums: {len(kick)} kicks, {len(snare)} snares, {len(hat)} hats")
+    snare_hi = power_env(band(stem["drums"], sr, 2500, 9000), sr, 90)
+    snare_lo = power_env(band(stem["drums"], sr, 180, 1200), sr, 90)
 
     # --- the grid, from the sharp percussion ------------------------------------
     sharp = np.sort(np.concatenate([hat.t[hat.amp > 0.5], snare.t[snare.amp > 0.8]]))
@@ -433,16 +435,43 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     width = power_env(side, sr, 8) / np.maximum(power_env(mid, sr, 8), 1e-5)
     out["width"] = to_grid(unit(smooth(width, ENV_RATE, period), 5, 95), ENV_RATE, n)
 
+    # --- crashes: a cymbal that rings on. The top band, followed slowly; an attack
+    # in *that* is something that lasted, which a hat never does.
+    crash_env = power_env(band(stem["drums"], sr, 6000, None), sr, 5)
+    crash = pick_onsets(crash_env, min_gap=1.5, sensitivity=0.45, rise_window=0.20, slope_ms=60)
+    say(f"crashes: {len(crash)}")
+
+    # --- what each bar sounds like, for telling sections apart --------------------
+    # Timbre (MFCC of the mix) and harmony (chroma of everything pitched), averaged
+    # over the bar. A section is then a run of bars that sound alike.
+    m22 = librosa.resample(mix.astype(np.float32), orig_sr=sr, target_sr=22050)
+    mfcc = librosa.feature.mfcc(y=m22, sr=22050, n_mfcc=14, hop_length=1024)[1:]
+    chroma_bar = librosa.feature.chroma_cqt(y=h22, sr=22050, hop_length=1024)
+    fr_t = np.arange(mfcc.shape[1]) * 1024 / 22050
+    bars = downbeats[(downbeats > -period) & (downbeats < duration)]
+    bar_edges = np.append(bars, duration)
+    feats = []
+    for b0, b1 in zip(bar_edges[:-1], bar_edges[1:]):
+        sel = (fr_t >= b0) & (fr_t < b1)
+        if not sel.any():
+            sel = np.abs(fr_t - b0) == np.abs(fr_t - b0).min()
+        feats.append(np.concatenate([mfcc[:, sel].mean(axis=1), chroma_bar[:, sel[: chroma_bar.shape[1]]].mean(axis=1)]))
+    out["bar_feat"] = np.asarray(feats, dtype=np.float32)
+    out["bar_t"] = bars
+
     # --- clocks -----------------------------------------------------------------
     t = np.arange(n) / RATE
     out["beats_elapsed"] = beat_clock(t, beats).astype(np.float32)
 
     events = {"kick": kick, "snare": snare, "hat": hat, "bass_note": bass,
-              "syllable": syll, "note": note}
+              "syllable": syll, "note": note, "crash": crash}
     for k, ev in events.items():
         out[f"ev_{k}_t"] = ev.t.astype(np.float64)
         out[f"ev_{k}_amp"] = ev.amp.astype(np.float32)
     out["ev_note_pitch"] = note_pitch.astype(np.float32)
+    # how bright each clap is: the top of its band against the bottom, just after it
+    si = np.clip((out["ev_snare_t"] * ENV_RATE).astype(int) + 8, 0, len(snare_hi) - 1)
+    out["ev_snare_bright"] = (snare_hi[si] / np.maximum(snare_hi[si] + snare_lo[si], 1e-9)).astype(np.float32)
     out["beats"] = beats
     out["downbeats"] = downbeats
 

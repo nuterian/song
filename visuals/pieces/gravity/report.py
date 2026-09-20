@@ -30,3 +30,30 @@ def print_listen(got: dict, bars_per_row: int = 4) -> None:
         harm = float(a["harmony"][lo:hi].mean())
         print(f"{i:3d} {t0:6.1f} " + " ".join(f"{c:5d}" for c in counts) + "  " +
               " ".join(f"{m:5.2f}" for m in means) + f" {harm:5.2f}")
+
+
+def print_models(got: dict, arrays: dict, meta: dict) -> None:
+    from . import decide, direct
+
+    a, lmeta = got["arrays"], got["meta"]
+    print("Beat This!:", meta["beat_this"])
+    print("key:", meta["key"]["name"], f"(fit {meta['key']['fit']:.2f})")
+    ch = meta["chords"]
+    print(f"chords: {len(ch)} spans; first twelve:", " ".join(c["chord"] for c in ch[:12]))
+    drops = direct.find_drops(a, lmeta["period"], lmeta["duration"])
+    sections = decide.find_sections(a, drops, lmeta["duration"])
+    sim = arrays["clap_similarity"]
+    names = list(decide.AXES)
+    axes = np.stack([decide.z((sim[:, 2 * k + 1] - sim[:, 2 * k]).tolist()) for k in range(len(names))], axis=1)
+    print("CLAP, standardised across the song (positive = the second word of the pair):")
+    print("  sec  bars        state   " + " ".join(f"{n:>8s}" for n in names))
+    for s, row in zip(sections, axes):
+        print(f"  {s.index:3d}  {s.bar0:3d}-{s.bar1:3d}  {s.state:7s} " + " ".join(f"{v:+8.2f}" for v in row))
+    ls, ws = arrays["line_similarity"], arrays["word_similarity"]
+    images = meta["images"]
+    print("lyric lines -> image (similarity):")
+    for text, row in zip(meta["lines"], ls):
+        k = int(np.argmax(row))
+        print(f"  {images[k]:9s} {row[k]:.2f}  {text}")
+    top = np.argsort(ws.max(axis=1))[::-1][:16]
+    print("strongest single words:", ", ".join(f"{meta['words'][i].strip()}->{images[int(np.argmax(ws[i]))]} {ws[i].max():.2f}" for i in top))
