@@ -19,14 +19,32 @@ from pathlib import Path
 import moderngl
 import numpy as np
 
-from . import AUDIO, CACHE, TRACK, WORKDIR, direct, models, shader, shader_ink
+from . import AUDIO, CACHE, ROOT, TRACK, WORKDIR, cosmos, direct, models, shader, shader_cosmos, shader_ink, sky
 
 # Which shader draws. Set once by the command line; everything that renders reads it.
 STYLE = "glow"
 
 
 def shader_module(style: str | None = None):
-    return shader_ink if (style or STYLE) == "ink" else shader
+    return {"ink": shader_ink, "cosmos": shader_cosmos}.get(style or STYLE, shader)
+
+
+def bake(got: dict) -> direct.Channels:
+    """The channels the current style's shader reads."""
+    mod = models.load_cached(CACHE)
+    return cosmos.bake(got, mod) if STYLE == "cosmos" else direct.direct(got, mod)
+
+
+CATALOGUE = ROOT / "visuals" / "cache" / "catalogues" / "bsc5.dat"
+
+
+def data_textures() -> dict[str, np.ndarray]:
+    """Lookup textures the current style's shader samples: (height, width, 4) float32."""
+    if STYLE != "cosmos":
+        return {}
+    if not CATALOGUE.exists():
+        raise SystemExit(f"no star catalogue at {CATALOGUE}; see the docstring of sky.py")
+    return {"uStarTex": sky.build(CATALOGUE)["texture"]}
 
 
 FULLSCREEN = np.array([-1.0, -1.0, 3.0, -1.0, -1.0, 3.0], dtype="f4")
@@ -43,7 +61,7 @@ ROLES: dict[str, tuple[str, ...]] = {
     "drop": ("uDropA",) + tuple(f"uMetA{k}" for k in range(direct.N_METEORS)),
 }
 # clocks: frozen in a solo, so that only the soloed instrument moves anything
-CLOCKS = ("uOrbit", "uOrbitSlow", "uDrift", "uBeats")
+CLOCKS = ("uOrbit", "uOrbitSlow", "uDrift", "uBeats", "uYears")
 SILENT_IN_SOLO = ("uVoice", "uSustain", "uTint", "uPump")
 
 
@@ -105,6 +123,14 @@ class Renderer:
         self.tex = self.ctx.texture((width, height), 4, dtype="f1")
         self.fbo = self.ctx.framebuffer(color_attachments=[self.tex])
         self.prog["uResolution"].value = (float(width), float(height))
+        self.textures = []
+        for unit, (name, arr) in enumerate(data_textures().items()):
+            tex = self.ctx.texture((arr.shape[1], arr.shape[0]), 4, arr.astype("f4").tobytes(), dtype="f4")
+            tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
+            tex.use(unit)
+            if name in self.prog:
+                self.prog[name].value = unit
+            self.textures.append(tex)
         self.fbo.use()
 
     def bind(self, names: list[str]) -> None:
@@ -133,7 +159,7 @@ def render(got: dict, out_dir: str | Path, start: float = 0.0, duration: float |
            solo: str | None = None, quiet: bool = False) -> Path:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    ch = direct.direct(got, models.load_cached(CACHE))
+    ch = bake(got)
     if solo:
         ch = solo_channels(ch, solo)
     total = ch.duration - start if duration is None else min(duration, ch.duration - start)
@@ -185,7 +211,7 @@ def stage(got: dict, out_dir: str | Path) -> Path:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     Renderer(64, 36).release()              # compile it here first: a GLSL error is better read now
-    export(got, direct.direct(got, models.load_cached(CACHE)), out_dir)
+    export(got, bake(got), out_dir)
     return out_dir
 
 
@@ -208,6 +234,14 @@ def export(got: dict, ch: direct.Channels, out_dir: Path) -> None:
         "plan": [{"bars": [s.bar0, s.bar1], "state": s.state, "hue": s.hue, "axes": s.axes}
                  for s in (ch.sections or [])],
     }
+    plan["textures"] = []
+    for name, arr in data_textures().items():
+        file = f"{name}.bin"
+        (out_dir / file).write_bytes(arr.astype("<f4").tobytes())
+        plan["textures"].append({"name": name, "file": file, "width": int(arr.shape[1]), "height": int(arr.shape[0])})
+    if getattr(ch, "acts", None):
+        plan["acts"] = [{"start": a.start, "end": a.end, "function": a.function,
+                         "subject": cosmos.PLANETS[a.subject][0] if a.subject >= 0 else None} for a in ch.acts]
     (out_dir / "frames.bin").write_bytes(ch.data.astype("<f4").tobytes())
     (out_dir / "plan.json").write_text(json.dumps(plan, indent=1) + "\n")
     src, dst = WORKDIR / "mix.m4a", out_dir / "mix.m4a"

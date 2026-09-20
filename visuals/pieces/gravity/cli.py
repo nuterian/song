@@ -21,8 +21,9 @@ def _listen(force: bool = False) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m visuals.pieces.gravity")
-    ap.add_argument("--style", choices=("glow", "ink"), default="glow",
-                    help="glow: soft light on black. ink: printed, cel-shaded space")
+    ap.add_argument("--style", choices=("glow", "ink", "cosmos"), default="glow",
+                    help="glow: soft light on black. ink: flat cel-shaded system, fixed view. "
+                         "cosmos: the real solar system in 3D through a moving camera")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("listen", help="stems -> events and streams")

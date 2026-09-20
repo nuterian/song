@@ -18,8 +18,9 @@ MODELS = ROOT / "visuals" / "cache" / "models"      # nmp.onnx lives here; see m
 OUT = ROOT / "visuals" / "out" / f"{TRACK}-piece"
 
 # Two ways of drawing the same baked channels. "glow" is soft light on black;
-# "ink" is the printed, cel-shaded space of github.com/nuterian/forge.
-STYLES = ("glow", "ink")
+# "ink" is the flat cel-shaded system seen from one fixed angle; "cosmos" is the solar
+# system in three dimensions - real planets, the real sky - through a moving camera.
+STYLES = ("glow", "ink", "cosmos")
 
 
 def out_dir(style: str = "glow") -> Path:

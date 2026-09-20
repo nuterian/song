@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from visuals.pieces.gravity import colour, direct, listen, models, shader, shader_ink
+from visuals.pieces.gravity import colour, cosmos, direct, listen, models, shader, shader_cosmos, shader_ink, sky
 
 SR = 48000
 
@@ -94,7 +94,7 @@ def test_the_spring_overshoots_once_and_settles():
     assert abs(x[-1] - 1.0) < 0.005      # ...and ends up there
 
 
-@pytest.mark.parametrize("sh", [shader, shader_ink], ids=["glow", "ink"])
+@pytest.mark.parametrize("sh", [shader, shader_ink, shader_cosmos], ids=["glow", "ink", "cosmos"])
 def test_both_dialects_are_one_source(sh):
     gl, web = sh.fragment_source(sh.GL_HEADER), sh.fragment_source(sh.WEBGL_HEADER)
     assert gl.split("\n", 1)[1] == web.split("\n", 1)[1]
@@ -290,3 +290,69 @@ def test_no_star_is_cut_off_and_every_arm_is_whole():
     finally:
         r.release()
         render.STYLE = "glow"
+
+
+# ------------------------------------------------------------ the solar system, in 3D
+
+
+def test_a_pulse_with_look_ahead_arrives_on_the_hit_and_never_jumps():
+    n = 3 * direct.RATE
+    hits = np.array([0.5, 1.0, 1.5])
+    x = cosmos.anticipating_pulse(hits, np.ones(3), n, rise=0.055, decay=0.13)
+    for t in hits:
+        i = int(round(t * direct.RATE))
+        assert x[i] == pytest.approx(1.0) and x[i - 1] < x[i] and x[i + 1] < x[i]      # the peak is the hit
+    assert np.abs(np.diff(x)).max() < 0.30                                           # and it eased in: mass has inertia
+
+
+def test_the_sky_frames_put_known_stars_where_they_are():
+    def latitude(ra_hours, dec_degrees):
+        v = sky.equatorial_to_ecliptic(np.radians([15.0 * ra_hours]), np.radians([dec_degrees]))[0]
+        return np.degrees(np.arcsin(v[1]))
+    assert latitude(10.1395, 11.967) == pytest.approx(0.46, abs=0.05)       # Regulus, almost on the ecliptic
+    assert latitude(2.5303, 89.264) == pytest.approx(66.1, abs=0.1)        # Polaris
+    g = sky.galactic_frame()
+    assert np.degrees(np.arcsin(g["pole"][1])) == pytest.approx(29.8, abs=0.1)
+    assert abs(np.dot(g["pole"], g["centre"])) < 1e-9
+    d = np.random.default_rng(0).normal(size=(500, 3))
+    d /= np.linalg.norm(d, axis=1, keepdims=True)
+    uv = sky.oct_encode(d)
+    assert uv.min() >= 0.0 and uv.max() <= 1.0
+
+
+def test_acts_cover_the_song_and_the_planets_align_at_the_climax():
+    from visuals.pieces.gravity import CACHE
+
+    got = listen.load_cached(CACHE)
+    if got is None:
+        pytest.skip("no listening cache for the real track")
+    ch = cosmos.bake(got, models.load_cached(CACHE))
+    acts = ch.acts
+    assert acts[0].function == "approach" and acts[-1].function == "pullback"
+    assert [a.function for a in acts].count("alignment") == 1
+    for a, b in zip(acts[:-1], acts[1:]):
+        assert a.end == pytest.approx(b.start)
+    # at the climax the eight planets stand within a narrow fan of longitude
+    climax = next(a for a in acts if a.function == "alignment")
+    i = int((climax.start + 0.30 * (climax.end - climax.start)) * direct.RATE)
+    lon = np.array([np.arctan2(ch.data[i, ch.index(f"uP{k}Z")], ch.data[i, ch.index(f"uP{k}X")]) for k in range(8)])
+    spread = np.degrees(np.ptp(np.unwrap(lon)))
+    assert spread < 20.0
+    # and the camera is a camera, not a teleporter: its speed never steps
+    cam = np.stack([ch.data[:, ch.index(f"uCam{c}")] for c in "XYZ"], axis=1).astype(np.float64)
+    speed = np.linalg.norm(np.diff(cam, axis=0), axis=1) * direct.RATE
+    assert np.abs(np.diff(speed)).max() * direct.RATE < 25.0
+
+
+def test_every_uniform_the_3d_shader_declares_is_fed():
+    import re
+
+    from visuals.pieces.gravity import CACHE
+
+    got = listen.load_cached(CACHE)
+    if got is None:
+        pytest.skip("no listening cache for the real track")
+    ch = cosmos.bake(got, models.load_cached(CACHE))
+    declared = set(re.findall(r"\bu[A-Z][A-Za-z0-9]*", shader_cosmos.fragment_source()))
+    fed = set(ch.names) | {"uTime", "uResolution"} | set(shader_cosmos.TEXTURES)
+    assert declared - fed == set()

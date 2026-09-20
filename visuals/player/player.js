@@ -132,6 +132,25 @@ async function main() {
     }
   }
 
+  // Lookup textures a program samples - a star catalogue, say. Float, unfiltered, read
+  // with texelFetch, so what the shader gets is exactly what Python wrote.
+  const dataTextures = [];
+  for (const [unit, spec] of (plan.textures || []).entries()) {
+    const raw = new Float32Array(await (await fetch(base + spec.file)).arrayBuffer());
+    const tex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE1 + unit);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, spec.width, spec.height, 0, gl.RGBA, gl.FLOAT, raw);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    dataTextures.push({ name: spec.name, unit: 1 + unit, tex });
+  }
+  // back to unit 0: everything after this binds its textures to the active unit, and
+  // would otherwise bind a render target over the top of the lookup
+  gl.activeTexture(gl.TEXTURE0);
+
   // A full-screen triangle, same as the renderer's.
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
@@ -184,6 +203,12 @@ async function main() {
       const loc = uniforms[grid.names[c]];
       if (loc) gl.uniform1f(loc, values[c]);
     }
+    for (const d of dataTextures) {
+      gl.activeTexture(gl.TEXTURE0 + d.unit);
+      gl.bindTexture(gl.TEXTURE_2D, d.tex);
+      if (uniforms[d.name]) gl.uniform1i(uniforms[d.name], d.unit);
+    }
+    gl.activeTexture(gl.TEXTURE0);
     if (uniforms.uTime) gl.uniform1f(uniforms.uTime, t);
     if (uniforms.uSeed) gl.uniform1f(uniforms.uSeed, plan.seed);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
