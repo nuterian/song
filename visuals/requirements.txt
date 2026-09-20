@@ -12,4 +12,11 @@ numpy==1.26.4
 # shaders written for WebGL2.
 moderngl==5.12.0
 
+# Listening, for pieces (visuals/pieces/): zero-phase filters and envelopes, vocal
+# pitch, constant-Q. The same librosa the root requirements pin. Stem separation
+# itself is run once from the root venv, which is the only place torch lives.
+scipy==1.14.1
+librosa==0.10.2.post1
+soundfile==0.12.1
+
 pytest==8.3.4

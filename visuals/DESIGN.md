@@ -425,6 +425,8 @@ visuals/
   render.py          headless GL, and the mp4
   export.py          staging plan.json + frames.bin + audio for the browser
   authoring.py       the hand-written score, and the seeded sampler
+  pieces/            one song taken as far as it will go, outside the schema;
+                     pieces/gravity/NOTES.md is what that found
   cli.py             render / score / serve
   player/            static WebGL2 page
   scores/            hand-written scores, one per track
