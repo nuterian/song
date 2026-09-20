@@ -354,5 +354,6 @@ def test_every_uniform_the_3d_shader_declares_is_fed():
         pytest.skip("no listening cache for the real track")
     ch = cosmos.bake(got, models.load_cached(CACHE))
     declared = set(re.findall(r"\bu[A-Z][A-Za-z0-9]*", shader_cosmos.fragment_source()))
-    fed = set(ch.names) | {"uTime", "uResolution"} | set(shader_cosmos.TEXTURES)
+    # uSS is the renderer's to set (how many render pixels to an output pixel), not the song's
+    fed = set(ch.names) | {"uTime", "uResolution", "uSS"} | set(shader_cosmos.TEXTURES)
     assert declared - fed == set()
