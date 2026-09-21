@@ -176,7 +176,6 @@ const vec3 PLANET_TINT[N_PLANETS] = vec3[{N_PLANETS}]({", ".join(_vec3(c) for c 
 const int   PING_N[N_PLANETS]     = int[{N_PLANETS}](1, 1, 2, 1, 3, 0, 1, 1);
 const float PING_REACH[N_PLANETS] = float[{N_PLANETS}](2.2, 2.0, 2.6, 2.3, 2.5, 0.0, 2.8, 3.6);
 const float PING_TAU[N_PLANETS]   = float[{N_PLANETS}](0.06, 0.20, 0.12, 0.08, 0.16, 0.12, 0.13, 0.28);
-const float POOL[N_PLANETS]       = float[{N_PLANETS}](0.8, 1.7, 1.2, 0.9, 1.1, 1.0, 1.2, 1.3);
 const vec3 GAL_POLE = {_vec3(_G["pole"])};
 const vec3 GAL_CENTRE = {_vec3(_G["centre"])};
 const vec3 GAL_ACROSS = {_vec3(_G["across"])};
@@ -607,16 +606,17 @@ void main() {{
         vec2 away = normalize(anti - 0.55 * normalize(vec2(vel.x, vel.y * e) + 1e-6));   // dust lags: it bends back along the orbit
         vec2 d = q - cs;
         float back = dot(d, away);
-        float len = (0.020 + 0.13 * closeness * closeness) * (0.55 + 0.75 * uField);
+        float len = (0.016 + 0.075 * closeness * closeness) * (0.55 + 0.75 * uField);
         float u = clamp(back / len, 0.0, 1.0);
-        float tailA = step(0.0, back) * step(back, len) * disc(abs(dot(d, vec2(-away.y, away.x))) / pxScene, (1.0 + 2.4 * closeness) * (1.0 - 0.85 * u) + 0.3);
-        vec3 cc = mix(vec3(0.96, 0.92, 0.80), white, 0.30 * (1.0 - u)); float cA = tailA * (0.75 - 0.45 * u) * lum;
+        // a small thing a long way off: a fine wedge of dust that fades to nothing along its length
+        float tailA = step(0.0, back) * step(back, len) * disc(abs(dot(d, vec2(-away.y, away.x))) / pxScene, (0.55 + 1.0 * closeness) * (1.0 - 0.9 * u) + 0.2);
+        vec3 cc = mix(vec3(0.96, 0.92, 0.80), white, 0.30 * (1.0 - u)); float cA = tailA * 0.50 * (1.0 - u) * (1.0 - u) * lum;
         // ...and the ion tail: gas, blown dead straight down the solar wind - finer, longer, blue
-        float backI = dot(d, anti), lenI = 1.55 * len;
-        float ion = step(0.0, backI) * step(backI, lenI) * disc(abs(dot(d, vec2(-anti.y, anti.x))) / pxScene, 0.75 * (1.0 - 0.7 * backI / lenI) + 0.15)
-                    * (0.60 - 0.40 * backI / lenI) * lum * smoothstep(0.15, 0.5, closeness);
-        cc = mix(cc, vec3(0.60, 0.80, 1.0), step(cA, ion)); cA = max(cA, ion);
-        float head = disc(length(d) / pxScene, 2.0 + 1.2 * closeness);
+        float backI = dot(d, anti), lenI = 1.25 * len, alongI = clamp(backI / lenI, 0.0, 1.0);
+        float ion = step(0.0, backI) * step(backI, lenI) * disc(abs(dot(d, vec2(-anti.y, anti.x))) / pxScene, 0.55)
+                    * 0.32 * (1.0 - alongI) * (1.0 - alongI) * lum * smoothstep(0.15, 0.5, closeness);
+        cc = mix(cc, vec3(0.74, 0.85, 1.0), step(cA, ion)); cA = max(cA, ion);
+        float head = disc(length(d) / pxScene, 1.3 + 0.6 * closeness);
         cc = mix(cc, white, head); cA = max(cA, head);
         if (orb.y > 0.0) {{ under = mix(under, cc, step(underA, cA)); underA = max(underA, cA); }}
         else {{ over = mix(over, cc, step(overA, cA)); overA = max(overA, cA); }}
@@ -631,7 +631,7 @@ void main() {{
         vec2 dq = q - sv.xy;
         int slot = PLANET_SLOT[i];
         float nAge = uTime - noteT[slot];
-        float lit = noteA[slot] * (0.72 * hit(nAge, 0.055) + 0.28 * hit(nAge, 0.26));   // as light: instant
+        float lit = noteA[slot] * (0.40 * hit(nAge, 0.09) + 0.60 * hit(nAge, 0.30));    // as light: instant - but a lift, not a strobe
         float size = PLANET_SIZE[i] * (1.0 + 0.30 * swell[slot]) * (1.0 + 0.10 * sv.z / max(a, 1e-3));
         float sizePx = size / pxScene;
         vec3 pc = vec3(0.0); float pA = 0.0;
@@ -688,16 +688,9 @@ void main() {{
             }}
             struck = clamp(struck, 0.0, 1.0);
 
-            // What it gives off is its own: the colour of the planet, lifted - a pool in the
-            // plane under it and rings thrown from it, on the axis of the orbits. Each planet
+            // What it gives off is its own: the colour of the planet, lifted - rings thrown from it, on the axis of the orbits. Each planet
             // in its own manner (see PING_N): this is an orchestra.
             vec3 own = mix(PLANET_TINT[i], white, 0.22) * mix(vec3(1.0), sunlight, 0.5);
-            float pop = clamp(noteA[slot], 0.0, 1.0) * hit(nAge, 0.080);
-            float rhoP = length(vec2(dq.x, dq.y / e));
-            float gP = length(vec2(dq.x, dq.y / (e * e))) / max(rhoP, 1e-6) * pxScene;
-            float pool = (1.0 - smoothstep(-0.6, 0.6, (rhoP - size * (1.0 + POOL[i] * (0.5 + 1.2 * pop))) / gP)) * step(0.03, pop);
-            float poolA = pool * clamp(2.4 * pop, 0.0, 0.70) * ev;
-            pc = mix(pc, own, poolA); pA = max(pA, poolA);
             vec2 dqR = dq;                                               // everything a planet throws lies in the plane of the orbits
             for (int j = 0; j < 3; j++) {{
                 if (j >= PING_N[i]) break;
@@ -777,10 +770,10 @@ void main() {{
                 vec3 sq = vec3(rot2(uOrbitSlow * (2.2 + 0.6 * float(i))) * vec2(dot(n, e1), dot(n, e2)), lat).xzy;
                 vec3 day = surface(i, lat, sq, w) * sunlight * lum;        // (the kick does not light a planet: the planets are the notes')
                 // a note is the planet catching light: its day flares, its night glows its own colour
-                day = mix(day, mix(day, white, 0.60), clamp(1.2 * lit, 0.0, 1.0));
+                day = mix(day, mix(day, white, 0.28), clamp(lit, 0.0, 1.0));
                 float ndl = dot(n, L);
                 vec3 globe = cel(day, ndl, 1.0 - n.z, shade, 1.4 * w);
-                globe += PLANET_TINT[i] * 0.50 * lit * (1.0 - smoothstep(-0.02, 0.10, ndl));
+                globe += PLANET_TINT[i] * 0.22 * lit * (1.0 - smoothstep(-0.02, 0.10, ndl));
                 // Shadows that fall on it. A moon passing between it and the Sun puts a small
                 // hard spot on its day side, which crosses as the moon does (Io's, on Jupiter);
                 // and Saturn's rings lay a dark band across Saturn.
@@ -798,7 +791,7 @@ void main() {{
                     dark = max(dark, step(0.0, sRing) * step(1.32, rkS) * step(rkS, 2.30) * (1.0 - step(1.92, rkS) * step(rkS, 2.02)));
                 }}
                 globe = mix(globe, globe * 0.22 + shade * 0.75, dark * smoothstep(-0.05, 0.10, ndl));
-                globe = mix(globe, mix(day, struckInk, 0.65), 0.85 * struck * smoothstep(0.15, 0.60, ndl));      // struck: its sunward side flashes
+                globe = mix(globe, mix(day, struckInk, 0.50), 0.45 * struck * smoothstep(0.15, 0.60, ndl));      // struck: its sunward side flashes
                 if (i == 2) globe = mix(globe, vec3(0.48, 0.72, 1.0), 0.50 * edge(0.80, 1.0 - n.z, 2.0 * w) * smoothstep(-0.1, 0.3, ndl));   // air
                 pc = mix(pc, globe, cover); pA = max(pA, cover);
             }}

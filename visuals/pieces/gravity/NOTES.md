@@ -524,3 +524,9 @@ white, shadow and sky the deep blue of space. The song animates; it does not rep
 hot core became the limb's own tone running on from the limb, because as a paler patch
 it sat apart from the Sun it was meant to be part of; and tongues are blunt, and do not
 pile into a spike when the same note is played again and again.
+
+Two more things came out after being watched. The filled pool under a planet, and the
+globe flashing most of the way to white on its note, were jarring - a strobe on eight
+bodies: the rings are the planet's answer now, and the globe only lifts a little. And
+the comet near perihelion, with a fat white wedge and a long blue line, was taken for
+a satellite: it is smaller, finer, and both tails fade to nothing along their length.
