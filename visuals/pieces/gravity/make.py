@@ -37,18 +37,23 @@ def modelled(track: Track, got: dict, force: bool = False, verbose: bool = True)
     return mod
 
 
-def make(track: Track, style: str = "cosmos", force: bool = False) -> Path:
-    """The bundle the player reads, for this track in this style. No mp4."""
-    from . import render
+def make(track: Track, style: str = "cosmos", force: bool = False, with_render: bool = False) -> Path:
+    """The bundle the player reads, for this track in this style, and its scorecard. No mp4."""
+    from . import render, scorecard
 
     t0 = time.time()
     print(f"track: {track.slug}  ({track.source})" + (f"\n  lyrics from {track.project}" if track.project else ""))
     got = listened(track, force)
     modelled(track, got, force)
     render.STYLE = style
-    out = render.stage(got, track, track.out(style))
-    print(f"staged {out}  ({time.time() - t0:.0f}s)\n"
-          f"  python -m visuals serve   ->   http://localhost:8765/player/?track={out.name}")
+    ch = render.bake(got, track)
+    out = render.stage(got, track, track.out(style), ch=ch)
+    print(f"staged {out}  ({time.time() - t0:.0f}s)")
+    if style == "cosmos":
+        card = scorecard.build(track, got, ch, with_render)
+        scorecard.write(card, out)
+        print(scorecard.show(card))
+    print(f"  python -m visuals serve   ->   http://localhost:8765/player/?track={out.name}")
     return out
 
 

@@ -38,6 +38,9 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("smooth", help="only section decisions live: is there a step anywhere?")
 
+    p = sub.add_parser("scorecard", help="cosmos: every check against its bound, and a verdict")
+    p.add_argument("--render", action="store_true", help="add recall and frame time (minutes)")
+
     p = sub.add_parser("matrix", help="solo each instrument; which detectors does it move?")
     p.add_argument("--start", type=float, default=120.0)
     p.add_argument("--duration", type=float, default=40.0)
@@ -107,6 +110,15 @@ def main(argv: list[str] | None = None) -> int:
         staged = render.stage(_listen(), track, out)
         print(f"staged {staged}\n  python -m visuals serve   ->   http://localhost:8765/player/?track={staged.name}")
         return 0
+
+    if args.cmd == "scorecard":
+        from . import render, scorecard
+        render.STYLE = "cosmos"
+        got = _listen()
+        card = scorecard.build(track, got, render.bake(got, track), args.render)
+        scorecard.write(card, track.out("cosmos"))
+        print(scorecard.show(card))
+        return 0 if not card["fails"] else 1
 
     if args.cmd == "smooth":
         from . import measure

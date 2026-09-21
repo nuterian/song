@@ -700,3 +700,27 @@ def test_events_of_a_stem_that_is_not_playing_are_dropped():
     near = np.array([False, True, True, False, False, False, True, False])
     t = np.array([0.5, 2.1, 5.9, 7.0, 11.0, 13.2, 15.5])
     assert listen.near_playing(t, bars, near).tolist() == [False, True, True, False, False, True, False]
+
+
+# ------------------------------------------------------------------ scorecard
+
+
+def test_the_gold_example_passes_its_own_scorecard():
+    from visuals.pieces.gravity import scorecard
+
+    got, ch = _real_cosmos()
+    card = scorecard.build(_gravity(), got, ch)
+    assert card["fails"] == [], card["fails"]
+    parts = {ln["name"]: ln for ln in card["lines"] if ln["group"] == "casting"}
+    assert set(parts) == set(scorecard.PARTS) and all(p["data"]["moves"] > 0.5 for p in parts.values())
+
+
+def test_a_part_that_never_moves_is_dead():
+    from visuals.pieces.gravity import scorecard
+
+    n = 120 * 60
+    live = np.sin(np.arange(n) / 30.0)
+    ch = direct.Channels(["uVoice", "uKickA"], [direct.LERP, direct.LERP],
+                         np.stack([np.zeros(n), live], axis=1).astype(np.float32), [], n / 120.0)
+    assert scorecard._moves(ch, ("uVoice",)) == 0.0
+    assert scorecard._moves(ch, ("uKickA",)) > 0.9

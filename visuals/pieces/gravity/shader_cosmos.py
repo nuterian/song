@@ -107,11 +107,6 @@ def _palette_uniforms() -> str:
     return "\n".join(f"uniform float uC{role}R, uC{role}G, uC{role}B;" for role in PALETTE_ROLES)
 
 
-def _palette_locals() -> str:
-    return "\n".join(f"    vec3 c{role} = pow(vec3(uC{role}R, uC{role}G, uC{role}B), vec3(1.0 / 2.2));"
-                     for role in PALETTE_ROLES)
-
-
 def _vec3(v) -> str:
     return "vec3(" + ", ".join(f"{float(x):.7f}" for x in v) + ")"
 
@@ -409,7 +404,6 @@ void main() {{
     float hatE[3] = float[3](uHatE0, uHatE1, uHatE2);                 // the hats take the stars in three turns; each turn swells and subsides
     float shimmer = uCrashE;
 
-{_palette_locals()}
     vec3 white = vec3(1.0, 0.985, 0.95);
     // Nothing here changes colour with the song. This is the solar system, and it is the
     // colour it is: a warm Sun in a warm corona, light that is gold going to white, shadow

@@ -236,13 +236,13 @@ def render(got: dict, track: Track, out_dir: str | Path, start: float = 0.0, dur
     return out_path
 
 
-def stage(got: dict, track: Track, out_dir: str | Path) -> Path:
+def stage(got: dict, track: Track, out_dir: str | Path, ch: direct.Channels | None = None) -> Path:
     """Only what the browser player needs - the shader and the baked channels - and
     no mp4. Seconds rather than minutes, which is what trying a look wants."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     Renderer(64, 36).release()              # compile it here first: a GLSL error is better read now
-    export(got, bake(got, track), track, out_dir)
+    export(got, bake(got, track) if ch is None else ch, track, out_dir)
     return out_dir
 
 
