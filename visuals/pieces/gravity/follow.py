@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from . import cosmos, direct, measure, render
+from . import cosmos, direct, measure, orrery, render
 from . import shader_cosmos as sc
 
 LUMA = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
@@ -47,6 +47,7 @@ def geometry(ch: direct.Channels, rows: np.ndarray, camera: str | None = None) -
     pulse = col("uSunPulse")
     a0 = np.maximum(0.255, 0.156 / e)
     tug = cam("uSpreadSlow")
+    now = rows / direct.RATE
 
     def to_frame(qx, qy):                    # the inverse of the shader's q = rot2(-roll) * (p * span + cam)
         return ((cr * qx + sr * qy) - cx) / span, ((-sr * qx + cr * qy) - cy) / span
@@ -55,9 +56,13 @@ def geometry(ch: direct.Channels, rows: np.ndarray, camera: str | None = None) -
     rest = 0.078 * (0.50 + 0.80 * col("uMass"))
     px, py, pr = [], [], []
     for i in range(sc.N_PLANETS):
-        a = (a0 + sc.ORBIT_STEP[i]) * tug
+        free = (a0 + col(f"uPd{i}")) * tug
+        late = (free - a0 * tug) / orrery.PULL_SPEED           # the kick's pull travels: see `orrery`
+        answer = sum(col(f"uPullA{k}") * orrery.pull_shape(now - col(f"uPullT{k}") - late) for k in range(2))
+        a = free - np.clip(span, 0.0, 1.0) * orrery.pull_depth(free, a0 * tug) * answer
         th = 2 * np.pi * col(f"uPh{i}") + turn
-        x, y, depth = a * np.cos(th), a * np.sin(th) * e, -a * np.sin(th) * c
+        up = a * col(f"uPz{i}")                                   # its orbit is tipped
+        x, y, depth = a * np.cos(th), a * np.sin(th) * e + up * c, -a * np.sin(th) * c + up * e
         fx, fy = to_frame(x, y)
         size = sc.PLANET_SIZE[i] * (1.0 + 0.30 * col(f"uSwell{sc._PLANET_SLOT[i]}")) * (1.0 + 0.10 * depth / np.maximum(a, 1e-3))
         px.append(fx); py.append(fy); pr.append(size / span)

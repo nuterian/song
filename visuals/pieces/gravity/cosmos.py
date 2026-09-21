@@ -304,7 +304,7 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     drop_a = np.array([d["strength"] for d in ch.drops])
     reentry = anticipating_pulse(drop_t, drop_a, n, bar, 1.1 * bar)
     wide = arriving(1.0 - hold, bar, 2 * bar)
-    spread = 1.0 + 0.70 * wide - 0.055 * reentry
+    spread = 1.0 + 0.55 * wide - 0.055 * reentry
 
     # mass does not jump: the Sun and the planets swell *into* their hits
     kt, ka = a["ev_kick_t"], a["ev_kick_amp"]
@@ -351,44 +351,72 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     # and strikes whatever planets lie in its way. The threshold is the song's own: see
     # `flares`. The charge is drawn (the corona stands further out and hotter as it builds,
     # and snaps back on the discharge), so a flare is seen coming.
-    fl_t, fl_a, fl_k, charge = flares(bt, ba, where, a["beats"].astype(np.float64), n, bar)
-    FT, FA = direct.held_events(fl_t, fl_a, n, shader_cosmos.N_FLARE)
-    _, FK = direct.held_events(fl_t, fl_k, n, shader_cosmos.N_FLARE)
-    for k in range(shader_cosmos.N_FLARE):
-        extra[f"uFlareT{k}"], extra[f"uFlareA{k}"], extra[f"uFlareK{k}"] = (direct.HOLD, FT[:, k]), (direct.HOLD, FA[:, k]), (direct.HOLD, FK[:, k])
+    fl_t, fl_a, _, charge = flares(bt, ba, where, a["beats"].astype(np.float64), n, bar)
+    flare_times, flare_sizes = fl_t, fl_a           # where each is thrown is decided below, once the planets are placed
     extra["uCharge"] = (direct.LERP, charge)
 
     # the bar before a re-entry, the sky holds its breath: up over that bar, gone on the downbeat
     extra["uBrace"] = (direct.LERP, anticipating_pulse(drop_t, np.clip(drop_a, 0, 1), n, bar, 0.10))
 
-    # ---- the planets' phases, and the alignment -------------------------------------------
-    # Kepler, for the distances drawn; and each starting longitude chosen so that at the
-    # climax they stand in a row to the right of the Sun, in the plane of the screen,
-    # half-lit. Every camera agrees on its heading at that moment (`turn0`), so the
-    # alignment is one event, the same in all of them.
+    # ---- where the planets are: the real orbits (see `orrery`), and the alignment ---------------
+    # Each planet runs on its own oval, tipped as it is, by Kepler's equation; its mean
+    # anomaly at the climax is chosen so that *there* the eight stand in a row to the right
+    # of the Sun, in the plane of the screen, half-lit. Every camera agrees on its heading at
+    # that moment (`turn0`), so the alignment is one event, the same in all of them.
+    from . import orrery
+
     tilt_s, roll_s = col["uTilt"].copy(), col["uIncl"].copy()
     turn0 = best_turn(float(np.median(tilt_s)), ROOT / "visuals" / "cache" / "catalogues")
-    rate = np.array([(0.250 / (0.250 + s_)) ** 1.5 for s_ in shader_cosmos.ORBIT_STEP])
     climax = next((x for x in acts if x.function == "alignment"), acts[len(acts) // 2])
     t_c = climax.start + 0.30 * (climax.end - climax.start)
-    clock = col["uOrbitSlow"]
+    clock = col["uOrbitSlow"]                               # in revolutions of Mercury
     clock_c = float(np.interp(t_c, t, clock))
     fan = np.radians((np.arange(shader_cosmos.N_PLANETS) - 3.5) * 1.4)
-    phases = np.stack([rate[i] * (clock - clock_c) + (fan[i] - turn0) / (2 * np.pi)
-                       for i in range(shader_cosmos.N_PLANETS)], axis=1)
+    rates = orrery.rate()
+    lon, off, rise = [], [], []
     for i in range(shader_cosmos.N_PLANETS):
-        extra[f"uPh{i}"] = (direct.LERP, phases[:, i])
+        at_climax = orrery.mean_from_true(fan[i] - turn0 - orrery.PERI[i], orrery.ECC[i])
+        l_, d_, z_ = orrery.track(orrery.ELEMENTS[i], at_climax + 2 * np.pi * rates[i] * (clock - clock_c))
+        lon.append(l_); off.append(d_); rise.append(z_)
+        extra[f"uPh{i}"] = (direct.LERP, l_ / (2 * np.pi))
+        extra[f"uPd{i}"] = (direct.LERP, d_)
+        extra[f"uPz{i}"] = (direct.LERP, z_)
+    lon, off, rise = np.stack(lon, 1), np.stack(off, 1), np.stack(rise, 1)
+    phases = lon / (2 * np.pi)
+    # Pluto: no part in the row - it is where it is
+    pl_l, pl_d, pl_z = orrery.track(orrery.PLUTO, 3.9 + 2 * np.pi * float(orrery.rate(orrery.PLUTO[6])) * (clock - clock_c))
+    extra["uPlutoPh"], extra["uPlutoD"], extra["uPlutoZ"] = (direct.LERP, pl_l / (2 * np.pi)), (direct.LERP, pl_d), (direct.LERP, pl_z)
+
+    # The pull of a kick travels, so a planet may still be answering the last kick when the
+    # next one lands: the last two are held.
+    KT2, KA2 = direct.held_events(kt[strong], np.clip(ka[strong], 0, 1.2), n, 2)
+    for k in range(2):
+        extra[f"uPullT{k}"], extra[f"uPullA{k}"] = (direct.HOLD, KT2[:, k]), (direct.HOLD, KA2[:, k])
+
+    # The Sun cues its players. A discharge is thrown at the planet that has the tune - the
+    # one whose note sounded last - so the flare crosses the system *to* someone, who answers.
+    last_note = np.stack([col[f"uNoteT{slot}"] for slot in range(direct.N_SATS)], 1)
+    aim, targets = [], []
+    for ft in flare_times:
+        k = min(int(np.ceil(ft * RATE)), n - 1)
+        planet = shader_cosmos.SLOT_TO_PLANET[int(np.argmax(last_note[k]))] if last_note[k].max() > ft - 4 * bar else 4
+        targets.append(planet)
+        aim.append((lon[k, planet] / (2 * np.pi)) % 1.0)
+    FT, FA = direct.held_events(flare_times, flare_sizes, n, shader_cosmos.N_FLARE)
+    _, FK = direct.held_events(flare_times, np.array(aim), n, shader_cosmos.N_FLARE)
+    for k in range(shader_cosmos.N_FLARE):
+        extra[f"uFlareT{k}"], extra[f"uFlareA{k}"], extra[f"uFlareK{k}"] = (direct.HOLD, FT[:, k]), (direct.HOLD, FA[:, k]), (direct.HOLD, FK[:, k])
+    fl_t = flare_times
 
     # ---- the cameras: all three are baked, so a player can change between them as it plays.
     # Each has its own solar system, in one respect: a gesture of the whole system - the
     # spread, the tug of a kick - is sized for the frame it is seen in. Close on Saturn, a
     # spread that is handsome from afar would throw the Sun across the picture at three
     # frame-heights a second (it did); so the closer the camera, the less the system heaves.
-    cams = cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread)
+    cams = cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, off, rise)
     pulse = extra["uSunPulse"][1]
     for mode, cam in cams.items():
-        # a kick tugs the orbits in - by the same small distance *on screen* however close we are
-        cam["uSpreadSlow"] = cam["uSpreadSlow"] * (1.0 - KICK_TUG * np.clip(cam["uCamSpan"], 0.0, 1.0) * pulse)
+        # (a kick's pull on the planets is the shader's and `orrery`'s: inverse-square, and it travels)
         cam["uCamSpan"] = cam["uCamSpan"] * (1.0 - 0.050 * reentry - 0.008 * pulse)
         for name, track in cam.items():
             extra[f"{name}.{mode}"] = (direct.LERP, track)
@@ -401,6 +429,7 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     out = direct.Channels(names, kinds, data, ch.drops, ch.duration, ch.sections, ch.info)
     out.acts = acts
     out.flares = fl_t
+    out.flare_targets = targets
     out.climax = t_c
     out.variants = {"camera": {"default": CAMERA,
                                "choices": {mode: {name: f"{name}.{mode}" for name in PER_CAMERA} for mode in cams}}}
@@ -435,11 +464,15 @@ def _shot(act: Act, e: np.ndarray, tilt_s: float) -> dict:
     if act.function == "eclipse":           # close on a giant, while the ripples sweep past it
         return dict(dturn=0.40 * (e - 0.5), tilt=0.50 * full, lspan=np.log(0.26) * full,
                     subject=act.subject, toward=full, off=(-0.10, 0.0))
-    return dict(dturn=0.55 * (e - 0.5), tilt=tilt_s * full, lspan=np.log(1.0 - 0.10 * np.sin(np.pi * e)),
-                subject=-1, toward=0 * full, off=(0.0, 0.0))          # wide: home, turning slowly, breathing in
+    # wide: home, turning slowly, breathing in - and coming down low over the plane in the
+    # middle of the act, where the orbits' tilts show: Mercury riding high over it, Venus and
+    # Saturn dipping under, Pluto far off it altogether
+    low = np.sin(np.pi * e) ** 2
+    return dict(dturn=0.55 * (e - 0.5), tilt=tilt_s + (0.36 - tilt_s) * low, lspan=np.log(1.0 - 0.10 * np.sin(np.pi * e)),
+                subject=-1, toward=0 * full, off=(0.0, 0.0))
 
 
-def cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, blend_bars: float = 8.0) -> dict:
+def cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, offsets, heights, blend_bars: float = 8.0) -> dict:
     """Three ways of watching the same system.
 
     static      the picture that worked: the section's tilt and roll, no zoom, no slide.
@@ -489,9 +522,9 @@ def cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, blend_bars
     def on_screen(i, turn, e, toward, spread_):
         """Where planet i is in the camera's turned frame: across, and up the screen."""
         a0 = np.maximum(0.255, 0.156 / e)
-        r = (a0 + shader_cosmos.ORBIT_STEP[i]) * spread_ * toward
+        r = (a0 + offsets[:, i]) * spread_ * toward
         th = 2 * np.pi * phases[:, i] + turn
-        return r * np.cos(th), r * np.sin(th) * e
+        return r * np.cos(th), r * (np.sin(th) * e + heights[:, i] * np.sqrt(1 - e * e))
 
     # A shot that must hold two bodies is framed from where they are: wide enough for the
     # Sun, its corona and the planet with half as much again round them, and never
@@ -521,7 +554,7 @@ def cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, blend_bars
             if sh["subject"] == -1 or lean == 0.0:
                 continue
             if sh["subject"] == -2:                       # the middle of the row
-                px, py = 0.34 * mine, np.zeros(n)
+                px, py = 0.37 * mine, np.zeros(n)
             else:
                 px, py = on_screen(sh["subject"], turn, e, sh["toward"], mine)
                 if sh.get("fit"):                         # the middle of the two of them, edge to edge

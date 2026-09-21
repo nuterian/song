@@ -13,8 +13,12 @@ the plane, rolls, zooms and slides (`uCamTurn`, `uCamTilt`, `uCamRoll`, `uCamSpa
 `uCamX/Y`). None of that distorts anything. The sky is the one thing seen through a
 lens, because it is infinitely far and has to be.
 
-What is real: the planets' order, character and colours; their periods, which follow
-Kepler's third law *for the distances drawn*; one light, at the origin, so phases and
+What is real: the planets' order, character and colours; their orbits - each the oval
+it is, tipped out of the plane as it is, pointing where it does against the real stars,
+run by Kepler's equation (`orrery`, which also says what is compressed: distance on a
+log scale, years to 12:1, sizes to 4:1); gravity that falls off as the square of the
+distance and travels; Pluto; Jupiter's four moons in their 1:2:4 resonance; Titan in
+the plane of the rings; one light, at the origin, so phases and
 terminators are where they should be; the Moon, Io and Ganymede, Titan; Saturn's
 rings, tilted 26.7 degrees and fixed in space, with the planet's shadow across them;
 the asteroid belt between Mars and Jupiter and the Kuiper belt beyond Neptune; five
@@ -46,7 +50,7 @@ nothing crawls when the camera moves.
 
 from __future__ import annotations
 
-from . import sky
+from . import orrery, sky
 from .direct import N_METEORS, N_RINGS, N_SATS, PALETTE_ROLES
 
 GL_HEADER = "#version 410 core\n"
@@ -68,8 +72,9 @@ _PLANET_SLOT = [SLOT_TO_PLANET.index(i) for i in range(N_PLANETS)]
 # beyond the asteroid belt. These are the spacings of the picture that worked.
 # The inner four keep that picture's spacing; the giants are given room, because a
 # ringed Saturn is not a dot and they have to be able to stand in a row.
-ORBIT_STEP = [0.0, 0.040, 0.082, 0.124, 0.222, 0.304, 0.376, 0.440]
-PLANET_SIZE = [0.0100, 0.0140, 0.0150, 0.0118, 0.0300, 0.0255, 0.0195, 0.0188]
+# Distances, sizes and the orbits' shapes are the solar system's, compressed as `orrery` says.
+ORBIT_STEP = [float(x) for x in orrery.MEAN_STEP]      # each planet's mean orbit, beyond Mercury's
+PLANET_SIZE = [float(x) for x in orrery.SIZE]
 # The mean colour of each planet's surface as `surface()` paints it, measured by
 # `surface_means()` (a test holds the two together). A planet's trail is this colour, and
 # so is the glow of its night side - Earth's is sea, land, ice and cloud together, which
@@ -79,7 +84,11 @@ PLANET_TINT = [(0.577, 0.541, 0.511), (0.924, 0.783, 0.487), (0.426, 0.646, 0.72
 N_PROM = 4            # prominences in flight: the bass line's notes
 N_WIND = 4            # gusts of solar wind in flight: the voice's syllables
 N_FLARE = 2           # flares in flight: the corona's discharges
-BELTS = ((0.148, 0.0150, 3), (0.485, 0.0300, 2))       # (inner edge beyond a0, lane width, lanes): asteroids; Kuiper
+# (inner edge beyond Mercury's orbit, lane width, lanes). The asteroids lie from 2.1 to 3.3 AU
+# in three lanes - the gaps between them are Kirkwood's, swept clear by Jupiter; the Kuiper
+# belt from 39 to 48 AU.
+BELTS = ((float(orrery.displayed(2.1)), float(orrery.displayed(3.3) - orrery.displayed(2.1)) / 3, 3),
+         (float(orrery.displayed(39.0)), float(orrery.displayed(48.0) - orrery.displayed(39.0)) / 2, 2))
 
 
 def _scalars(prefix: str, count: int, suffix: str = "") -> str:
@@ -140,6 +149,10 @@ uniform float uCamTurn, uCamTilt, uCamRoll, uCamSpan, uCamX, uCamY;
 {_scalars("uMetA", N_METEORS)}
 {_scalars("uMetS", N_METEORS)}
 {_scalars("uPh", N_PLANETS)}
+{_scalars("uPd", N_PLANETS)}
+{_scalars("uPz", N_PLANETS)}
+uniform float uPullT0, uPullT1, uPullA0, uPullA1;
+uniform float uPlutoPh, uPlutoD, uPlutoZ;
 {_scalars("uPromT", N_PROM)}
 {_scalars("uPromA", N_PROM)}
 {_scalars("uPromK", N_PROM)}
@@ -165,6 +178,16 @@ const int STAR_GRID = {sky.GRID};
 const int STAR_PER_CELL = {sky.PER_CELL};
 const ivec2 GALAXY_SIZE = ivec2({sky.MILKY_WAY[1]}, {sky.MILKY_WAY[0]});
 const float ORBIT_STEP[N_PLANETS] = float[{N_PLANETS}]({_floats(ORBIT_STEP)});
+// each orbit's shape, for its trail: eccentricity, where its perihelion and its ascending
+// node point, the sine of its inclination, and the log of its semi-latus rectum over
+// Mercury's mean distance - distance is drawn on a log scale (K_MAP per e-fold)
+const float ORB_ECC[N_PLANETS] = float[{N_PLANETS}]({_floats(orrery.ECC)});
+const float ORB_PERI[N_PLANETS] = float[{N_PLANETS}]({_floats(orrery.PERI)});
+const float ORB_NODE[N_PLANETS] = float[{N_PLANETS}]({_floats(orrery.NODE)});
+const float ORB_SINI[N_PLANETS] = float[{N_PLANETS}]({_floats(__import__("numpy").sin(orrery.INC))});
+const float ORB_LOGP[N_PLANETS] = float[{N_PLANETS}]({_floats(__import__("numpy").log(orrery.A * (1 - orrery.ECC ** 2) / orrery.A[0]))});
+const float K_MAP = {orrery._K:.6f};
+const float PULL = {orrery.PULL:.5f}, PULL_SPEED = {orrery.PULL_SPEED:.4f}, PULL_RISE = {orrery.PULL_RISE:.4f};
 const float PLANET_SIZE[N_PLANETS] = float[{N_PLANETS}]({_floats(PLANET_SIZE)});
 const int PLANET_SLOT[N_PLANETS] = int[{N_PLANETS}]({", ".join(str(x) for x in _PLANET_SLOT)});
 const vec3 PLANET_TINT[N_PLANETS] = vec3[{N_PLANETS}]({", ".join(_vec3(c) for c in PLANET_TINT)});
@@ -182,6 +205,8 @@ const vec3 GAL_ACROSS = {_vec3(_G["across"])};
 // Saturn's pole, in (along the plane, along the plane, up): 26.7 degrees off the
 // ecliptic's and fixed in space, so the rings open and close as it goes round
 const vec3 RING_POLE = vec3(0.3853, 0.2312, 0.8934);
+const vec3 RING_U = normalize(cross(RING_POLE, vec3(0.0, 0.0, 1.0)));      // two directions in the plane of Saturn's rings
+const vec3 RING_V = cross(RING_POLE, normalize(cross(RING_POLE, vec3(0.0, 0.0, 1.0))));
 const vec3 BELT0 = vec3({BELTS[0][0]:.4f}, {BELTS[0][1]:.4f}, {BELTS[0][2]:.1f});
 const vec3 BELT1 = vec3({BELTS[1][0]:.4f}, {BELTS[1][1]:.4f}, {BELTS[1][2]:.1f});
 const float SKY_LENS = 1.30;                 // focal length of the sky's lens, in frame heights: about 42 degrees
@@ -229,6 +254,15 @@ float gAA = 1.0;
 float edge(float at, float x, float w) {{ return smoothstep(at - w * gAA, at + w * gAA, x); }}
 // coverage of a disc of radius rPx (or a band of half-width rPx about zero); d in output pixels
 float disc(float dPx, float rPx) {{ return 1.0 - smoothstep(rPx - 0.55 * gAA, rPx + 0.55 * gAA, dPx); }}
+
+// A planet's answer to the pull of a kick, which left the Sun at `t` and travels: nothing
+// until it arrives, then in smoothly and back slowly. The last two kicks, because the far
+// planets are still answering one when the next lands.
+float pullOne(float age) {{ float x = max(age, 0.0) / PULL_RISE; float f = x * exp(1.0 - x); return f * f; }}   // squared: it starts from rest
+float pullOf(float out_, float t0, float a0_, float t1, float a1_) {{
+    float late = out_ / PULL_SPEED;
+    return a0_ * pullOne(uTime - t0 - late) + a1_ * pullOne(uTime - t1 - late);
+}}
 
 // Light bent by a ripple of gravity: a point in the frame, pushed straight out from the
 // Sun where a wavefront (one a kick's, one a re-entry's) is passing it. Amplitudes and
@@ -503,10 +537,9 @@ void main() {{
     for (int i = 0; i < N_FLARE; i++) {{
         float age = uTime - flareT[i];
         if (age < 0.0 || age > 1.5 || flareA[i] <= 0.0) continue;
-        float thF = TAU * flareK[i];
-        float phiF = atan(cos(thF) / e, sin(thF));                    // that place on the limb, as a direction in the plane
+        float phiF = TAU * flareK[i] + uCamTurn;                      // thrown at a planet: its longitude, in the camera's turned frame
         float dphi = abs(mod(atan(pl.y, pl.x) - phiF + PI, TAU) - PI);
-        float fan = 1.0 - smoothstep(0.80, 1.05, dphi);
+        float fan = 1.0 - smoothstep(0.42, 0.66, dphi);               // aimed: a sixth of a turn wide
         float rad = R + 0.05 + 0.95 * age;
         float a_ = planeRing(q, e, rad, 1.3 + 2.4 * exp(-age / 0.18), pxScene) * fan * flareA[i] * (1.0 - smoothstep(0.9, 1.5, age)) * ev;
         vec3 fc = mix(vec3(1.0, 0.70, 0.34), white, 0.35 + 0.45 * exp(-age / 0.2));
@@ -551,12 +584,18 @@ void main() {{
     // The innermost orbit clears the Sun even at the top of a beat, however far the plane
     // is tipped: a planet behind the Sun, or across its face, is a note nobody saw.
     float a0 = max(0.255, 0.156 / e);
-    float tug = uSpreadSlow;                                          // the spread, with every beat's tug on it baked in - sized for this camera's frame
+    float tug = uSpreadSlow;                                          // how wide the orbits stand, as this camera sees it
+    // A kick is the Sun's mass, pulsing; its pull falls off as the square of the distance and
+    // it travels - so Mercury jumps on the beat and Neptune stirs most of a second later. In
+    // a close shot it is scaled down, so it is the same small movement on screen.
+    float pullGain = clamp(uCamSpan, 0.0, 1.0);
     float noteT[N_SATS] = {_gather("uNoteT", N_SATS)};
     float noteA[N_SATS] = {_gather("uNoteA", N_SATS)};
     float noteM[N_SATS] = {_gather("uNoteM", N_SATS)};
     float swell[N_SATS] = {_gather("uSwell", N_SATS)};
     float phase[N_PLANETS] = {_gather("uPh", N_PLANETS)};
+    float pOff[N_PLANETS] = {_gather("uPd", N_PLANETS)};
+    float pRise[N_PLANETS] = {_gather("uPz", N_PLANETS)};
 
     vec3 under = vec3(0.0), over = vec3(0.0);                         // what passes behind the Sun, and in front
     float underA = 0.0, overA = 0.0;
@@ -623,10 +662,11 @@ void main() {{
 
     // ---- the planets -------------------------------------------------------------------------------
     for (int i = 0; i < N_PLANETS; i++) {{
-        float a = (a0 + ORBIT_STEP[i]) * tug;
+        float aFree = (a0 + pOff[i]) * tug;                             // where it would be, left alone
+        float pulled = pullGain * PULL * pow(a0 * tug / max(aFree, 1e-4), 2.0) * pullOf(aFree - a0 * tug, uPullT0, uPullA0, uPullT1, uPullA1);
+        float a = aFree - pulled;
         float th = TAU * phase[i] + uCamTurn;
-        vec2 cp = a * vec2(cos(th), sin(th));                          // in the plane, in the camera's turned frame
-        vec3 sv = toView(vec3(cp, 0.0), e, c);                         // on screen, and its depth toward us
+        vec3 sv = toView(vec3(a * cos(th), a * sin(th), a * pRise[i]), e, c);   // its orbit is tipped: it rides above the plane and below it
         vec2 dq = q - sv.xy;
         int slot = PLANET_SLOT[i];
         float nAge = uTime - noteT[slot];
@@ -635,23 +675,35 @@ void main() {{
         float sizePx = size / pxScene;
         vec3 pc = vec3(0.0); float pA = 0.0;
 
-        // its trail: no orbit is drawn. A short wake that fades behind it, longer the
-        // faster it goes - the mean colour of its own surface
-        {{
-            float behind = mod(th - thW, TAU);
+        // Its trail: no orbit is drawn. A short wake that fades behind it, longer the faster it
+        // goes, the mean colour of its own surface - and lying along the orbit it is actually
+        // on: an oval about the Sun at one focus, tipped out of the plane. For this pixel's
+        // longitude, where is that orbit? (Its height there is taken off the pixel first, so
+        // the wake of a tipped orbit stays under its planet.)
+        // (Only where this pixel could be on it: within the orbit's own range of distance, and
+        // of height. Eight ovals' worth of trigonometry at every pixel was a third of the frame.)
+        float meanR = (a0 + ORBIT_STEP[i]) * tug;
+        float band = (1.2 * K_MAP * ORB_ECC[i] + (a0 + ORBIT_STEP[i]) * ORB_SINI[i] * c / e) * tug + PULL + 4.0 * pxScene / e;
+        if (abs(rhoW - meanR) < band) {{
+            float lonPix = thW - uCamTurn;
+            float rise = ORB_SINI[i] * sin(lonPix - ORB_NODE[i]);
+            float rOrb = (a0 + K_MAP * (ORB_LOGP[i] - log(1.0 + ORB_ECC[i] * cos(lonPix - ORB_PERI[i])))) * tug - pulled;
+            vec2 plT = vec2(plW.x, plW.y - rOrb * rise * c / e);
+            float rhoT = length(plT);
+            float behind = mod(th - atan(plT.y, plT.x), TAU);
             float reach = (0.32 + 0.95 * pow(0.250 / (ORBIT_STEP[i] + 0.250), 1.5)) * (0.60 + 0.40 * uHold);
             float fade = behind < reach ? pow(1.0 - behind / reach, 1.25) : 0.0;
-            float grad = length(vec2(plW.x, plW.y / e)) / max(rhoW, 1e-6);
+            float grad = length(vec2(plT.x, plT.y / e)) / max(rhoT, 1e-6);
             // it thins as it fades, as an inked line does: near the planet it is solid enough
             // to be the planet's colour and not the sky's seen through it
-            float tr = disc(abs(rhoW - a) / (grad * pxScene), mix(0.60, 1.20, fade)) * mix(fade, sqrt(fade), 0.5) * (0.50 + 0.36 * lum);
+            float tr = disc(abs(rhoT - rOrb) / (grad * pxScene), mix(0.60, 1.20, fade)) * mix(fade, sqrt(fade), 0.5) * (0.50 + 0.36 * lum);
             vec3 tc = PLANET_TINT[i] * sunlight * lum;                 // the planet's own colour, in the planet's own light
             if (plW.y > 0.0) {{ under = mix(under, tc, step(underA, tr)); underA = max(underA, tr); }}
             else {{ over = mix(over, tc, step(overA, tr)); overA = max(overA, tr); }}
         }}
 
         float rel = length(dq) / max(size, 1e-5);
-        if (rel < 5.2) {{
+        if (rel < 6.8) {{
             // The outline first, so that whatever the planet gives off lies over it, not under it.
             float keyline = disc(length(dq) / pxScene, sizePx + 1.7);
             pc = space * 0.55; pA = keyline * 0.92;
@@ -678,9 +730,8 @@ void main() {{
             for (int k = 0; k < N_FLARE; k++) {{
                 float since = uTime - flareT[k] - max(a - R - 0.05, 0.0) / 0.95;
                 if (flareA[k] <= 0.0 || since < 0.0 || since > 1.2) continue;
-                float thF = TAU * flareK[k];
-                float dphi = abs(mod(th - atan(cos(thF) / e, sin(thF)) + PI, TAU) - PI);
-                float inFan = 1.0 - smoothstep(0.80, 1.05, dphi);
+                float dphi = abs(mod(th - TAU * flareK[k] - uCamTurn + PI, TAU) - PI);
+                float inFan = 1.0 - smoothstep(0.42, 0.66, dphi);
                 float f = 1.3 * flareA[k] * inFan * exp(-since / 0.30);
                 if (f > struck) {{ struck = f; struckInk = mix(vec3(1.0, 0.70, 0.34), white, 0.45); }}
                 if (flareA[k] * inFan > rung) {{ rung = flareA[k] * inFan; rungAge = since; }}
@@ -740,17 +791,28 @@ void main() {{
                 ringC = mix(ringC, mix(vec3(1.0, 0.95, 0.80), white, 0.3), clamp(noteA[slot], 0.0, 1.0) * hit(nAge, 0.22) * exp(-pow((rk - runs) / 0.16, 2.0)) * ev);
                 ringA_ = ann; ringFront = step(0.0, zr);
             }}
-            // moons: the Moon; Io and Ganymede; Titan
-            int moons = i == 2 ? 1 : i == 4 ? 2 : i == 5 ? 1 : 0;
-            vec3 moonAt[2] = vec3[2](vec3(0.0), vec3(0.0)); float moonSz[2] = float[2](0.0, 0.0);
-            for (int m = 0; m < 2; m++) {{
+            // Moons. The Moon, its orbit tipped five degrees. Jupiter's four: Io, Europa and
+            // Ganymede go round in 1 : 2 : 4 - for every turn of Ganymede, two of Europa and four
+            // of Io, and never all three in line (the Laplace resonance; their phases here keep
+            // it) - with Callisto further out, keeping its own time. Titan, which goes round
+            // Saturn in the plane of the rings, not the plane of the planets.
+            int moons = i == 2 ? 1 : i == 4 ? 4 : i == 5 ? 1 : 0;
+            vec3 moonAt[4] = vec3[4](vec3(0.0), vec3(0.0), vec3(0.0), vec3(0.0)); float moonSz[4] = float[4](0.0, 0.0, 0.0, 0.0);
+            for (int m = 0; m < 4; m++) {{
                 if (m >= moons) break;
                 float fm = float(m);
-                float ma = TAU * (uOrbitSlow * (i == 2 ? 3.3 : 5.5 - 2.0 * fm) + 0.3 * float(i) + 0.55 * fm) + uCamTurn;
-                float mr = size * (i == 2 ? 3.2 : i == 4 ? 2.6 + 0.9 * fm : 3.0) * (1.0 + 0.30 * swell[slot]);   // a note swings its moons out
-                vec3 mv = toView(vec3(mr * cos(ma), mr * sin(ma), 0.0), e, c);
-                float msz = max(size * (i == 2 ? 0.27 : 0.17), 1.5 * pxScene);
-                moonAt[m] = mv; moonSz[m] = size * (i == 2 ? 0.27 : 0.17);
+                float turns = i == 2 ? 3.3 * uOrbitSlow
+                            : i == 5 ? 2.6 * uOrbitSlow + 0.2
+                            : (m == 0 ? 8.0 : m == 1 ? 4.0 : m == 2 ? 2.0 : 0.848) * uOrbitSlow + (m == 2 ? 0.25 : m == 3 ? 0.6 : 0.0);
+                float ma = TAU * turns;
+                float swing = 1.0 + 0.30 * swell[slot];                  // a note swings its moons out
+                float mr = size * swing * (i == 2 ? 3.2 : i == 5 ? 3.4 : 2.1 + 0.85 * fm + 0.12 * fm * fm);
+                vec3 mw = i == 5 ? mr * (cos(ma) * RING_U + sin(ma) * RING_V)
+                                 : vec3(mr * cos(ma), mr * sin(ma), i == 2 ? mr * 0.089 * sin(ma - 2.18) : 0.0);
+                vec3 mv = toView(vec3(rot2(uCamTurn) * mw.xy, mw.z), e, c);
+                float mrel = i == 2 ? 0.27 : i == 5 ? 0.17 : (m == 0 ? 0.12 : m == 1 ? 0.10 : m == 2 ? 0.17 : 0.15);
+                float msz = max(size * mrel, 1.5 * pxScene);
+                moonAt[m] = mv; moonSz[m] = size * mrel;
                 vec2 md = dq - mv.xy;
                 float moon = disc(length(md) / pxScene, msz / pxScene);
                 moon *= 1.0 - step(mv.z, 0.0) * disc(length(dq) / pxScene, sizePx);      // behind its planet
@@ -767,7 +829,9 @@ void main() {{
                 float lat = dot(n, axis);
                 vec3 e1 = normalize(cross(axis, vec3(0.31, 0.95, 0.10))), e2 = cross(axis, e1);
                 vec3 sq = vec3(rot2(uOrbitSlow * (2.2 + 0.6 * float(i))) * vec2(dot(n, e1), dot(n, e2)), lat).xzy;
-                vec3 day = surface(i, lat, sq, w) * sunlight * lum;        // (the kick does not light a planet: the planets are the notes')
+                // (the kick does not light a planet: the planets are the notes'. But as the corona
+                // charges, the daylight out here dims a little - and comes back with the discharge.)
+                vec3 day = surface(i, lat, sq, w) * sunlight * lum * (1.0 - 0.10 * uCharge);
                 // a note is the planet catching light: its day flares, its night glows its own colour
                 day = mix(day, mix(day, white, 0.28), clamp(lit, 0.0, 1.0));
                 float ndl = dot(n, L);
@@ -778,7 +842,7 @@ void main() {{
                 // and Saturn's rings lay a dark band across Saturn.
                 vec3 P = n * size;
                 float dark = 0.0;
-                for (int m = 0; m < 2; m++) {{
+                for (int m = 0; m < 4; m++) {{
                     if (moonSz[m] <= 0.0) continue;
                     vec3 toMoon = moonAt[m] - P;
                     float sunward = dot(toMoon, L);
@@ -798,6 +862,32 @@ void main() {{
         }}
         if (sv.z < 0.0) {{ under = mix(under, pc, pA); underA = max(underA, pA); }}
         else {{ over = mix(over, pc, pA); overA = max(overA, pA); }}
+    }}
+
+    // ---- Pluto: small, far, and on an orbit like no planet's - tipped seventeen degrees and so
+    // lopsided that at perihelion it is inside Neptune's. With Charon, half its size and close by.
+    {{
+        float a = (a0 + uPlutoD) * tug;
+        float th = TAU * uPlutoPh + uCamTurn;
+        vec3 sv = toView(vec3(a * cos(th), a * sin(th), a * uPlutoZ), e, c);
+        vec2 dq = q - sv.xy;
+        float size = {orrery.JUPITER_SIZE * (orrery.PLUTO[5] / orrery.RADIUS[4]) ** 0.40:.5f};
+        if (length(dq) < 4.0 * size + 3.0 * pxScene) {{
+            vec3 L = normalize(-sv);
+            float pA = disc(length(dq) / pxScene, size / pxScene + 1.5) * 0.92; vec3 pc = space * 0.55;
+            vec2 cd = dq - size * 2.3 * vec2(cos(TAU * 6.0 * uOrbitSlow), e * sin(TAU * 6.0 * uOrbitSlow));
+            float csz = max(0.52 * size, 1.3 * pxScene);
+            vec3 cn = vec3(cd / csz, sqrt(max(1.0 - dot(cd, cd) / (csz * csz), 0.0)));
+            float charon = disc(length(cd) / pxScene, csz / pxScene);
+            pc = mix(pc, cel(vec3(0.62, 0.60, 0.60) * sunlight * lum, dot(cn, L), 1.0 - cn.z, shade, 1.2 * pxScene / csz), charon); pA = max(pA, charon);
+            vec3 n = vec3(dq / size, sqrt(max(1.0 - dot(dq, dq) / (size * size), 0.0)));
+            float heart = edge(0.52, soft(n * 2.1 + 3.0), 2.0 * pxScene / size);              // the pale plain
+            vec3 day = mix(vec3(0.74, 0.58, 0.47), vec3(0.93, 0.87, 0.80), heart) * sunlight * lum;
+            float cover = disc(length(dq) / pxScene, size / pxScene);
+            pc = mix(pc, cel(day, dot(n, L), 1.0 - n.z, shade, 1.4 * pxScene / size), cover); pA = max(pA, cover);
+            if (sv.z < 0.0) {{ under = mix(under, pc, pA); underA = max(underA, pA); }}
+            else {{ over = mix(over, pc, pA); overA = max(overA, pA); }}
+        }}
     }}
 
     // ---- put it together: the far half of the plane's waves, what is behind the Sun, the
@@ -859,7 +949,8 @@ void main() {{
         for (int i = 0; i < N_FLARE; i++) {{
             float age = uTime - flareT[i];
             if (age < 0.0 || age > 0.9 || flareA[i] <= 0.0) continue;
-            float dth = abs(mod(around - TAU * flareK[i] + PI, TAU) - PI);
+            float phiF = TAU * flareK[i] + uCamTurn;                  // where on the limb that direction in the plane leaves from
+            float dth = abs(mod(around - atan(cos(phiF), e * sin(phiF)) + PI, TAU) - PI);
             burst += R * 0.80 * flareA[i] * exp(-pow(dth / 0.40, 2.6)) * exp(-age / 0.20);
         }}
         tongue = 0.50 * R * (1.0 - exp(-tongue / (0.50 * R)));         // the same note played again and again does not pile up into a spike
@@ -895,7 +986,8 @@ void main() {{
             float turn = 0.004 * uBeats;
             for (int k = 0; k < 4; k++) {{
                 float fk = float(k);
-                float lon = turn + 1.7 * fk + 0.6 * hash11(fk * 3.1 + 0.2), latS = (mod(fk, 2.0) < 0.5 ? 0.30 : -0.24) + 0.08 * hash11(fk * 5.7);
+                float latS = (mod(fk, 2.0) < 0.5 ? 0.30 : -0.24) + 0.08 * hash11(fk * 5.7);
+                float lon = turn * (1.0 - 0.9 * sin(latS) * sin(latS)) + 1.7 * fk + 0.6 * hash11(fk * 3.1 + 0.2);   // it is not solid: its equator laps its higher latitudes
                 vec3 at = vec3(cos(latS) * sin(lon), sin(latS), cos(latS) * cos(lon));
                 if (at.z < 0.15) continue;                                // round the back, or too near the limb to draw cleanly
                 float ang = acos(clamp(dot(n, at), -1.0, 1.0));

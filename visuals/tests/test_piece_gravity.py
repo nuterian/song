@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from visuals.pieces.gravity import colour, cosmos, direct, listen, models, shader, shader_cosmos, shader_ink, sky
+from visuals.pieces.gravity import colour, cosmos, direct, listen, models, orrery, shader, shader_cosmos, shader_ink, sky
 
 SR = 48000
 
@@ -401,7 +401,8 @@ def test_no_camera_jolts():
         j = follow.jolt(ch, mode)
         assert j["slide_peak"] < 0.40, (mode, j)               # frame heights a second
         assert j["zoom_peak"] < 0.45, (mode, j)
-        assert j["planet_speed_peak"] < 0.70, (mode, j)
+        assert j["planet_speed_peak"] < 1.0, (mode, j)           # Mercury's hop on a kick is the fastest thing there is
+        assert j["planet_speed_p99"] < 0.30, (mode, j)
     assert follow.jolt(ch, "hybrid")["slide_peak"] == 0.0        # the hybrid follows nothing
 
 
@@ -506,7 +507,8 @@ def test_a_planet_is_struck_when_a_ring_from_the_sun_reaches_it():
                 row[ch.index(name)] = 0.0
         g = follow.geometry(ch, np.array([k]))
         e = float(g["e"][0])
-        orbit = (max(0.255, 0.156 / e) + shader_cosmos.ORBIT_STEP[planet]) * float(row[ch.index("uSpreadSlow")])
+        orbit = (max(0.255, 0.156 / e) + float(row[ch.index(f"uPd{planet}")])) * float(row[ch.index("uSpreadSlow")])
+        row[ch.index("uPullA0")] = row[ch.index("uPullA1")] = 0.0          # and no kick is pulling it about
         sun = 0.078 * (0.50 + 0.80 * float(row[ch.index("uMass")])) * (1.0 + 0.22 * float(row[ch.index("uSunPulse")]))
         reach_age = (max(orbit - sun - 0.035, 0.0) / 0.66) ** (1.0 / 0.72)
         row[ch.index("uRingT0")] = t - reach_age - 0.03                     # the ring got there a thirtieth of a second ago
@@ -522,4 +524,44 @@ def test_a_planet_is_struck_when_a_ring_from_the_sun_reaches_it():
         r.release()
         render.STYLE = old
     assert struck > 1.03 * calm, (calm, struck)
+
+
+def test_the_orrery_keeps_the_solar_systems_pattern_and_its_physics():
+    step = orrery.MEAN_STEP
+    gaps = np.diff(step)
+    assert np.all(gaps > 0.03)                                   # nothing collides
+    assert gaps[3] == gaps.max()                                 # the wide gap is where the asteroids are
+    assert step[3] < 0.35 * step[-1]                             # the inner four are close in; the giants are spread wide
+    assert shader_cosmos.BELTS[0][0] > step[3] and shader_cosmos.BELTS[0][0] + 3 * shader_cosmos.BELTS[0][1] < step[4]
+    assert orrery.rate()[0] / orrery.rate()[-1] == pytest.approx(12.0)
+    # Kepler: round an oval the longitude never jumps, a revolution is a revolution, and it is quickest at perihelion
+    m = np.linspace(0.0, 4 * np.pi, 4001)
+    lon, off, up = orrery.track(orrery.ELEMENTS[0], m)
+    assert np.all(np.diff(lon) > 0) and lon[-1] - lon[0] == pytest.approx(4 * np.pi, abs=1e-6)
+    assert np.argmax(np.diff(lon)[500:3500]) == pytest.approx(np.argmin(off[500:3500]), abs=3)   # (perihelion is at 2 pi: index 2000)
+    assert np.abs(up).max() == pytest.approx(np.sin(np.radians(7.005)), abs=1e-3)      # Mercury's seven degrees
+    # Pluto comes inside Neptune
+    _, p_off, p_up = orrery.track(orrery.PLUTO, m)
+    assert p_off.min() < step[-1] < p_off.max() and np.abs(p_up).max() > 0.29
+    # gravity: inverse-square of the distance drawn, and it travels - the planets answer in turn
+    r = 0.255 + step
+    assert orrery.pull_depth(r, r[0])[4] == pytest.approx(orrery.PULL * (r[0] / r[4]) ** 2)
+    t = np.arange(0.0, 1.5, 1 / 240)
+    peaks = [t[np.argmax(orrery.pull_shape(t - (ri - r[0]) / orrery.PULL_SPEED))] for ri in r]
+    assert np.all(np.diff(peaks) > 0) and peaks[-1] - peaks[0] > 0.4
+    assert orrery.pull_shape(np.array([0.0, 1e-3]))[1] < 1e-3                          # from rest
+
+
+def test_a_flare_is_thrown_at_the_planet_that_has_the_tune():
+    got, ch = _real_cosmos()
+    assert len(ch.flare_targets) == len(ch.flares) > 10
+    hits = 0
+    for ft, planet in zip(ch.flares, ch.flare_targets):
+        k = min(int(np.ceil(ft * direct.RATE)) + 1, len(ch.data) - 1)
+        aimed = max(ch.data[k, ch.index(f"uFlareK{s}")] for s in range(shader_cosmos.N_FLARE)
+                    if abs(ch.data[k, ch.index(f"uFlareT{s}")] - ft) < 1e-3)
+        where = (ch.data[k, ch.index(f"uPh{planet}")]) % 1.0
+        hits += abs((aimed - where + 0.5) % 1.0 - 0.5) < 0.01
+    assert hits == len(ch.flares)
+    assert len(set(ch.flare_targets)) >= 4                       # and not always the same player
 

@@ -530,3 +530,48 @@ globe flashing most of the way to white on its note, were jarring - a strobe on 
 bodies: the rings are the planet's answer now, and the globe only lifts a little. And
 the comet near perihelion, with a fat white wedge and a long blue line, was taken for
 a satellite: it is smaller, finer, and both tails fade to nothing along their length.
+
+
+# Version 4.1: a realism pass
+
+Asked: are the planets really all in one plane? They are not, quite - and nothing in
+the picture was: eight circles, evenly stepped, in a flat plane, Neptune 2.7 times as
+far out as Mercury (it is 78) and its year 4.5 of Mercury's (it is 685). `orrery.py` is
+now the one place the solar system's numbers live, and what is drawn is:
+
+- **The real orbits.** J2000 elements: each planet's oval (Mercury's 0.21 and Mars's
+  0.09 are visible), its tilt to the ecliptic (Mercury 7 degrees, Venus 3.4, Saturn
+  2.5; Earth none, by definition), and where its perihelion and node point - against
+  the real stars, since the star catalogue is in the same frame. Kepler's equation
+  runs each one, quicker near the Sun. A trail lies along the oval its planet is on.
+- **Three honest compressions.** Distance on a log scale, applied to the instantaneous
+  distance: the true *pattern* survives - four close in, the wide gap where the
+  asteroids are (now at their 2.1-3.3 AU, in three lanes: Kirkwood's gaps), four giants
+  spread wide. Years raised to the power that makes Neptune's 12 of Mercury's. Radii
+  to the power 0.40: Jupiter four Mercuries across. A power law for distance was tried
+  on paper and rejected: the inner orbits end up closer together than the planets are
+  wide.
+- **Gravity.** A kick is the Sun's mass pulsing. Its pull falls off as the square of
+  the distance drawn and it *travels*, so Mercury hops on the beat and Neptune stirs
+  most of a second later: the planets answer in turn, outward. It starts from rest
+  (the answer's shape is squared), and in a close shot it is scaled to the frame.
+- **The conductor.** A discharge of the corona is thrown at the planet that has the
+  tune - the one whose note sounded last - in a fan a sixth of a turn wide; that planet
+  is struck and rings. As the corona charges, daylight on the planets dims a tenth.
+- **Small true things.** Pluto and Charon, 17 degrees off the plane and inside
+  Neptune's orbit at perihelion. Jupiter's four moons, Io : Europa : Ganymede going
+  round in 1 : 2 : 4 with the phases that keep them from ever lining up. Titan in the
+  plane of the rings. The Moon's orbit tipped five degrees. The Sun's equator lapping
+  its higher latitudes. The cinematic camera comes down low over the plane in the wide
+  acts, where the tilts show.
+
+Not done, and why: the Sun's wobble about the barycentre (over five minutes Jupiter
+barely moves, so it would be a fixed offset nobody sees); transits and planet-rise over
+the limb (the innermost orbit is deliberately kept clear of the Sun's disc at any
+tilt, so that no note is hidden - the two cannot both be had); zodiacal light (a pale
+band exactly where the planets are, which was asked to be kept dark).
+
+Cost: 5.5 ms a frame at 1080p, 10 at 1440p (15 worst). The trails' trigonometry runs
+only where a pixel could be on that orbit; without that it was 12.7. Jolt: slide 24
+%/s, zoom 39, fastest planet 84 (Mercury's hop; the 99th percentile is 18-22, lower
+than before). Sync has not been re-measured since the geometry changed.
