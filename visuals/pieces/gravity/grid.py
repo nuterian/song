@@ -32,9 +32,12 @@ GATE = 0.5                   # sharp hits within 4 ms of the lattice, for it to 
 BT_GATE = 0.5                # ...and, if Beat This! is steady, its beats within 25 ms of it
 BT_STEADY = 0.8              # Beat This! is steady when this share of its beat gaps is within 5 % of the median
 ON_LATTICE = 0.004           # s
-MIN_SHARP = 32               # fewer sharp hits than this and there is no lattice to find
+MIN_SHARP = 32               # fewer sharp hits than this and there is no lattice to find...
+SHARP_PER_S = 0.5            # ...nor fewer than this many a second: Shattered Voices' synths alone left
+                             # 32 "hats" in 155 s, and they made a lattice at 180.2 BPM (real drums: 3-4 a second)
 OCTAVE_TOL = 0.06            # a lattice beat within 6 % of Beat This!'s
 SUBDIVISIONS = (1, 2, 3, 4, 6, 8)
+FAST = 160.0                 # BPM: at this and above, the picture follows every other beat (drum & bass is felt at half)
 
 
 def tracked_beats(mix: np.ndarray, sr: int) -> dict[str, np.ndarray]:
@@ -243,7 +246,22 @@ def snap_beats(bt_beats: np.ndarray, t: np.ndarray, amp: np.ndarray,
     ok = np.abs(near - b) < tol
     snapped = np.where(ok, near, b)
     kept = ok & (np.abs(snapped - _local_line(snapped, ok)) < agree)
-    return np.where(kept, snapped, _local_line(snapped, kept)), -off, float(kept.mean())
+    return in_order(np.where(kept, snapped, _local_line(snapped, kept))), -off, float(kept.mean())
+
+
+def in_order(beats: np.ndarray, closest: float = 0.35) -> np.ndarray:
+    """Beats that only go forward, none closer than `closest` of the local beat to the one
+    before. Beat This! can put beats 80 ms apart, and a line fitted through such neighbours
+    once put a beat 235 ms before its predecessor (Shattered Voices, synths alone)."""
+    b = np.sort(beats)
+    if len(b) < 3:
+        return b
+    local = np.median(np.diff(b))
+    keep = [0]
+    for i in range(1, len(b)):
+        if b[i] - b[keep[-1]] >= closest * local:
+            keep.append(i)
+    return b[keep]
 
 
 def extend(beats: np.ndarray, duration: float) -> np.ndarray:
@@ -316,6 +334,14 @@ def local_downbeats(beats: np.ndarray, bt_downbeats: np.ndarray, meter: int, pha
     return beats[idx[(idx >= 0) & (idx < len(beats))]]
 
 
+def halve(beats: np.ndarray, bt_downbeats: np.ndarray) -> np.ndarray:
+    """Every other beat - the half that Beat This!'s downbeats fall on."""
+    if len(bt_downbeats):
+        parity = np.bincount(_nearest_beat(beats, bt_downbeats) % 2, minlength=2)
+        return beats[int(np.argmax(parity))::2]
+    return beats[::2]
+
+
 def find(sharp: np.ndarray, kicks: np.ndarray, onsets: tuple[np.ndarray, np.ndarray],
          bt: dict, duration: float, force: str | None = None) -> dict:
     """The grid for a song. `onsets` (times, sizes) are every attack heard, for snapping;
@@ -329,7 +355,7 @@ def find(sharp: np.ndarray, kicks: np.ndarray, onsets: tuple[np.ndarray, np.ndar
                                "steady": float(np.mean(np.abs(gaps / bt_period - 1) < 0.05)) if len(gaps) else 0.0}}
 
     lat = None
-    if len(sharp) >= MIN_SHARP and np.isfinite(bt_period) and force != "tracked":
+    if len(sharp) >= max(MIN_SHARP, SHARP_PER_S * duration) and np.isfinite(bt_period) and force != "tracked":
         scan = lattice_scan(sharp)
         spacing, coherence = scan[0]
         div = beat_multiple(spacing, bt_period)
@@ -357,8 +383,18 @@ def find(sharp: np.ndarray, kicks: np.ndarray, onsets: tuple[np.ndarray, np.ndar
     else:
         raise ValueError("no beat to be found: too few sharp hits for a lattice and too few tracked beats")
 
+    # A tempo prior. With no drums, Beat This! can take eighth notes for the beat (Shattered
+    # Voices' synths alone: 182 BPM in two, where the song is 90 in four), and everything
+    # measured in beats and bars then runs at double speed - the scorecard failed it on
+    # jolt. At FAST and above the picture follows every other beat, and a bar keeps its
+    # length: 2 x 2 fast beats is 4 slow ones in length, so a bar of two becomes a bar of four.
+    halved = 60.0 / float(np.median(np.diff(beats))) >= FAST
+    if halved:
+        beats = halve(beats, bt["downbeats"])
+        meter = meter // 2 if meter // 2 >= 2 else 4
+        out["meter"], out["halved"] = meter, True
     phase, phase_from, kv, bt_votes = bar_phase(beats, kicks, bt["downbeats"], meter)
-    if source == "lattice":
+    if source == "lattice" or halved:
         downbeats = beats[(np.arange(len(beats)) - phase) % meter == 0]
     else:
         # A tracked grid can drop or double a beat, and one global phase would put every

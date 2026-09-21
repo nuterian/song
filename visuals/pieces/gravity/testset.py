@@ -12,6 +12,7 @@ against the whole song. Written to visuals/cache/testset/<name>.wav (ignored by 
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import numpy as np
 import soundfile as sf
@@ -25,14 +26,17 @@ DIR = ROOT / "visuals" / "cache" / "testset"
 DERIVED = {
     "gravity-no-drums": (GRAVITY_AUDIO, ("bass", "other", "vocals")),
     "tidal-core-no-drums-no-bass": (None, ("other", "vocals")),        # needs TIDAL CORE's stems
+    "shattered-voices-synths-only": ("shattered-voices", ("other",)),   # nothing below, nothing sung: the nearest to ambient
 }
 
 
 def source(name: str) -> Track:
     src, _ = DERIVED[name]
-    if src is not None:
-        return Track.resolve(src)
-    return Track("tidal-core", ROOT / "visuals" / "cache" / "tidal-core" / "audio.wav")
+    if src is None:
+        return Track("tidal-core", ROOT / "visuals" / "cache" / "tidal-core" / "audio.wav")
+    if isinstance(src, str):                  # a song already separated here, by its slug
+        return Track(src, Path.home() / "Downloads" / "Shattered Voices.wav")
+    return Track.resolve(src)
 
 
 def make(name: str) -> None:

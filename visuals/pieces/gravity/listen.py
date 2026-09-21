@@ -35,7 +35,7 @@ from .grid import fit_grid, latency  # noqa: F401  (the grid is grid.py's; kept 
 
 RATE = 120          # the grid streams live on; matches visuals.listen.RATE
 ENV_RATE = 1000     # envelopes used for timing attacks
-VERSION = 13         # 8: grid found; 9: absent stems silent; 10: fallback onsets; 11: no leakage in the grid; 12: any sample rate; 13: Beat This! a referee only when steady
+VERSION = 16         # ...14: enough hits for a lattice; 15: a tracked grid only goes forward; 16: a tempo prior (halve at 160+)
 
 STEMS = ("drums", "bass", "other", "vocals")
 # Which stem each kind of event is heard in.
@@ -250,8 +250,9 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     # The stems must sit exactly under the mix, or every event time is off by the
     # same amount and nothing downstream could tell. Measured, not assumed.
     total = sum(stem.values())
-    a0 = int(60 * sr)
-    seg = slice(a0, a0 + 6 * sr)
+    # six seconds from a minute in - or, in a song too short for that, from its middle
+    a0 = int(min(60.0, max(0.0, duration / 2 - 3.0)) * sr)
+    seg = slice(a0, min(a0 + 6 * sr, len(mix)))
     xc = signal.correlate(total[seg], mix[seg], mode="full", method="fft")
     stem_lag = int(np.argmax(xc)) - (seg.stop - seg.start - 1)
     say(f"loaded {duration:.1f}s at {sr} Hz, four stems; stems lag the mix by "

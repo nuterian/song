@@ -217,6 +217,8 @@ def clap_scores(mix: np.ndarray, sr: int, spans: list[tuple[float, float]],
                 seg = y[int(t * 48000): int(min(t + 10.0, b) * 48000)]
                 pieces.append(seg)
                 t += 10.0
+            if not pieces:                     # a section under a second: hear it whole
+                pieces.append(y[int(a * 48000): int(max(b, a + 1.0) * 48000)])
             inp = proc(audios=pieces, sampling_rate=48000, return_tensors="pt")
             e = torch.nn.functional.normalize(model.get_audio_features(**inp), dim=-1).mean(dim=0)
             embs.append(torch.nn.functional.normalize(e, dim=-1))

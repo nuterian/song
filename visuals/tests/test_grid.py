@@ -147,3 +147,21 @@ def test_an_unsteady_beat_tracker_cannot_veto_a_good_lattice():
     g = grid.find(sharp, kicks, (sharp, np.ones(len(sharp))), bt, beats[-1] + 1)
     assert g["beat_this"]["steady"] < grid.BT_STEADY and g["lattice"]["beat_this_agrees"] < grid.BT_GATE
     assert g["source"] == "lattice" and abs(g["tempo"] - 128.0) < 0.01
+
+
+def test_a_tracked_grid_only_goes_forward():
+    b = np.array([0.0, 0.5, 1.0, 1.08, 1.5, 1.265, 2.0, 2.5])      # a beat 80 ms after another, one out of order
+    got = grid.in_order(b)
+    assert np.all(np.diff(got) >= 0.35 * 0.5) and got[0] == 0.0 and got[-1] == 2.5
+
+
+def test_eighth_notes_taken_for_the_beat_are_halved():
+    """Shattered Voices' synths alone: Beat This! heard 182 BPM in two; the song is 90 in four."""
+    rng = np.random.default_rng(9)
+    beats = 0.3 + (60.0 / 90.0) * np.arange(200)
+    eighths = np.sort(np.concatenate([beats, beats + (60.0 / 180.0)]))
+    bt = fake_beat_this(eighths, 2, 0.015, rng)
+    g = grid.find(np.zeros(0), np.zeros(0), (eighths, np.ones(len(eighths))), bt, beats[-1] + 1)
+    assert g.get("halved") and abs(g["tempo"] - 90.0) < 1.0 and g["meter"] == 4
+    d = np.abs(beats[5:-5][:, None] - g["beats"][None, :]).min(axis=1)
+    assert np.median(d) < 0.01

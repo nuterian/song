@@ -85,7 +85,7 @@ def listening(got: dict) -> list[Line]:
         out.append(Line("listening", "tempo drift", f"{drift:.2f} ms, worst 30 s mean", "<= 2 ms", _check(drift <= 2.0, WARN)))
     else:
         tr = g.get("tracked", {})
-        why = f"{lat['on_lattice']:.2f} of hits on the best lattice" if lat else "too few hats and claps for a lattice"
+        why = f"{lat['on_lattice']:.2f} of hits on the best lattice" if lat else "too few hats and claps for a lattice (under one every two seconds)"
         out.append(Line("listening", "no lattice", f"{why}; Beat This!'s beats, {tr.get('snapped', 0):.2f} snapped to attacks",
                         f"lattice >= {grid.GATE}", WARN))
     out.append(Line("listening", "meter agreement", f"{g.get('meter_agreement', 0):.2f} of Beat This!'s bars have {m.get('meter', 4)} beats",
