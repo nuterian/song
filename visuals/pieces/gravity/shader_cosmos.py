@@ -144,14 +144,21 @@ uniform float uCamTurn, uCamTilt, uCamRoll, uCamSpan, uCamX, uCamY;
 {_scalars("uNoteT", N_SATS)}
 {_scalars("uNoteA", N_SATS)}
 {_scalars("uNoteM", N_SATS)}
-{_scalars("uSwell", N_SATS)}
+{_scalars("uLean", N_PLANETS)}
+{_scalars("uHop", N_PLANETS)}
+{_scalars("uGlow", N_PLANETS)}
+{_scalars("uBig", N_PLANETS)}
+{_scalars("uSwing", N_PLANETS)}
+{_scalars("uSpin", N_PLANETS)}
+{_scalars("uPingT", N_PLANETS)}
+{_scalars("uPingA", N_PLANETS)}
+uniform float uKickE, uSyllE, uHatE0, uHatE1, uHatE2, uCrashE, uOpened, uFlashE;   // eased levels: each peaks on its sound
 {_scalars("uMetT", N_METEORS)}
 {_scalars("uMetA", N_METEORS)}
 {_scalars("uMetS", N_METEORS)}
 {_scalars("uPh", N_PLANETS)}
 {_scalars("uPd", N_PLANETS)}
 {_scalars("uPz", N_PLANETS)}
-uniform float uPullT0, uPullT1, uPullA0, uPullA1;
 uniform float uPlutoPh, uPlutoD, uPlutoZ;
 {_scalars("uPromT", N_PROM)}
 {_scalars("uPromA", N_PROM)}
@@ -174,8 +181,10 @@ const int N_RINGS = {N_RINGS};
 const int N_SATS = {N_SATS};
 const int N_METEORS = {N_METEORS};
 const int N_PLANETS = {N_PLANETS};
-const int STAR_GRID = {sky.GRID};
-const int STAR_PER_CELL = {sky.PER_CELL};
+const int STAR_GRID = {sky.DEEP_GRID};
+const int STAR_PER_CELL = {sky.DEEP_PER_CELL};
+const float PARALLAX = {sky.PARALLAX:.6f};          // how far the very nearest star shifts as the camera goes round: art, not astronomy
+const float DEEP_SIZE[8] = float[8]({_floats(sky.SIZE_CLASSES)});   // a deep-sky object's radius on the sky, by size class
 const ivec2 GALAXY_SIZE = ivec2({sky.MILKY_WAY[1]}, {sky.MILKY_WAY[0]});
 const float ORBIT_STEP[N_PLANETS] = float[{N_PLANETS}]({_floats(ORBIT_STEP)});
 // each orbit's shape, for its trail: eccentricity, where its perihelion and its ascending
@@ -187,7 +196,8 @@ const float ORB_NODE[N_PLANETS] = float[{N_PLANETS}]({_floats(orrery.NODE)});
 const float ORB_SINI[N_PLANETS] = float[{N_PLANETS}]({_floats(__import__("numpy").sin(orrery.INC))});
 const float ORB_LOGP[N_PLANETS] = float[{N_PLANETS}]({_floats(__import__("numpy").log(orrery.A * (1 - orrery.ECC ** 2) / orrery.A[0]))});
 const float K_MAP = {orrery._K:.6f};
-const float PULL = {orrery.PULL:.5f}, PULL_SPEED = {orrery.PULL_SPEED:.4f}, PULL_RISE = {orrery.PULL_RISE:.4f};
+const float PULL = {orrery.PULL:.5f};
+const float LEAD = {__import__("visuals.pieces.gravity.ease", fromlist=["LEAD"]).LEAD:.4f};          // held events show up this long before their sound
 const float PLANET_SIZE[N_PLANETS] = float[{N_PLANETS}]({_floats(PLANET_SIZE)});
 const int PLANET_SLOT[N_PLANETS] = int[{N_PLANETS}]({", ".join(str(x) for x in _PLANET_SLOT)});
 const vec3 PLANET_TINT[N_PLANETS] = vec3[{N_PLANETS}]({", ".join(_vec3(c) for c in PLANET_TINT)});
@@ -198,7 +208,6 @@ const vec3 PLANET_TINT[N_PLANETS] = vec3[{N_PLANETS}]({", ".join(_vec3(c) for c 
 // Neptune is slow and far-reaching. All of it in the plane of the orbits.
 const int   PING_N[N_PLANETS]     = int[{N_PLANETS}](1, 1, 2, 1, 3, 0, 1, 1);
 const float PING_REACH[N_PLANETS] = float[{N_PLANETS}](2.2, 2.0, 2.6, 2.3, 2.5, 0.0, 2.8, 3.6);
-const float PING_TAU[N_PLANETS]   = float[{N_PLANETS}](0.06, 0.20, 0.12, 0.08, 0.16, 0.12, 0.13, 0.28);
 const vec3 GAL_POLE = {_vec3(_G["pole"])};
 const vec3 GAL_CENTRE = {_vec3(_G["centre"])};
 const vec3 GAL_ACROSS = {_vec3(_G["across"])};
@@ -255,13 +264,14 @@ float edge(float at, float x, float w) {{ return smoothstep(at - w * gAA, at + w
 // coverage of a disc of radius rPx (or a band of half-width rPx about zero); d in output pixels
 float disc(float dPx, float rPx) {{ return 1.0 - smoothstep(rPx - 0.55 * gAA, rPx + 0.55 * gAA, dPx); }}
 
-// A planet's answer to the pull of a kick, which left the Sun at `t` and travels: nothing
-// until it arrives, then in smoothly and back slowly. The last two kicks, because the far
-// planets are still answering one when the next lands.
-float pullOne(float age) {{ float x = max(age, 0.0) / PULL_RISE; float f = x * exp(1.0 - x); return f * f; }}   // squared: it starts from rest
-float pullOf(float out_, float t0, float a0_, float t1, float a1_) {{
-    float late = out_ / PULL_SPEED;
-    return a0_ * pullOne(uTime - t0 - late) + a1_ * pullOne(uTime - t1 - late);
+// Nothing is instant; everything arrives on the beat. `age` is time since the sound (held
+// events are shown LEAD early, so it starts negative): 0 until `lead` before it, eased up
+// to 1 exactly on it, eased away to 0 by `fall` after - quick to let go, then a long tail.
+// Flat at both ends and at the top: no corner anywhere.
+float sstep(float x) {{ x = clamp(x, 0.0, 1.0); return x * x * x * (x * (6.0 * x - 15.0) + 10.0); }}
+float arrive(float age, float lead, float fall) {{
+    if (age <= -lead || age >= fall) return 0.0;
+    return age < 0.0 ? sstep(1.0 + age / lead) : 1.0 - sstep(pow(age / fall, 0.62));
 }}
 
 // Light bent by a ripple of gravity: a point in the frame, pushed straight out from the
@@ -393,11 +403,11 @@ void main() {{
     float amb = 0.42 + 1.00 * uExposure;
     float ev = 0.80 + 0.30 * uExposure;
     float lum = clamp(0.62 + 0.38 * amb, 0.0, 1.0);
-    float kick = uKickA * hit(uTime - uKickT, 0.105);                 // as light: instant
-    float syll = uSyllA * hit(uTime - uSyllT, 0.14);
+    float kick = uKickE;                                              // eased: it peaks on the kick
+    float syll = uSyllE;
     float dropAge = uTime - uDropT;
-    float tick = uHatA * hit(uTime - uHatT, 0.060);
-    float shimmer = uCrashA * hit(uTime - uCrashT, 1.6);
+    float hatE[3] = float[3](uHatE0, uHatE1, uHatE2);                 // the hats take the stars in three turns; each turn swells and subsides
+    float shimmer = uCrashE;
 
 {_palette_locals()}
     vec3 white = vec3(1.0, 0.985, 0.95);
@@ -428,9 +438,9 @@ void main() {{
     vec2 sunP = -(rot2(uCamRoll) * vec2(0.0)) - vec2(uCamX, uCamY) / uCamSpan;   // the Sun, in the frame
     float sunRp = 0.078 * (0.50 + 0.80 * uMass) / uCamSpan;
     float kAge = uTime - uKickT;
-    float lensKA = kAge < 0.0 ? 0.0 : 0.0036 * uKickA * exp(-kAge / 0.30), lensKR = sunRp + 0.95 * kAge;
-    float lensDA = dropAge < 0.0 ? 0.0 : 0.0070 * uDropA * exp(-dropAge / 1.6), lensDR = sunRp + 0.42 * dropAge;
-    float opened = dropAge < 0.0 ? 0.0 : uDropA * exp(-dropAge / 1.8);
+    float lensKA = kAge < 0.0 ? 0.0 : 0.0036 * uKickA * exp(-kAge / 0.30) * sstep(kAge / 0.10), lensKR = sunRp + 0.95 * kAge;
+    float lensDA = dropAge < 0.0 ? 0.0 : 0.0070 * uDropA * exp(-dropAge / 1.6) * sstep(dropAge / 0.20), lensDR = sunRp + 0.42 * dropAge;
+    float opened = uOpened;                                           // eased open on the downbeat, and closed again over two bars
     float skyGain = (1.0 - 0.38 * uBrace) * (1.0 + 0.60 * opened);
 
     // the Milky Way: five flat tones cut from NASA's map along its own contours, each
@@ -458,7 +468,7 @@ void main() {{
         const float FAINT = 300.0;
         vec2 cell = floor(uvO * FAINT);
         vec3 fd = octDecode((cell + 0.25 + 0.5 * hash22(cell + 0.37)) / FAINT);
-        if (hash12(cell + 4.1) < 0.05 + 0.80 * galaxy(fd)) {{
+        if (hash12(cell + 4.1) < 0.80 * galaxy(fd) - 0.06) {{                    // (only in the Milky Way: its unresolved stars. Everywhere else the stars are the catalogue's.)
             vec3 fv = toView(vec3(rot2(uCamTurn) * fd.xz, fd.y), e, c);
             vec2 at = lensed(rot2(uCamRoll) * fv.xy / max(-fv.z, 1e-3) * lens, sunP, 0.7 * lensKA, lensKR, 0.5 * lensDA, lensDR);
             float dPx = length(p - at) * resY;
@@ -466,27 +476,76 @@ void main() {{
         }}
     }}
     {{
-        // the real ones: a hard disc whose size in pixels is its magnitude; the brightest
-        // are four-pointed. A third answer each hat in turn: they grow, they do not blur.
+        // The real ones (HYG: every star to magnitude 7.5, with its distance and constellation),
+        // and the deep sky among them (OpenNGC). A star is a hard disc whose size is its
+        // magnitude; the brightest are four-pointed. Its *distance* shows three ways: a near
+        // star is a little larger and crisper, takes its glints at a fainter magnitude, and
+        // shifts against the far ones as the camera goes round (slightly - this is art).
+        // A constellation breathes together: its stars take the same turn of the hats.
         ivec2 sc = min(ivec2(uvO * float(STAR_GRID)), ivec2(STAR_GRID - 1));
+        vec3 eye = vec3(0.0, -c, e);                                   // where the camera stands, in its own turned frame
         for (int k = 0; k < STAR_PER_CELL; k++) {{
             vec4 s = texelFetch(uStarTex, ivec2(sc.x * STAR_PER_CELL + k, sc.y), 0);
             if (dot(s.xyz, s.xyz) < 0.5) break;
-            float cls = floor((s.w + 2.0) / 100.0), mag = s.w - 100.0 * cls;
-            vec3 sv = toView(vec3(rot2(uCamTurn) * s.xz, s.y), e, c);
+            float w_ = s.w;
+            float grp = floor(w_ / 10000.0); w_ -= 10000.0 * grp;
+            float nearD = floor(w_ / 1000.0); w_ -= 1000.0 * nearD;
+            float cls = floor(w_ / 100.0);
+            float mag = w_ - 100.0 * cls - 2.0;
+            vec3 dT = vec3(rot2(uCamTurn) * s.xz, s.y);
+            if (cls < 8.5) dT = normalize(dT - PARALLAX * (nearD / 9.0) * eye);
+            vec3 sv = toView(dT, e, c);
             if (sv.z > -0.2) continue;
-            vec2 d = (p - lensed(rot2(uCamRoll) * sv.xy / (-sv.z) * lens, sunP, lensKA, lensKR, lensDA, lensDR)) * resY;   // output pixels from the star
-            if (abs(d.x) > 26.0 || abs(d.y) > 26.0) continue;
+            vec2 d = (p - lensed(rot2(uCamRoll) * sv.xy / (-sv.z) * lens, sunP, lensKA, lensKR, lensDA, lensDR)) * resY;   // output pixels from it
             float h = hash12(s.xz * 91.7 + s.y * 13.1);
-            float mine = 1.0 - min(abs(floor(h * 3.0) - uHatK), 1.0);
-            float lift = (tick * mine + shimmer * (0.4 + 0.6 * hash11(h * 7.3))) * step(mag, 5.2);
-            float rad = clamp(1.05 + 0.62 * (5.6 - mag), 1.05, 5.2) * (1.0 + 0.55 * lift);
+            if (cls > 8.5) {{
+                // ---- the deep sky: clusters, nebulae, galaxies, remnants - flat, hard-edged, each at
+                // its true size on the sky (nothing under three and a half pixels), the faintest things there are
+                float rp = max(DEEP_SIZE[int(grp)] * lens * resY, 3.5);
+                if (abs(d.x) > rp + 2.0 || abs(d.y) > rp + 2.0) continue;
+                vec2 dr = rot2(TAU * h) * d;
+                float bright = (0.45 + 0.055 * (mag + 2.0)) * starGain;
+                int kind = int(nearD);
+                if (kind == 0) {{                                        // a galaxy: a tilted oval of far light, and its core
+                    float el = length(vec2(dr.x, dr.y / (0.34 + 0.4 * fract(h * 7.0))));
+                    col = mix(col, vec3(0.62, 0.66, 0.86), disc(el, rp) * 0.26 * bright);
+                    col = mix(col, vec3(0.90, 0.88, 0.92), disc(el, 0.30 * rp) * 0.55 * bright);
+                }} else if (kind == 1) {{                                 // an open cluster: a handful of young blue stars
+                    for (int j = 0; j < 7; j++) {{
+                        vec2 at = (hash22(vec2(h * 91.0, float(j) * 3.7)) - 0.5) * 1.5 * rp;
+                        col = mix(col, vec3(0.78, 0.86, 1.0), disc(length(dr - at), 0.95 + 0.7 * hash11(float(j) + h * 9.0)) * 0.80 * bright);
+                    }}
+                }} else if (kind == 2) {{                                 // a globular cluster: old light, packed to a core
+                    col = mix(col, vec3(0.98, 0.90, 0.72), disc(length(d), rp) * 0.22 * bright);
+                    col = mix(col, vec3(1.0, 0.94, 0.80), disc(length(d), 0.42 * rp) * 0.70 * bright);
+                }} else if (kind == 3) {{                                 // a nebula: a cloud of glowing hydrogen, ragged-edged
+                    float cloud = soft(vec3(dr / rp * 1.6, h * 9.0)) - 0.55 * length(dr) / rp;
+                    col = mix(col, vec3(0.70, 0.26, 0.38), edge(0.10, cloud, 0.06) * 0.42 * bright);
+                    col = mix(col, vec3(0.92, 0.50, 0.58), edge(0.34, cloud, 0.06) * 0.50 * bright);
+                }} else if (kind == 4) {{                                 // a planetary nebula: a small ring, and the star that threw it
+                    col = mix(col, vec3(0.42, 0.88, 0.80), disc(abs(length(d) - rp), 1.0) * 0.85 * bright);
+                    col = mix(col, white, disc(length(d), 0.9) * 0.8 * bright);
+                }} else {{                                                // a supernova remnant: what is left of the shell, in pieces
+                    float gap = step(0.42, soft(vec3(normalize(dr + 1e-5) * 2.3, h * 5.0)));
+                    col = mix(col, vec3(0.70, 0.90, 1.0), disc(abs(length(d) - rp), 1.0) * gap * 0.80 * bright);
+                    col = mix(col, vec3(0.95, 0.60, 0.50), disc(abs(length(d) - 0.62 * rp), 0.8) * (1.0 - gap) * 0.50 * bright);
+                }}
+                continue;
+            }}
+            if (abs(d.x) > 26.0 || abs(d.y) > 26.0) continue;
+            // a star breathes with its constellation's turn of the hats - and a little with the
+            // other two, each star in its own proportion, so no two swell quite alike
+            int turnK = int(grp);
+            float lift = (0.75 * hatE[turnK] + 0.25 * mix(hatE[(turnK + 1) % 3], hatE[(turnK + 2) % 3], fract(h * 17.0))
+                          + shimmer * (0.4 + 0.6 * hash11(h * 7.3))) * step(mag, 5.2);
+            float close = nearD / 9.0;
+            float rad = clamp(1.05 + 0.62 * (5.6 - mag), 0.78, 5.2) * (0.90 + 0.28 * close) * (1.0 + 0.34 * lift);
             float a = disc(length(d), rad);
-            if (mag < 2.6) {{
-                float reach = rad * (2.2 + 0.45 * (2.6 - mag)) * (1.0 + 0.8 * lift);
+            if (mag < 2.6 + 0.8 * close) {{
+                float reach = rad * (2.2 + 0.45 * max(2.6 - mag, 0.0) + 0.9 * close) * (1.0 + 0.5 * lift);
                 a = max(a, max(disc(abs(d.y), 0.85) * disc(abs(d.x), reach), disc(abs(d.x), 0.85) * disc(abs(d.y), reach)));
             }}
-            col = mix(col, starColour(cls), a * clamp(1.12 - 0.125 * mag + 0.5 * lift, 0.34, 1.0) * starGain);
+            col = mix(col, starColour(cls), a * clamp(1.12 - 0.125 * mag + 0.10 * close + 0.3 * lift, 0.26, 1.0) * starGain);
         }}
     }}
 
@@ -496,22 +555,22 @@ void main() {{
     float metS[N_METEORS] = {_gather("uMetS", N_METEORS)};
     for (int i = 0; i < N_METEORS; i++) {{
         float age = uTime - metT[i];
-        if (age < 0.0 || age > 1.3 || metA[i] <= 0.0) continue;
+        if (age < -LEAD || age > 1.3 || metA[i] <= 0.0) continue;
         float s = metS[i];
         float alpha = TAU * hash11(s * 7.13 + 0.3);
         vec2 start = vec2(0.78 * cos(alpha), 0.42 * sin(alpha));
         float side = hash11(s * 3.71 + 1.9) < 0.5 ? -1.0 : 1.0;
         vec2 dir = rot2(side * (0.55 + 0.35 * hash11(s * 5.3))) * normalize(-start);
-        vec2 head = start + dir * (0.50 + 0.28 * hash11(s * 9.7) + 0.22 * metA[i]) * age;
+        vec2 head = start + dir * (0.50 + 0.28 * hash11(s * 9.7) + 0.22 * metA[i]) * max(age, 0.0);
         vec2 d = p - head;
         float back = -dot(d, dir), off = abs(dot(d, vec2(-dir.y, dir.x))) * resY;
-        float len = (0.030 + 0.070 * metA[i]) * min(age / 0.08, 1.0);
+        float len = (0.030 + 0.070 * metA[i]) * sstep(age / 0.16) + 1e-5;
         float u = clamp(back / len, 0.0, 1.0);
         float tail = step(0.0, back) * step(back, len) * disc(off, (0.85 + 1.2 * metA[i]) * (1.0 - u) + 0.35);
         col = mix(col, mix(white, kA, smoothstep(0.25, 0.45, u)), tail * (1.0 - smoothstep(0.75, 1.1, age)) * (0.50 + 0.50 * metA[i]));
-        // it is lit the moment it arrives: a small four-pointed glint where it enters, gone in a tenth of a second
+        // a small four-pointed glint where it enters: it opens onto the moment and closes after it
         vec2 g = (p - start) * resY;
-        float glint = (5.0 + 9.0 * metA[i]) * max(1.0 - age / 0.11, 0.0);
+        float glint = (5.0 + 9.0 * metA[i]) * arrive(age, LEAD, 0.30);
         col = mix(col, white, max(disc(abs(g.y), 0.8) * disc(abs(g.x), glint), disc(abs(g.x), 0.8) * disc(abs(g.y), glint)) * step(0.5, glint));
     }}
 
@@ -536,12 +595,12 @@ void main() {{
     // where its prominence stood, and fans out across the plane: fast, hot, a third of a turn wide.
     for (int i = 0; i < N_FLARE; i++) {{
         float age = uTime - flareT[i];
-        if (age < 0.0 || age > 1.5 || flareA[i] <= 0.0) continue;
+        if (age < 0.0 || age > 1.5 || flareA[i] <= 0.0) continue;      // (the front leaves on the beat; the tongue that throws it has been rising)
         float phiF = TAU * flareK[i] + uCamTurn;                      // thrown at a planet: its longitude, in the camera's turned frame
         float dphi = abs(mod(atan(pl.y, pl.x) - phiF + PI, TAU) - PI);
         float fan = 1.0 - smoothstep(0.42, 0.66, dphi);               // aimed: a sixth of a turn wide
         float rad = R + 0.05 + 0.95 * age;
-        float a_ = planeRing(q, e, rad, 1.3 + 2.4 * exp(-age / 0.18), pxScene) * fan * flareA[i] * (1.0 - smoothstep(0.9, 1.5, age)) * ev;
+        float a_ = planeRing(q, e, rad, 1.3 + 2.4 * exp(-age / 0.18), pxScene) * fan * flareA[i] * (1.0 - sstep((age - 0.8) / 0.7)) * sstep(age / 0.10) * ev;
         vec3 fc = mix(vec3(1.0, 0.70, 0.34), white, 0.35 + 0.45 * exp(-age / 0.2));
         waveCol = mix(waveCol, fc, step(waveA, a_)); waveA = max(waveA, a_);
     }}
@@ -551,13 +610,15 @@ void main() {{
         // ghost note's is a ripple that dies near the Sun - or the plane is never still.
         float loud = smoothstep(0.22, 0.65, ringA[i]);
         float life = mix(0.50, 2.2, loud);
-        if (age < 0.0 || age > life || ringA[i] <= 0.0) continue;
-        float rad = R + 0.035 + 0.66 * pow(age, 0.72);
+        if (age < -LEAD || age > life || ringA[i] <= 0.0) continue;
+        float born = sstep(1.0 + age / LEAD);                          // it comes up out of the corona over the tenth of a second before the clap
+        float out_ = max(age, 0.0);
+        float rad = R + 0.035 * born + 0.66 * pow(out_, 0.72);
         float g = (rho - rad) / 0.035;
-        shove += 0.010 * (0.15 + 0.85 * loud) * exp(-g * g) * exp(-age / 0.5);
-        float a_ = planeRing(q, e, rad, 0.95 + 2.6 * exp(-age / 0.07), pxScene) * (1.0 - smoothstep(0.55 * life, life, age))
-                   * clamp((0.40 + 0.60 * ringA[i]) * (0.95 * exp(-age / 0.10) + 0.75 * exp(-age / 0.45)), 0.0, 1.0) * ev;
-        vec3 wc = mix(mix(kA, kB, ringM[i]), white, 0.15 + 0.55 * exp(-age / 0.10));
+        shove += 0.010 * (0.15 + 0.85 * loud) * exp(-g * g) * exp(-out_ / 0.5) * born;
+        float a_ = planeRing(q, e, rad, 0.95 + 2.6 * exp(-out_ / 0.07) * born, pxScene) * (1.0 - smoothstep(0.55 * life, life, age)) * born
+                   * clamp((0.40 + 0.60 * ringA[i]) * (0.95 * exp(-out_ / 0.10) + 0.75 * exp(-out_ / 0.45)), 0.0, 1.0) * ev;
+        vec3 wc = mix(mix(kA, kB, ringM[i]), white, 0.15 + 0.55 * exp(-out_ / 0.10));
         waveCol = mix(waveCol, wc, step(waveA, a_)); waveA = max(waveA, a_);
     }}
     if (dropAge >= 0.0 && dropAge < 4.5) {{
@@ -585,14 +646,19 @@ void main() {{
     // is tipped: a planet behind the Sun, or across its face, is a note nobody saw.
     float a0 = max(0.255, 0.156 / e);
     float tug = uSpreadSlow;                                          // how wide the orbits stand, as this camera sees it
-    // A kick is the Sun's mass, pulsing; its pull falls off as the square of the distance and
-    // it travels - so Mercury jumps on the beat and Neptune stirs most of a second later. In
-    // a close shot it is scaled down, so it is the same small movement on screen.
+    // The planets are bodies (`dance`): how far each leans toward the Sun or away, and how far
+    // it has hopped off the plane, are simulated - springs, driven by its notes, by the Sun's
+    // pull (inverse-square, and it travels) and by its neighbours. In a close shot the
+    // movement is scaled down, so it is the same small movement on screen.
     float pullGain = clamp(uCamSpan, 0.0, 1.0);
-    float noteT[N_SATS] = {_gather("uNoteT", N_SATS)};
-    float noteA[N_SATS] = {_gather("uNoteA", N_SATS)};
-    float noteM[N_SATS] = {_gather("uNoteM", N_SATS)};
-    float swell[N_SATS] = {_gather("uSwell", N_SATS)};
+    float pingT[N_PLANETS] = {_gather("uPingT", N_PLANETS)};
+    float pingA[N_PLANETS] = {_gather("uPingA", N_PLANETS)};
+    float pLean[N_PLANETS] = {_gather("uLean", N_PLANETS)};
+    float pHop[N_PLANETS] = {_gather("uHop", N_PLANETS)};
+    float pGlow[N_PLANETS] = {_gather("uGlow", N_PLANETS)};
+    float pBig[N_PLANETS] = {_gather("uBig", N_PLANETS)};
+    float pSwing[N_PLANETS] = {_gather("uSwing", N_PLANETS)};
+    float pSpin[N_PLANETS] = {_gather("uSpin", N_PLANETS)};
     float phase[N_PLANETS] = {_gather("uPh", N_PLANETS)};
     float pOff[N_PLANETS] = {_gather("uPd", N_PLANETS)};
     float pRise[N_PLANETS] = {_gather("uPz", N_PLANETS)};
@@ -615,8 +681,7 @@ void main() {{
         float ang = TAU * ((ci + 0.5 + 0.5 * jit.x) / count + turn);
         vec2 cp = (lr + 0.30 * laneW * jit.y) * tug * vec2(cos(ang), sin(ang));
         vec2 dd = (q - vec2(cp.x, cp.y * e)) / pxScene;                // pixels from the rock
-        float mine = 1.0 - min(abs(floor(hash12(id + 9.1) * 3.0) - uHatK), 1.0);
-        float glint = tick * mine;
+        float glint = 0.6 * hatE[int(floor(hash12(id + 9.1) * 3.0))];   // a rock catches the light with its turn of the hats - eased
         float sizePx = min(mix(bI == 0 ? 0.0022 : 0.0016, bI == 0 ? 0.0050 : 0.0032, hash12(id + 4.4)) * (1.0 + 0.9 * glint),
                            0.30 * laneW * e * tug) / pxScene;
         sizePx = max(sizePx, 1.15);
@@ -663,15 +728,15 @@ void main() {{
     // ---- the planets -------------------------------------------------------------------------------
     for (int i = 0; i < N_PLANETS; i++) {{
         float aFree = (a0 + pOff[i]) * tug;                             // where it would be, left alone
-        float pulled = pullGain * PULL * pow(a0 * tug / max(aFree, 1e-4), 2.0) * pullOf(aFree - a0 * tug, uPullT0, uPullA0, uPullT1, uPullA1);
+        float pulled = -pullGain * pLean[i];
         float a = aFree - pulled;
         float th = TAU * phase[i] + uCamTurn;
-        vec3 sv = toView(vec3(a * cos(th), a * sin(th), a * pRise[i]), e, c);   // its orbit is tipped: it rides above the plane and below it
+        vec3 sv = toView(vec3(a * cos(th), a * sin(th), a * pRise[i] + pullGain * pHop[i]), e, c);   // its orbit is tipped; and it hops
         vec2 dq = q - sv.xy;
         int slot = PLANET_SLOT[i];
-        float nAge = uTime - noteT[slot];
-        float lit = noteA[slot] * (0.40 * hit(nAge, 0.09) + 0.60 * hit(nAge, 0.30));    // as light: instant - but a lift, not a strobe
-        float size = PLANET_SIZE[i] * (1.0 + 0.30 * swell[slot]) * (1.0 + 0.10 * sv.z / max(a, 1e-3));
+        float nAge = uTime - pingT[i];                                 // since it last threw a ring (shown LEAD early: it starts negative)
+        float lit = pGlow[i];                                          // its day side lifts with its playing - eased, never switched
+        float size = PLANET_SIZE[i] * (1.0 + 0.22 * pBig[i]) * (1.0 + 0.10 * sv.z / max(a, 1e-3));
         float sizePx = size / pxScene;
         vec3 pc = vec3(0.0); float pA = 0.0;
 
@@ -711,30 +776,30 @@ void main() {{
             // What reaches it from the Sun. A clap's ring, the re-entry's shock and a flare's
             // front are all circles in the plane about the Sun, so each arrives at this orbit
             // at a moment that can be worked out - and at that moment the planet is *struck*:
-            // its sunward side flashes, a bow wave stands off it toward the Sun, and (for a
-            // flare) it rings. There on the frame of arrival, gone in a fifth of a second.
-            float struck = 0.0, rung = 0.0, rungAge = 0.0; vec3 struckInk = white;
+            // its sunward side lifts and a bow wave stands off it toward the Sun - eased onto the
+            // moment of arrival and away after it. (Struck by a flare it also rings: `dance` throws that ring.)
+            float struck = 0.0; vec3 struckInk = white;
             for (int k = 0; k < N_RINGS; k++) {{
                 float loudK = smoothstep(0.22, 0.65, ringA[k]);
                 float reachAge = pow(max(a - R - 0.035, 0.0) / 0.66, 1.0 / 0.72);
                 float since = uTime - ringT[k] - reachAge;
-                if (ringA[k] <= 0.0 || since < 0.0 || since > 0.7 || reachAge > mix(0.50, 2.2, loudK)) continue;
-                float f = (0.30 + 0.70 * loudK) * (0.30 + 0.70 * exp(-reachAge / 0.9)) * exp(-since / 0.16);
+                if (ringA[k] <= 0.0 || since < -LEAD || since > 0.7 || reachAge > mix(0.50, 2.2, loudK)) continue;
+                float f = (0.30 + 0.70 * loudK) * (0.30 + 0.70 * exp(-reachAge / 0.9)) * arrive(since, LEAD, 0.60);
                 if (f > struck) {{ struck = f; struckInk = mix(mix(kA, kB, ringM[k]), white, 0.35); }}
             }}
             {{
                 float since = dropAge - pow(max(a - R, 0.0) / 0.60, 1.0 / 0.70);
-                float f = since < 0.0 ? 0.0 : uDropA * exp(-since / 0.35);
+                float f = uDropA * arrive(since, 1.5 * LEAD, 1.10);
                 if (f > struck) {{ struck = f; struckInk = mix(kA, white, 0.55); }}
             }}
             for (int k = 0; k < N_FLARE; k++) {{
                 float since = uTime - flareT[k] - max(a - R - 0.05, 0.0) / 0.95;
-                if (flareA[k] <= 0.0 || since < 0.0 || since > 1.2) continue;
+                if (flareA[k] <= 0.0 || since < -LEAD || since > 1.2) continue;
                 float dphi = abs(mod(th - TAU * flareK[k] - uCamTurn + PI, TAU) - PI);
                 float inFan = 1.0 - smoothstep(0.42, 0.66, dphi);
-                float f = 1.3 * flareA[k] * inFan * exp(-since / 0.30);
+                float f = 1.3 * flareA[k] * inFan * arrive(since, LEAD, 0.90);
                 if (f > struck) {{ struck = f; struckInk = mix(vec3(1.0, 0.70, 0.34), white, 0.45); }}
-                if (flareA[k] * inFan > rung) {{ rung = flareA[k] * inFan; rungAge = since; }}
+
             }}
             struck = clamp(struck, 0.0, 1.0);
 
@@ -742,18 +807,18 @@ void main() {{
             // in its own manner (see PING_N): this is an orchestra.
             vec3 own = mix(PLANET_TINT[i], white, 0.22) * mix(vec3(1.0), sunlight, 0.5);
             vec2 dqR = dq;                                               // everything a planet throws lies in the plane of the orbits
+            // A ring is an event now, not a twitch: a planet throws one when its playing has
+            // built up to it (`dance`), about once in a bar and a half. It opens over a second,
+            // eased; it arrives with its note and thins away; and each planet has its own figure.
             for (int j = 0; j < 3; j++) {{
                 if (j >= PING_N[i]) break;
-                float ageJ = nAge - 0.070 * float(j);                    // one after another
-                if (ageJ < 0.0) continue;
-                float open = size * (1.4 + PING_REACH[i] * (1.0 - exp(-ageJ / PING_TAU[i])));
-                float ping = planeRing(dqR, e, open, 1.0 + 0.5 * float(PING_N[i] == 1), pxScene)
-                             * clamp(noteA[slot], 0.0, 1.0) * hit(ageJ, 1.5 * PING_TAU[i]) * (1.0 - 0.25 * float(j)) * ev;
-                pc = mix(pc, mix(own, white, 0.35), step(pA, ping)); pA = max(pA, ping);
-            }}
-            if (rung > 0.0 && rungAge >= 0.0) {{                         // struck by a flare, it rings - once, wide, in its own colour
-                float ringOut = planeRing(dqR, e, size * (1.6 + 3.4 * (1.0 - exp(-rungAge / 0.22))), 1.4, pxScene) * rung * hit(rungAge, 0.40) * ev;
-                pc = mix(pc, mix(own, white, 0.45), step(pA, ringOut)); pA = max(pA, ringOut);
+                float ageJ = nAge - 0.16 * float(j);                     // one after another
+                if (ageJ < -LEAD || ageJ > 1.6 || pingA[i] <= 0.0) continue;
+                float going = clamp(ageJ / 1.6, 0.0, 1.0);
+                float open = size * (1.35 + PING_REACH[i] * (1.0 - pow(1.0 - going, 2.4)));            // fast away, slowing as it opens
+                float ping = planeRing(dqR, e, open, (1.15 + 0.4 * float(PING_N[i] == 1)) * (1.0 - 0.55 * going), pxScene)
+                             * clamp(pingA[i], 0.0, 1.0) * arrive(ageJ, LEAD, 1.6) * (1.0 - 0.25 * float(j)) * 0.85 * ev;
+                pc = mix(pc, mix(own, white, 0.30), step(pA, ping)); pA = max(pA, ping);
             }}
             if (struck > 0.02) {{
                 // the bow wave: an arc in the plane, standing off the planet on the side the Sun is
@@ -787,8 +852,8 @@ void main() {{
                 ringC = mix(vec3(0.91, 0.83, 0.62), vec3(0.74, 0.66, 0.50), edge(1.62, rk, gk) * (1.0 - step(1.92, rk))) * sunlight * lum;
                 ringC = mix(ringC, ringC * 0.20 + shade * 0.8, castShadow);
                 // Saturn's answer to its note is in its rings: a band of light runs out along them
-                float runs = 1.32 + 0.98 * clamp(nAge / 0.30, 0.0, 1.2);
-                ringC = mix(ringC, mix(vec3(1.0, 0.95, 0.80), white, 0.3), clamp(noteA[slot], 0.0, 1.0) * hit(nAge, 0.22) * exp(-pow((rk - runs) / 0.16, 2.0)) * ev);
+                float runs = 1.32 + 0.98 * sstep(nAge / 0.9);
+                ringC = mix(ringC, mix(vec3(1.0, 0.95, 0.80), white, 0.3), 0.8 * clamp(pingA[i], 0.0, 1.0) * arrive(nAge, LEAD, 1.2) * exp(-pow((rk - runs) / 0.20, 2.0)) * ev);
                 ringA_ = ann; ringFront = step(0.0, zr);
             }}
             // Moons. The Moon, its orbit tipped five degrees. Jupiter's four: Io, Europa and
@@ -805,7 +870,7 @@ void main() {{
                             : i == 5 ? 2.6 * uOrbitSlow + 0.2
                             : (m == 0 ? 8.0 : m == 1 ? 4.0 : m == 2 ? 2.0 : 0.848) * uOrbitSlow + (m == 2 ? 0.25 : m == 3 ? 0.6 : 0.0);
                 float ma = TAU * turns;
-                float swing = 1.0 + 0.30 * swell[slot];                  // a note swings its moons out
+                float swing = 1.0 + 0.34 * pSwing[i];                    // its moons are on strings: they swing out after it, and back
                 float mr = size * swing * (i == 2 ? 3.2 : i == 5 ? 3.4 : 2.1 + 0.85 * fm + 0.12 * fm * fm);
                 vec3 mw = i == 5 ? mr * (cos(ma) * RING_U + sin(ma) * RING_V)
                                  : vec3(mr * cos(ma), mr * sin(ma), i == 2 ? mr * 0.089 * sin(ma - 2.18) : 0.0);
@@ -828,7 +893,7 @@ void main() {{
                 float w = 1.0 / max(sizePx, 1.0);                         // how much of the sphere a pixel covers
                 float lat = dot(n, axis);
                 vec3 e1 = normalize(cross(axis, vec3(0.31, 0.95, 0.10))), e2 = cross(axis, e1);
-                vec3 sq = vec3(rot2(uOrbitSlow * (2.2 + 0.6 * float(i))) * vec2(dot(n, e1), dot(n, e2)), lat).xzy;
+                vec3 sq = vec3(rot2(uOrbitSlow * (2.2 + 0.6 * float(i)) + pSpin[i]) * vec2(dot(n, e1), dot(n, e2)), lat).xzy;
                 // (the kick does not light a planet: the planets are the notes'. But as the corona
                 // charges, the daylight out here dims a little - and comes back with the discharge.)
                 vec3 day = surface(i, lat, sq, w) * sunlight * lum * (1.0 - 0.10 * uCharge);
@@ -907,8 +972,8 @@ void main() {{
         vec3 windInk = vivid(mix(mix(kA, white, 0.45), cTint, 0.6 * uTint), 1.2);
         for (int i = 0; i < N_WIND; i++) {{
             float age = uTime - windT[i];
-            if (age < 0.0 || age > 0.70 || windA[i] <= 0.0) continue;
-            float out1 = (0.35 + 0.65 * windA[i]) * R * 0.62 * exp(-age / 0.22);
+            if (age < -LEAD || age > 0.70 || windA[i] <= 0.0) continue;
+            float out1 = (0.35 + 0.65 * windA[i]) * R * 0.62 * arrive(age, LEAD, 0.70);
             if (out1 < 1.5 * pxScene) continue;
             for (int k = 0; k < 3; k++) {{
                 float phi = TAU * (windK[i] + float(k) / 3.0) + uCamTurn;
@@ -931,7 +996,7 @@ void main() {{
     float out_ = r - R;
     if (out_ > -2.0 * pxScene && out_ < 0.30 + R) {{
         float flow = soft(vec3(normalize(q + 1e-5) * 1.3, 0.030 * uBeats));
-        float reach = (0.012 + 0.020 * uBass + 0.014 * uRays * uHold + 0.008 * uSunPulse + 0.04 * uDropA * hit(dropAge, 0.9)
+        float reach = (0.012 + 0.020 * uBass + 0.014 * uRays * uHold + 0.008 * uSunPulse + 0.04 * uFlashE
                        + 0.020 * uCharge) * (0.80 + 0.40 * flow);             // ...and it stands further out as it charges
         // Where a prominence stands the corona stands out with it, a tongue of flame: the bass
         // line is in the Sun's silhouette, against the dark. Each tongue has a hot core. And a
@@ -940,18 +1005,18 @@ void main() {{
         float tongue = 0.0;
         for (int i = 0; i < N_PROM; i++) {{
             float age = uTime - promT[i];
-            if (age < 0.0 || age > 0.60 || promA[i] <= 0.0) continue;
+            if (age < -LEAD || age > 0.70 || promA[i] <= 0.0) continue;
             float dth = abs(mod(around - TAU * promK[i] + PI, TAU) - PI);
             // a swell of the rim, not a spike: broad, blunt-topped, a third as high as it is wide
-            tongue += R * (0.09 + 0.30 * promA[i]) * exp(-pow(dth / 0.34, 2.6)) * (1.0 - 0.25 * exp(-age / 0.040)) * (1.0 - smoothstep(0.16, 0.60, age));   // light: there on its frame
+            tongue += R * (0.09 + 0.30 * promA[i]) * exp(-pow(dth / 0.34, 2.6)) * arrive(age, LEAD, 0.70);        // it swells onto its note and sinks back
         }}
         float burst = 0.0;
         for (int i = 0; i < N_FLARE; i++) {{
             float age = uTime - flareT[i];
-            if (age < 0.0 || age > 0.9 || flareA[i] <= 0.0) continue;
+            if (age < -1.6 * LEAD || age > 0.9 || flareA[i] <= 0.0) continue;
             float phiF = TAU * flareK[i] + uCamTurn;                  // where on the limb that direction in the plane leaves from
             float dth = abs(mod(around - atan(cos(phiF), e * sin(phiF)) + PI, TAU) - PI);
-            burst += R * 0.80 * flareA[i] * exp(-pow(dth / 0.40, 2.6)) * exp(-age / 0.20);
+            burst += R * 0.80 * flareA[i] * exp(-pow(dth / 0.40, 2.6)) * arrive(age, 1.6 * LEAD, 0.80);
         }}
         tongue = 0.50 * R * (1.0 - exp(-tongue / (0.50 * R)));         // the same note played again and again does not pile up into a spike
         reach += tongue + burst;
@@ -971,7 +1036,7 @@ void main() {{
         float heat = clamp(0.32 + 0.45 * uBass * amb, 0.0, 1.0);
         vec3 surf = mix(vec3(1.0, 0.82, 0.40), vec3(1.0, 0.94, 0.72), heat);
         float discharge = 0.0;
-        for (int i = 0; i < N_FLARE; i++) discharge = max(discharge, flareA[i] * hit(uTime - flareT[i], 0.14));
+        for (int i = 0; i < N_FLARE; i++) discharge = max(discharge, flareA[i] * arrive(uTime - flareT[i], LEAD, 0.50));
         vec3 limb = mix(vec3(1.0, 0.57, 0.19), vec3(1.0, 0.80, 0.42), clamp(heat + 0.85 * kick * ev, 0.0, 1.0));
         limb = mix(limb, white, 0.75 * discharge * ev);
         // limb darkening, as a real star has, in one clean step
@@ -1006,7 +1071,7 @@ void main() {{
     col = mix(col, over, clamp(overA, 0.0, 1.0));
 
     // a re-entry lifts the whole sky for a moment: one flat wash, and it goes slowly
-    col = mix(col, mix(vec3(1.0, 0.72, 0.40), white, 0.45), 0.14 * uDropA * hit(dropAge, 0.45));
+    col = mix(col, mix(vec3(1.0, 0.72, 0.40), white, 0.45), 0.12 * uFlashE);
     fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }}
 """

@@ -166,7 +166,7 @@ def arriving(x: np.ndarray, before: float, after: float) -> np.ndarray:
 
 
 def flares(note_t: np.ndarray, note_a: np.ndarray, note_k: np.ndarray, beats: np.ndarray, n: int, bar: float,
-           every_bars: float = 2.0, leak_bars: float = 4.0) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+           every_bars: float = 2.0, leak_bars: float = 4.0, rest_bars: float = 0.0) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Integrate and fire. Each bass note adds its loudness to a charge that leaks away
     over `leak_bars`; when the charge is over the threshold *and a note lands on a beat*,
     it fires on that note and the charge is spent. So a flare is always a played note, on
@@ -190,11 +190,12 @@ def flares(note_t: np.ndarray, note_a: np.ndarray, note_k: np.ndarray, beats: np
     want = max(playing / (every_bars * bar), 1.0)
 
     def run(theta: float):
-        q, last, fired, spent = 0.0, note_t[0], [], []
+        q, last, fired, spent, since = 0.0, note_t[0], [], [], -1e9
         for i, (t, a_) in enumerate(zip(note_t, amp)):
             q = q * np.exp(-(t - last) / tau) + a_
             last = t
-            if q >= theta and on_beat[i]:
+            if q >= theta and on_beat[i] and t - since >= rest_bars * bar:
+                since = t
                 fired.append(i)
                 spent.append(q)
                 q = 0.0
@@ -309,12 +310,27 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     # mass does not jump: the Sun and the planets swell *into* their hits
     kt, ka = a["ev_kick_t"], a["ev_kick_amp"]
     strong = ka > 0.5
-    extra["uSunPulse"] = (direct.LERP, anticipating_pulse(kt[strong], np.clip(ka[strong], 0, 1.2), n, 0.055, 0.13))
+    from . import dance, ease
+    extra["uSunPulse"] = (direct.LERP, ease.envelope(kt[strong], np.clip(ka[strong], 0, 1.2), n, 0.085, 0.36))
+    slot_notes = []
     for slot in range(direct.N_SATS):
         tt = np.unique(col[f"uNoteT{slot}"])
         tt = tt[tt > -100]
         amp = np.array([col[f"uNoteA{slot}"][min(int(np.ceil(x * RATE)), n - 1)] for x in tt])
-        extra[f"uSwell{slot}"] = (direct.LERP, anticipating_pulse(tt, np.clip(amp, 0, 1.2), n, 0.045, 0.20))
+        slot_notes.append((tt, amp))
+    planet_notes = dance.balance(slot_notes, shader_cosmos.SLOT_TO_PLANET)     # every planet plays
+
+    # ---- nothing is instant: the levels that used to snap are eased, and each peaks on its sound ----
+    extra["uKickE"] = (direct.LERP, ease.envelope(kt[strong], np.clip(ka[strong], 0, 1.2), n, 0.085, 0.34))
+    sy_t, sy_a = a["ev_syllable_t"].astype(np.float64), a["ev_syllable_amp"].astype(np.float64)
+    extra["uSyllE"] = (direct.LERP, ease.envelope(sy_t[sy_a > 0.25], np.clip(sy_a[sy_a > 0.25], 0, 1), n, 0.085, 0.42))
+    hat_t = np.unique(col["uHatT"]); hat_t = hat_t[hat_t > -100]
+    at = np.minimum(np.ceil(hat_t * RATE).astype(int), n - 1)
+    hat_a, hat_k = col["uHatA"][at], np.round(col["uHatK"][at]).astype(int) % 3
+    for k in range(3):
+        extra[f"uHatE{k}"] = (direct.LERP, ease.envelope(hat_t[hat_k == k], hat_a[hat_k == k], n, 0.090, 0.42))
+    cr_t = np.unique(col["uCrashT"]); cr_t = cr_t[cr_t > -100]
+    extra["uCrashE"] = (direct.LERP, ease.envelope(cr_t, col["uCrashA"][np.minimum(np.ceil(cr_t * RATE).astype(int), n - 1)], n, 0.12, 2.4))
 
     # ---- the bass line's notes are prominences; the voice's syllables, gusts of solar wind -------
     # Where round the limb a prominence stands is its pitch - the twelve pitch classes round
@@ -353,10 +369,12 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     # and snaps back on the discharge), so a flare is seen coming.
     fl_t, fl_a, _, charge = flares(bt, ba, where, a["beats"].astype(np.float64), n, bar)
     flare_times, flare_sizes = fl_t, fl_a           # where each is thrown is decided below, once the planets are placed
-    extra["uCharge"] = (direct.LERP, charge)
+    extra["uCharge"] = (direct.LERP, ease.smooth(charge, 0.30))       # it is spent over a third of a second, not in a sample
 
     # the bar before a re-entry, the sky holds its breath: up over that bar, gone on the downbeat
-    extra["uBrace"] = (direct.LERP, anticipating_pulse(drop_t, np.clip(drop_a, 0, 1), n, bar, 0.10))
+    extra["uBrace"] = (direct.LERP, ease.envelope(drop_t, np.clip(drop_a, 0, 1), n, bar, 0.45, rise=ease.EASE_SLOW))
+    extra["uOpened"] = (direct.LERP, ease.envelope(drop_t, np.clip(drop_a, 0, 1), n, 0.16, 2 * bar))
+    extra["uFlashE"] = (direct.LERP, ease.envelope(drop_t, np.clip(drop_a, 0, 1), n, 0.12, 0.9))
 
     # ---- where the planets are: the real orbits (see `orrery`), and the alignment ---------------
     # Each planet runs on its own oval, tipped as it is, by Kepler's equation; its mean
@@ -387,26 +405,37 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     pl_l, pl_d, pl_z = orrery.track(orrery.PLUTO, 3.9 + 2 * np.pi * float(orrery.rate(orrery.PLUTO[6])) * (clock - clock_c))
     extra["uPlutoPh"], extra["uPlutoD"], extra["uPlutoZ"] = (direct.LERP, pl_l / (2 * np.pi)), (direct.LERP, pl_d), (direct.LERP, pl_z)
 
-    # The pull of a kick travels, so a planet may still be answering the last kick when the
-    # next one lands: the last two are held.
-    KT2, KA2 = direct.held_events(kt[strong], np.clip(ka[strong], 0, 1.2), n, 2)
-    for k in range(2):
-        extra[f"uPullT{k}"], extra[f"uPullA{k}"] = (direct.HOLD, KT2[:, k]), (direct.HOLD, KA2[:, k])
-
     # The Sun cues its players. A discharge is thrown at the planet that has the tune - the
     # one whose note sounded last - so the flare crosses the system *to* someone, who answers.
-    last_note = np.stack([col[f"uNoteT{slot}"] for slot in range(direct.N_SATS)], 1)
-    aim, targets = [], []
-    for ft in flare_times:
+    aim, targets, strikes = [], [], []
+    for ft, fs in zip(flare_times, flare_sizes):
         k = min(int(np.ceil(ft * RATE)), n - 1)
-        planet = shader_cosmos.SLOT_TO_PLANET[int(np.argmax(last_note[k]))] if last_note[k].max() > ft - 4 * bar else 4
+        last = [float(pt[pt <= ft][-1]) if np.any(pt <= ft) else -1e9 for pt, _ in planet_notes]
+        planet = int(np.argmax(last)) if max(last) > ft - 4 * bar else 4
         targets.append(planet)
         aim.append((lon[k, planet] / (2 * np.pi)) % 1.0)
+        reach = (max(0.255, 0.156 / float(np.clip(tilt_s[k], 0.2, 0.98))) + off[k, planet]) * spread[k]
+        strikes.append((float(ft) + max(reach - 0.09 - 0.05, 0.0) / 0.95, planet, float(fs)))
     FT, FA = direct.held_events(flare_times, flare_sizes, n, shader_cosmos.N_FLARE)
     _, FK = direct.held_events(flare_times, np.array(aim), n, shader_cosmos.N_FLARE)
     for k in range(shader_cosmos.N_FLARE):
         extra[f"uFlareT{k}"], extra[f"uFlareA{k}"], extra[f"uFlareK{k}"] = (direct.HOLD, FT[:, k]), (direct.HOLD, FA[:, k]), (direct.HOLD, FK[:, k])
     fl_t = flare_times
+
+    # ---- the dancers ---------------------------------------------------------------------------
+    beats = a["beats"].astype(np.float64)
+    grid = np.sort(np.concatenate([beats, 0.5 * (beats[:-1] + beats[1:])])) if len(beats) > 1 else beats
+    danced = dance.simulate(planet_notes, (kt[strong], ka[strong]), strikes, a["downbeats"].astype(np.float64), grid, n, bar, flares)
+    ping_cols = []
+    for i in range(shader_cosmos.N_PLANETS):
+        for name in ("uLean", "uHop", "uGlow", "uBig", "uSwing", "uSpin"):
+            extra[f"{name}{i}"] = (direct.LERP, danced[f"{name}{i}"])
+        rt, ra = danced["rings"][i]
+        hit_t = np.array([s_[0] for s_ in strikes if s_[1] == i])
+        every_t = np.concatenate([rt, hit_t]); every_a = np.concatenate([0.55 + 0.45 * ra, np.ones(len(hit_t))])
+        o = np.argsort(every_t)
+        PT, PA = direct.held_events(every_t[o], every_a[o], n, 1)
+        extra[f"uPingT{i}"], extra[f"uPingA{i}"] = (direct.HOLD, PT[:, 0]), (direct.HOLD, PA[:, 0])
 
     # ---- the cameras: all three are baked, so a player can change between them as it plays.
     # Each has its own solar system, in one respect: a gesture of the whole system - the
@@ -423,13 +452,22 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     for name in PER_CAMERA:
         extra[name] = (direct.LERP, extra[f"{name}.{CAMERA}"][1])
 
-    names = ch.names + list(extra)
-    kinds = ch.kinds + [extra[k][0] for k in extra]
-    data = np.concatenate([ch.data, np.stack([extra[k][1] for k in extra], axis=1).astype(np.float32)], axis=1)
+    base = {name: c for c, name in enumerate(ch.names)}
+    keep = [c for c, name in enumerate(ch.names) if name not in extra]            # (what is re-baked here replaces direct's)
+    names = [ch.names[c] for c in keep] + list(extra)
+    kinds = [ch.kinds[c] for c in keep] + [extra[k][0] for k in extra]
+    data = np.concatenate([ch.data[:, keep], np.stack([extra[k][1] for k in extra], axis=1).astype(np.float32)], axis=1)
+    early = [c for c, name in enumerate(names) if name.rstrip("0123456789") in (
+        "uRingT", "uRingA", "uRingM", "uPromT", "uPromA", "uPromK", "uWindT", "uWindA", "uWindK",
+        "uFlareT", "uFlareA", "uFlareK", "uMetT", "uMetA", "uMetS", "uPingT", "uPingA")]
+    ease.advance(data, early, 1.6 * ease.LEAD)                                     # a flare's tongue needs the longest run-up
     out = direct.Channels(names, kinds, data, ch.drops, ch.duration, ch.sections, ch.info)
     out.acts = acts
     out.flares = fl_t
     out.flare_targets = targets
+    out.planet_notes = planet_notes
+    out.rings = danced["rings"]
+    out.restless = danced["restless"]
     out.climax = t_c
     out.variants = {"camera": {"default": CAMERA,
                                "choices": {mode: {name: f"{name}.{mode}" for name in PER_CAMERA} for mode in cams}}}

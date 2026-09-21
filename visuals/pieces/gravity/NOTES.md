@@ -575,3 +575,80 @@ Cost: 5.5 ms a frame at 1080p, 10 at 1440p (15 worst). The trails' trigonometry 
 only where a pixel could be on that orbit; without that it was 12.7. Jolt: slide 24
 %/s, zoom 39, fastest planet 84 (Mercury's hop; the 99th percentile is 18-22, lower
 than before). Sync has not been re-measured since the geometry changed.
+
+
+# Version 4.2: nothing is instant; the planets are bodies; the sky is the real one, with depth
+
+Watched for long enough, three things were wrong. Stars twinkled by jumping 55 % bigger
+on a hat (one every 0.12 s) and vanishing in 60 ms: a strobe. A planet threw a ring
+every 0.35-0.5 s - Uranus 400 in the song, Earth 2 - each open in a tenth of a second:
+too often, too fast to see, and meaningless. And the faint stars were invented.
+
+## Nothing is instant; everything arrives on the beat (`ease.py`)
+
+"Light is instant" is retired. Every channel is baked from a song that is already
+known, so a movement can begin *before* its sound and top out *on* it: cubic Bezier
+in, cubic Bezier out, flat at both ends and at the top. `ease.envelope` makes the
+levels (kick, voice, the hats' three turns, crash, the re-entry's flash and the sky's
+opening, the Sun's swell); `ease.advance` makes held events - a clap's ring, a
+prominence, a flare, a glint - show up a tenth of a second early with their true time
+intact, so the shader sees them coming (`arrive(age, lead, fall)`) and a ring comes up
+out of the corona instead of appearing. Where one eased event overtakes another's tail
+there is a corner, so levels are softened; softening a skewed shape moves its top a
+sample late, which is measured and taken out: a baked level tops out 0.0 ms from its
+event. Tests hold: no step, no corner, the top on the event.
+
+## The planets are bodies (`dance.py`)
+
+After the flock on jugalm.com: state that blends, never a switch; temperament; an idle
+flock that is never all still. Each planet is a small simulation - how far it leans
+toward the Sun or away, how far it has hopped off the plane, its glow, its swell, its
+moons' swing (on strings: they lag and overshoot), its spin - springs with mass, driven
+by its own notes, by the Sun (a kick's pull, inverse-square, travelling outward; a
+flare that strikes it throws it out and makes it ring), and by its neighbours, to which
+it is weakly coupled so that a disturbance passes along the system. A note's push is
+applied *early* by exactly as long as that body takes to reach the top of its hop:
+Jupiter sets off sooner and rises slower than Mercury, and both are at the top on the
+note. Left alone for six bars a planet gets restless and does something small on a bar
+line, each at its own interval. Pushes are spread over a tenth of a second, so not even
+velocity has a corner.
+
+Rings are rare and mean something: a planet's notes charge it, and past a threshold
+found from the song the next strong note on the grid throws one - about one per bar
+and a half of its playing, never two within a bar (165-400 per planet became about 50),
+opening over a second and a half. Notes are shared out so every planet plays (191
+each): pitch bands keep their order, low to the giants, and an overfull band trades
+its notes with its neighbour, alternately.
+
+Fastest planet across the frame 84 -> 38 %/s; planets' acceleration (99.9th
+percentile) 12-38 -> 3.7.
+
+## The real sky, with depth (`sky.build_deep`)
+
+HYG v4.1 (25,791 stars to magnitude 7.5, with distances and constellations) replaces
+the Yale catalogue and the invented faint field (which survives only inside the Milky
+Way, as its unresolved grain). OpenNGC gives 233 deep-sky objects - everything Messier
+listed, anything brighter than magnitude 7, and the famous southern ones - each at its
+true place and true angular size, as a flat hard-edged glyph by kind: galaxies (tilted
+ovals with a core), open clusters, globulars, nebulae (ragged, hydrogen-pink),
+planetary nebulae (rings), supernova remnants (broken shells: the Crab, the Veil). A
+test finds Sirius, Alpha Centauri, Betelgeuse, Orion's belt, Andromeda, the Pleiades,
+the Orion nebula, the Crab and the Ring where they are, as what they are.
+
+Distance is drawn three ways: a near star is a little larger and crisper, takes its
+glints at a fainter magnitude, and *shifts against the far ones as the camera goes
+round*. That last is not real - from inside the solar system there is no parallax to
+see - and it was chosen knowingly: a third of a degree for the very nearest star. A
+constellation's stars take the same turn of the hats, so figures shimmer together.
+
+## What the measuring said, and what it cannot say yet
+
+The Sun-radius detector had been saturated since the corona turned warm (it took the
+corona for the Sun): fixed by colour, and the kick reads 1.00 again on the 100-160 s
+window, half-way up 41 ms before the sound - as designed, for an 85 ms ease that tops
+out on it. Voice 0.74, clap 0.53, crash 0.35. For the busy instruments - bass notes,
+planets' notes, hats - recall against "quiet moments" is no longer a meaningful
+question: they are continuous motion now, by design, and there are no quiet moments
+to compare with. Their timing is held by tests on the baked bodies instead (a hop tops
+out within 30 ms of its note). A position-based detector for the dance is the next
+measuring job. 6.0 ms a frame at 1080p, 10.0 at 1440p (worst 11.9).

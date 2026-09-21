@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from visuals.pieces.gravity import colour, cosmos, direct, listen, models, orrery, shader, shader_cosmos, shader_ink, sky
+from visuals.pieces.gravity import colour, cosmos, dance, direct, ease, listen, models, orrery, shader, shader_cosmos, shader_ink, sky
 
 SR = 48000
 
@@ -113,17 +113,26 @@ def test_the_printed_style_blurs_nothing():
             assert "posterize" in line, line.strip()
 
 
+
+def _gl_or_skip():
+    """Skip only for the one honest reason: there is no GL here. A shader that does not
+    compile is a failure - these tests used to skip on *any* error from the renderer, and
+    so a broken shader passed the test that exists to catch it."""
+    moderngl = pytest.importorskip("moderngl")
+    try:
+        moderngl.create_standalone_context(require=330).release()
+    except Exception as exc:
+        pytest.skip(f"no headless GL: {exc}")
+
+
 @pytest.mark.parametrize("style", ["glow", "ink"])
 def test_each_style_compiles_and_draws(style):
     pytest.importorskip("moderngl")
     from visuals.pieces.gravity import render
 
     render.STYLE = style
-    try:
-        r = render.Renderer(160, 90)
-    except Exception as exc:
-        render.STYLE = "glow"
-        pytest.skip(f"no headless GL: {exc}")
+    _gl_or_skip()
+    r = render.Renderer(160, 90)
     try:
         ch = _one_kick_channels(0.5)
         r.bind(ch.names)
@@ -150,10 +159,8 @@ def test_a_hit_is_on_screen_when_it_arrives_and_never_after(t_kick):
     moderngl = pytest.importorskip("moderngl")
     from visuals.pieces.gravity import render
 
-    try:
-        r = render.Renderer(160, 90)
-    except Exception as exc:                       # no GL on this machine
-        pytest.skip(f"no headless GL: {exc}")
+    _gl_or_skip()
+    r = render.Renderer(160, 90)
     fps = 60
     ch = _one_kick_channels(t_kick)
     times = render.frame_times(0.0, 1.0, fps)
@@ -263,11 +270,8 @@ def test_no_star_is_cut_off_and_every_arm_is_whole():
     if got is None:
         pytest.skip("no listening cache for the real track")
     render.STYLE = "ink"
-    try:
-        r = render.Renderer(1920, 1080)
-    except Exception as exc:
-        render.STYLE = "glow"
-        pytest.skip(f"no headless GL: {exc}")
+    _gl_or_skip()
+    r = render.Renderer(1920, 1080)
     try:
         ch = render.sections_only(direct.direct(got, models.load_cached(CACHE)))
         ch.data[:, ch.index("uSpread")] = 60.0           # the system off screen: sky only
@@ -440,11 +444,8 @@ def test_a_kick_moves_the_stars_and_does_not_brighten_them():
     got, ch = _real_cosmos()
     old = render.STYLE
     render.STYLE = "cosmos"
-    try:
-        r = render.Renderer(640, 360)
-    except Exception as err:                                         # no GL here
-        render.STYLE = old
-        pytest.skip(str(err))
+    _gl_or_skip()
+    r = render.Renderer(640, 360)
     try:
         r.bind(ch.names)
         t = 130.0
@@ -492,23 +493,20 @@ def test_a_planet_is_struck_when_a_ring_from_the_sun_reaches_it():
     got, ch = _real_cosmos()
     old = render.STYLE
     render.STYLE = "cosmos"
-    try:
-        r = render.Renderer(1280, 720)
-    except Exception as err:
-        render.STYLE = old
-        pytest.skip(str(err))
+    _gl_or_skip()
+    r = render.Renderer(1280, 720)
     try:
         r.bind(ch.names)
         t, planet = 130.0, 4
         k = int(t * direct.RATE)
         row = ch.data[k].copy()
         for name in ch.names:
-            if name.startswith(("uRingA", "uNoteA", "uFlareA", "uDropA", "uSwell", "uPromA")):
+            if name.startswith(("uRingA", "uNoteA", "uFlareA", "uDropA", "uPingA", "uGlow", "uBig", "uPromA")):
                 row[ch.index(name)] = 0.0
         g = follow.geometry(ch, np.array([k]))
         e = float(g["e"][0])
         orbit = (max(0.255, 0.156 / e) + float(row[ch.index(f"uPd{planet}")])) * float(row[ch.index("uSpreadSlow")])
-        row[ch.index("uPullA0")] = row[ch.index("uPullA1")] = 0.0          # and no kick is pulling it about
+        row[ch.index(f"uLean{planet}")] = row[ch.index(f"uHop{planet}")] = 0.0   # and it is standing still
         sun = 0.078 * (0.50 + 0.80 * float(row[ch.index("uMass")])) * (1.0 + 0.22 * float(row[ch.index("uSunPulse")]))
         reach_age = (max(orbit - sun - 0.035, 0.0) / 0.66) ** (1.0 / 0.72)
         row[ch.index("uRingT0")] = t - reach_age - 0.03                     # the ring got there a thirtieth of a second ago
@@ -543,13 +541,9 @@ def test_the_orrery_keeps_the_solar_systems_pattern_and_its_physics():
     # Pluto comes inside Neptune
     _, p_off, p_up = orrery.track(orrery.PLUTO, m)
     assert p_off.min() < step[-1] < p_off.max() and np.abs(p_up).max() > 0.29
-    # gravity: inverse-square of the distance drawn, and it travels - the planets answer in turn
+    # gravity: inverse-square of the distance drawn
     r = 0.255 + step
     assert orrery.pull_depth(r, r[0])[4] == pytest.approx(orrery.PULL * (r[0] / r[4]) ** 2)
-    t = np.arange(0.0, 1.5, 1 / 240)
-    peaks = [t[np.argmax(orrery.pull_shape(t - (ri - r[0]) / orrery.PULL_SPEED))] for ri in r]
-    assert np.all(np.diff(peaks) > 0) and peaks[-1] - peaks[0] > 0.4
-    assert orrery.pull_shape(np.array([0.0, 1e-3]))[1] < 1e-3                          # from rest
 
 
 def test_a_flare_is_thrown_at_the_planet_that_has_the_tune():
@@ -564,4 +558,94 @@ def test_a_flare_is_thrown_at_the_planet_that_has_the_tune():
         hits += abs((aimed - where + 0.5) % 1.0 - 0.5) < 0.01
     assert hits == len(ch.flares)
     assert len(set(ch.flare_targets)) >= 4                       # and not always the same player
+
+
+def test_an_eased_level_peaks_on_its_event_and_has_no_corner():
+    n = int(4 * direct.RATE)
+    y = ease.envelope([1.0, 2.5], [1.0, 0.5], n, 0.09, 0.40)
+    assert abs(np.argmax(y[: int(2 * direct.RATE)]) - int(round(1.0 * direct.RATE))) <= 1    # the top is on the event
+    assert y[int(0.85 * direct.RATE)] == 0.0 and y[int(1.46 * direct.RATE)] == 0.0 and y[int(0.96 * direct.RATE)] > 0.05   # it begins before it, and ends
+    assert y[int(2.5 * direct.RATE)] == pytest.approx(0.5, abs=0.03)
+    assert np.abs(np.diff(y)).max() < 0.20                                               # no step (it rises in eleven samples)
+    assert np.abs(np.diff(y, 2)).max() < 0.05                                            # and no corner
+    curve = ease.bezier(0.45, 0.0, 0.55, 1.0)
+    x = np.linspace(0, 1, 101)
+    assert curve(0.0) == 0.0 and curve(1.0) == pytest.approx(1.0) and np.all(np.diff(curve(x)) >= 0)
+
+
+def test_the_planets_are_bodies_nothing_in_them_jumps_and_a_hop_tops_out_on_its_note():
+    # one planet's notes, a second apart: the top of each hop is on the note, though a heavy planet set off sooner
+    n, bar = int(12 * direct.RATE), 2.0
+    none = (np.zeros(0), np.zeros(0))
+    for planet in (0, 4):                                   # Mercury, light; Jupiter, heavy
+        notes = [none] * 8
+        notes[planet] = (np.array([3.0, 6.0, 9.0]), np.ones(3))
+        out = dance.simulate(notes, none, [], np.arange(0, 12, bar), np.arange(0, 12, 0.25), n, bar, cosmos.flares)
+        hop = out[f"uHop{planet}"]
+        top = np.argmax(hop[int(5.5 * direct.RATE):int(7.0 * direct.RATE)]) / direct.RATE + 5.5
+        assert abs(top - 6.0) < 0.03, (planet, top)
+        assert hop.max() == pytest.approx(dance.HOP * orrery.SIZE[planet], rel=0.2)
+        # its neighbours feel it, less, and later
+        other = planet + 1
+        assert 0.02 * hop.max() < out[f"uHop{other}"].max() < 0.5 * hop.max()
+    assert dance.time_to_peak(dance.FREQ, dance.DAMP)[4] > 2 * dance.time_to_peak(dance.FREQ, dance.DAMP)[0]
+
+
+def test_the_real_dance_is_smooth_every_planet_plays_and_rings_are_rare():
+    got, ch = _real_cosmos()
+    bar = 4 * float(got["meta"]["period"])
+    counts = [len(t) for t, _ in ch.planet_notes]
+    assert min(counts) > 0.7 * np.mean(counts)                                  # every planet plays (one had two notes in the song)
+    for i in range(8):
+        for name in ("uLean", "uHop", "uGlow", "uBig", "uSwing"):
+            x = ch.data[:, ch.index(f"{name}{i}")].astype(np.float64)
+            assert np.abs(np.diff(x)).max() < 0.25 * max(np.ptp(x), 1e-9), (name, i)      # nothing jumps
+            assert np.abs(np.diff(x, 2)).max() < 0.09 * max(np.ptp(x), 1e-9), (name, i)   # and nothing has a corner in it
+        rt = ch.rings[i][0]
+        assert len(rt) < 0.25 * counts[i]                                        # a ring is not a twitch
+        assert len(rt) < 2 or np.diff(rt).min() > 0.45 * bar
+    # every eased level in the bake is free of steps
+    for name in ("uKickE", "uSyllE", "uHatE0", "uHatE1", "uHatE2", "uCrashE", "uOpened", "uFlashE", "uSunPulse", "uCharge", "uBrace"):
+        x = ch.data[:, ch.index(name)].astype(np.float64)
+        assert np.abs(np.diff(x)).max() < 0.20 * max(np.ptp(x), 1e-9), name
+        assert np.abs(np.diff(x, 2)).max() < 0.12 * max(np.ptp(x), 1e-9), name     # (an 85 ms ease is curved, but it has no corner: a corner reads 0.2 and up)
+
+
+def test_the_deep_sky_is_the_real_one_with_its_distances():
+    from pathlib import Path
+
+    from visuals.pieces.gravity import ROOT
+    cat = ROOT / "visuals" / "cache" / "catalogues"
+    if not (cat / "hyg_v41.csv").exists() or not (cat / "openngc.csv").exists():
+        pytest.skip("no HYG / OpenNGC catalogues")
+    built = sky.build_deep(cat / "hyg_v41.csv", cat / "openngc.csv", cat / "openngc_addendum.csv")
+    tex = built["texture"].reshape(-1, 4)
+    tex = tex[(tex[:, :3] ** 2).sum(1) > 0.5]
+    w = tex[:, 3].astype(np.float64)
+    grp = np.floor(w / 10000); w -= 10000 * grp
+    near = np.floor(w / 1000); w -= 1000 * near
+    cls = np.floor(w / 100); mag = w - 100 * cls - 2.0
+
+    def find(ra_h, dec_deg, want_deep=False):
+        d = sky.equatorial_to_ecliptic(np.radians([15 * ra_h]), np.radians([dec_deg]))[0]
+        ok = (cls > 8.5) if want_deep else (cls < 8.5)
+        sep = np.degrees(np.arccos(np.clip(tex[ok, :3] @ d, -1, 1)))
+        k = int(np.argmin(sep))
+        return sep[k], near[ok][k], grp[ok][k], mag[ok][k]
+
+    # near and far: Sirius is 2.6 parsecs off, Alpha Centauri 1.3; Betelgeuse and Rigel are hundreds
+    sep, sirius, _, m = find(6.7525, -16.7161)
+    assert sep < 0.05 and m < -1.0 and sirius >= 7
+    assert find(14.66, -60.83)[1] == 9
+    assert find(5.9195, 7.4071)[1] <= 2 and find(5.2423, -8.2016)[1] <= 1
+    # a constellation breathes together: Orion's belt takes one turn of the hats
+    belt = [find(5.5334, -0.2991)[2], find(5.6036, -1.2019)[2], find(5.6793, -1.9426)[2]]
+    assert len(set(belt)) == 1
+    # the deep sky, where it is and what it is: Andromeda (a galaxy, the biggest), the Pleiades,
+    # the Orion nebula, the Crab (a supernova remnant), the Ring (a planetary nebula, the smallest)
+    for ra_h, dec, kind, size in ((0.7123, 41.269, "galaxy", 7), (3.7912, 24.105, "open", 7), (5.5881, -5.391, "nebula", 6),
+                                  (5.5755, 22.0145, "remnant", 1), (18.8931, 33.0292, "planetary", 0)):
+        sep, k, sz, _ = find(ra_h, dec, want_deep=True)
+        assert sep < 0.2 and int(k) == sky.KINDS[kind] and int(sz) == size, (kind, sep, k, sz)
+    assert built["stars"] > 20000 and len(built["deep"]) > 150
 

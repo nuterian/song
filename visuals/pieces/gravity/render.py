@@ -9,6 +9,8 @@ forgives.
 
 from __future__ import annotations
 
+import functools
+
 import json
 import os
 import shutil
@@ -47,7 +49,15 @@ def data_textures() -> dict[str, np.ndarray]:
     galaxy = CATALOGUE.parent / "milkyway_2020_4k_gal_print.jpg"
     if not galaxy.exists():
         raise SystemExit(f"no Milky Way map at {galaxy}; see sky.milky_way")
-    return {"uStarTex": sky.build(CATALOGUE)["texture"], "uGalaxyTex": sky.milky_way(galaxy)[..., None]}
+    hyg, ngc = CATALOGUE.parent / "hyg_v41.csv", CATALOGUE.parent / "openngc.csv"
+    if not hyg.exists() or not ngc.exists():
+        raise SystemExit(f"no HYG / OpenNGC catalogues in {CATALOGUE.parent}; see sky.build_deep")
+    return {"uStarTex": _deep_sky(hyg, ngc)["texture"], "uGalaxyTex": sky.milky_way(galaxy)[..., None]}
+
+
+@functools.lru_cache(maxsize=1)
+def _deep_sky(hyg: Path, ngc: Path) -> dict:
+    return sky.build_deep(hyg, ngc, ngc.parent / "openngc_addendum.csv")
 
 
 FULLSCREEN = np.array([-1.0, -1.0, 3.0, -1.0, -1.0, 3.0], dtype="f4")
@@ -65,12 +75,12 @@ ROLES: dict[str, tuple[str, ...]] = {
 }
 # The solar system gives mass to two of them: the kick's swell of the Sun and a note's
 # swell of its planet are baked with look-ahead, as levels of their own.
-ROLES["kick"] += ("uSunPulse",)
-ROLES["note"] += tuple(f"uSwell{k}" for k in range(direct.N_SATS))
-ROLES["bass"] += tuple(f"uPromA{k}" for k in range(4))
-ROLES["bass"] += tuple(f"uFlareA{k}" for k in range(2)) + ("uCharge",)
-ROLES["voice"] += tuple(f"uWindA{k}" for k in range(4))
-ROLES["drop"] += ("uBrace",)
+ROLES["kick"] += ("uSunPulse", "uKickE") + tuple(f"uLean{k}" for k in range(8))
+ROLES["note"] += tuple(f"{name}{k}" for k in range(8) for name in ("uGlow", "uBig", "uHop", "uSwing", "uSpin", "uPingA"))
+ROLES["bass"] += tuple(f"uPromA{k}" for k in range(4)) + tuple(f"uFlareA{k}" for k in range(2)) + ("uCharge",)
+ROLES["voice"] += tuple(f"uWindA{k}" for k in range(4)) + ("uSyllE",)
+ROLES["hat"] += ("uHatE0", "uHatE1", "uHatE2", "uCrashE")
+ROLES["drop"] += ("uBrace", "uOpened", "uFlashE")
 
 # clocks: frozen in a solo, so that only the soloed instrument moves anything
 CLOCKS = ("uOrbit", "uOrbitSlow", "uDrift", "uBeats") + tuple(f"uPh{i}" for i in range(8))

@@ -47,7 +47,6 @@ def geometry(ch: direct.Channels, rows: np.ndarray, camera: str | None = None) -
     pulse = col("uSunPulse")
     a0 = np.maximum(0.255, 0.156 / e)
     tug = cam("uSpreadSlow")
-    now = rows / direct.RATE
 
     def to_frame(qx, qy):                    # the inverse of the shader's q = rot2(-roll) * (p * span + cam)
         return ((cr * qx + sr * qy) - cx) / span, ((-sr * qx + cr * qy) - cy) / span
@@ -56,15 +55,13 @@ def geometry(ch: direct.Channels, rows: np.ndarray, camera: str | None = None) -
     rest = 0.078 * (0.50 + 0.80 * col("uMass"))
     px, py, pr = [], [], []
     for i in range(sc.N_PLANETS):
-        free = (a0 + col(f"uPd{i}")) * tug
-        late = (free - a0 * tug) / orrery.PULL_SPEED           # the kick's pull travels: see `orrery`
-        answer = sum(col(f"uPullA{k}") * orrery.pull_shape(now - col(f"uPullT{k}") - late) for k in range(2))
-        a = free - np.clip(span, 0.0, 1.0) * orrery.pull_depth(free, a0 * tug) * answer
+        gain = np.clip(span, 0.0, 1.0)                           # a body's movement is scaled to the frame in a close shot
+        a = (a0 + col(f"uPd{i}")) * tug + gain * col(f"uLean{i}")    # it leans toward the Sun and away (`dance`)
         th = 2 * np.pi * col(f"uPh{i}") + turn
-        up = a * col(f"uPz{i}")                                   # its orbit is tipped
+        up = a * col(f"uPz{i}") + gain * col(f"uHop{i}")         # its orbit is tipped; and it hops
         x, y, depth = a * np.cos(th), a * np.sin(th) * e + up * c, -a * np.sin(th) * c + up * e
         fx, fy = to_frame(x, y)
-        size = sc.PLANET_SIZE[i] * (1.0 + 0.30 * col(f"uSwell{sc._PLANET_SLOT[i]}")) * (1.0 + 0.10 * depth / np.maximum(a, 1e-3))
+        size = sc.PLANET_SIZE[i] * (1.0 + 0.22 * col(f"uBig{i}")) * (1.0 + 0.10 * depth / np.maximum(a, 1e-3))
         px.append(fx); py.append(fy); pr.append(size / span)
     return {"sun_x": sun_x, "sun_y": sun_y, "sun_rest": rest / span, "sun_r": rest * (1.0 + 0.22 * pulse) / span,
             "planet_x": np.stack(px, 1), "planet_y": np.stack(py, 1), "planet_r": np.stack(pr, 1),
@@ -123,7 +120,7 @@ def signals(ch: direct.Channels, start: float = 0.0, duration: float | None = No
                 # the Sun (nothing else on screen is that red and that bright: the corona is a
                 # darker band, by design). An area is good to a small fraction of a pixel, and
                 # a flare standing on the limb does not move it.
-                body = (d < 0.90 * rest) | ((d < 1.50 * rest) & (img[..., 0] > 0.86) & (img[..., 1] > 0.40))
+                body = (d < 0.90 * rest) | ((d < 1.50 * rest) & (img[..., 0] > 0.90) & (img[..., 1] > 0.55))   # the limb's orange has more green in it than the corona's ever does
                 sector = ((np.arctan2(dy, dx) + np.pi) / (2 * np.pi) * 24).astype(int) % 24
                 # ...sector by sector, and the *median* sector: a tongue of flame has a hot core the
                 # colour of the Sun, and it stands in one or two sectors; the limb is in all of them
@@ -156,24 +153,41 @@ def signals(ch: direct.Channels, start: float = 0.0, duration: float | None = No
     return out
 
 
+BACK = 8          # frames: things ease in over a tenth of a second now, so "before" is a little further back
+
+
+def _rise(sig: np.ndarray, frames: np.ndarray) -> np.ndarray:
+    """How far a reading has come up *onto* the hit: the better of the two frames from it,
+    over the lower of the two frames an eighth of a second before it. (`measure.response`
+    compares with the frame just before - right for something that appears whole on its
+    frame, and blind to something that eases in.)"""
+    return np.maximum(sig[frames], sig[frames + 1]) - np.minimum(sig[frames - BACK], sig[frames - BACK - 1])
+
+
 def _recall(sig: np.ndarray, fps: float, start: float, events: np.ndarray, rng) -> tuple[float, int]:
     """`measure.recall`, asked only where the detector could see what it watches."""
     dur = len(sig) / fps
     ev = events[(events > start + 0.1) & (events < start + dur - 0.1)]
     frames = measure.first_frame(ev, fps, start)
-    frames = frames[(frames >= 2) & (frames < len(sig) - 2)]
-    seen = np.isfinite(sig[frames - 2]) & np.isfinite(sig[frames - 1]) & np.isfinite(sig[frames]) & np.isfinite(sig[frames + 1])
+    frames = frames[(frames >= BACK + 2) & (frames < len(sig) - 2)]
+    seen = np.isfinite(sig[frames - BACK - 1]) & np.isfinite(sig[frames - BACK]) & np.isfinite(sig[frames]) & np.isfinite(sig[frames + 1])
     frames = frames[seen]
     if len(frames) < 5:
         return float("nan"), int(len(frames))
-    got = measure.response(sig, frames)
-    cand = rng.uniform(start + 0.1, start + dur - 0.1, 6000)
-    cand = cand[np.abs(cand[:, None] - ev[None, :]).min(axis=1) > 0.06]
+    got = _rise(sig, frames)
+    # The null: the same reading where nothing of this kind was arriving - which, now that
+    # "before" is an eighth of a second back, means no event of this kind in the 0.2 s before
+    # the moment either (or the null would be looking across the last event's rise, too).
+    cand = rng.uniform(start + 0.3, start + dur - 0.1, 12000)
+    since = cand[:, None] - ev[None, :]
+    after = np.where(since >= 0, since, np.inf).min(axis=1)
+    until = np.where(since < 0, -since, np.inf).min(axis=1)
+    cand = cand[(after > BACK / fps + 0.07) & (until > 0.06)]
     nf = measure.first_frame(cand, fps, start)
-    nf = nf[(nf >= 2) & (nf < len(sig) - 2)]
-    null = measure.response(sig, nf)
+    nf = nf[(nf >= BACK + 2) & (nf < len(sig) - 2)]
+    null = _rise(sig, nf)
     null = null[np.isfinite(null)]
-    if len(null) < 20:
+    if len(null) < 40:                 # an instrument too busy to have any quiet moments: recall cannot be asked this way
         return float("nan"), int(len(frames))
     return float((got > np.percentile(null, 95)).mean()), int(len(frames))
 
@@ -200,7 +214,7 @@ def sync(got: dict, ch: direct.Channels, camera: str, start: float = 0.0, durati
                                 "hits": float(np.percentile(seg, 98)),
                                 "ratio": float(np.percentile(seg, 98) / max(np.median(seg), 1e-9))})
     if not quiet:
-        print(f"  {camera}: instrument -> detector   recall   asked   onset")
+        print(f"  {camera}: instrument -> detector   recall   asked   half-way up (it eases in: the top is about as long after this as the run-up is)")
         for name, r_ in out["roles"].items():
             print(f"    {name:10s} -> {r_['detector']:8s} {r_['recall']:6.2f} {r_['asked']:7d} {r_['onset_ms']:+7.1f} ms")
         for r_ in out["acts"]:
@@ -216,8 +230,8 @@ def _lift(sig: np.ndarray, fps: float, start: float, events: np.ndarray) -> floa
     dur = len(sig) / fps
     ev = events[(events > start + 0.1) & (events < start + dur - 0.1)]
     frames = measure.first_frame(ev, fps, start)
-    frames = frames[(frames >= 2) & (frames < len(sig) - 2)]
-    rise = measure.response(sig, frames)
+    frames = frames[(frames >= BACK + 2) & (frames < len(sig) - 2)]
+    rise = _rise(sig, frames)
     rise = rise[np.isfinite(rise)]
     return float(np.median(rise)) if len(rise) >= 5 else float("nan")
 

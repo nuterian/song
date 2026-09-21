@@ -150,3 +150,134 @@ def galactic_lb(direction: np.ndarray) -> tuple[float, float]:
     b = np.degrees(np.arcsin(np.clip(d @ np.array(g["pole"]), -1, 1)))
     l = np.degrees(np.arctan2(d @ np.array(g["across"]), d @ np.array(g["centre"]))) % 360.0
     return float(l), float(b)
+
+
+# ---------------------------------------------------------------------------------------------
+# The deep sky: every star to magnitude 7.5 with its distance and its constellation (the HYG
+# database v4.1, astronexus, CC BY-SA: Hipparcos, Yale and Gliese merged), and the clusters,
+# nebulae, galaxies and supernova remnants anyone has heard of (OpenNGC, CC BY-SA), each at
+# its true place and its true size on the sky.
+#
+# One lookup texture, as before: the sphere unfolded to a square, cut into cells, each cell
+# listing what could touch it, brightest first. A texel is a direction and one packed number:
+#
+#     stars   mag + 2  (0 .. 9.99)  + 100 x colour class (0..4) + 1000 x nearness (0..9)
+#                                   + 10000 x which turn of the hats its constellation takes (0..2)
+#     deep    brightness (0 .. 9.99) + 100 x 9                  + 1000 x kind (0..5)
+#                                   + 10000 x size class (0..7)
+#
+# Nearness is what makes the depth of the sky visible. A near star is drawn crisper and a
+# little larger, with glints at a fainter magnitude; a far one is a fine point. And near
+# stars shift against far ones as the camera turns: there is no such parallax from inside
+# the solar system (the nearest star is 270,000 times as far as the Sun), so this is art,
+# not astronomy, and it is slight - a third of a degree for the very nearest.
+
+DEEP_GRID = 96
+DEEP_PER_CELL = 12
+DEEP_FAINTEST = 7.5
+PARALLAX = np.radians(0.34)                    # how far the very nearest star shifts, each way
+KINDS = {"galaxy": 0, "open": 1, "globular": 2, "nebula": 3, "planetary": 4, "remnant": 5}
+SIZE_CLASSES = np.radians(np.array([3.0, 5.0, 8.0, 13.0, 20.0, 32.0, 50.0, 75.0]) / 60.0)   # radius on the sky, per class
+_NGC_KIND = {"G": "galaxy", "GPair": "galaxy", "GGroup": "galaxy", "OCl": "open", "*Ass": "open", "GCl": "globular",
+             "Neb": "nebula", "HII": "nebula", "EmN": "nebula", "RfN": "nebula", "Cl+N": "nebula",
+             "PN": "planetary", "SNR": "remnant"}
+_ALSO = {"NGC0869", "NGC0884", "NGC5139", "NGC0104", "NGC3372", "NGC7293", "NGC6960", "NGC6992", "NGC7000",
+         "NGC2070", "NGC2237", "NGC2264", "NGC0253", "NGC5128", "NGC4755", "NGC3532", "IC2602", "NGC2516", "IC0434"}
+
+
+def nearness(parsecs: np.ndarray) -> np.ndarray:
+    """0 (far: 300 parsecs and beyond) to 9 (the nearest few): steps of equal ratio."""
+    d = np.clip(np.asarray(parsecs, dtype=np.float64), 1.3, 300.0)
+    return np.round(9.0 * (1.0 - np.log(d / 1.3) / np.log(300.0 / 1.3)))
+
+
+def read_hyg(path: Path) -> dict[str, np.ndarray]:
+    import csv
+
+    ra, dec, mag, ci, dist, con = [], [], [], [], [], []
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):
+            if row["id"] == "0" or not row["mag"] or float(row["mag"]) > DEEP_FAINTEST:
+                continue
+            ra.append(np.radians(15.0 * float(row["ra"]))); dec.append(np.radians(float(row["dec"])))
+            mag.append(float(row["mag"])); ci.append(float(row["ci"]) if row["ci"] else 0.6)
+            d = float(row["dist"]) if row["dist"] else 1e5
+            dist.append(d if d < 9e4 else 1e5)                      # 100000 is the catalogue's "unknown": far
+            con.append(row["con"])
+    return {"ra": np.array(ra), "dec": np.array(dec), "mag": np.array(mag), "bv": np.array(ci),
+            "dist": np.array(dist), "con": np.array(con)}
+
+
+def read_openngc(*paths: Path) -> list[dict]:
+    """The objects worth drawing: everything Messier catalogued, anything brighter than
+    magnitude 7, and a short list of famous southern and faint ones he never saw."""
+    import csv
+
+    out = []
+    for path in paths:
+        if not path.exists():
+            continue
+        with open(path, newline="") as f:
+            for row in csv.DictReader(f, delimiter=";"):
+                kind = _NGC_KIND.get(row["Type"])
+                if kind is None or not row["RA"] or not row["Dec"]:
+                    continue
+                vmag = float(row["V-Mag"]) if row["V-Mag"] else (float(row["B-Mag"]) if row["B-Mag"] else 99.0)
+                if not (row["M"] or vmag <= 7.0 or row["Name"] in _ALSO):
+                    continue
+                h, m, sec = (float(x) for x in row["RA"].split(":"))
+                sign = -1.0 if row["Dec"].startswith("-") else 1.0
+                d, dm, ds = (float(x) for x in row["Dec"].lstrip("+-").split(":"))
+                major = float(row["MajAx"]) if row["MajAx"] else 4.0
+                out.append({"name": row["Name"], "kind": kind, "ra": np.radians(15 * (h + m / 60 + sec / 3600)),
+                            "dec": sign * np.radians(d + dm / 60 + ds / 3600), "mag": min(vmag, 9.5),
+                            "radius": np.radians(0.5 * major / 60.0), "messier": row["M"], "common": row["Common names"]})
+    return out
+
+
+def _ring_of(d: np.ndarray, reach: float, points: int = 8) -> list[np.ndarray]:
+    a = np.cross(d, [0.0, 1.0, 0.0] if abs(d[1]) < 0.9 else [1.0, 0.0, 0.0])
+    a /= np.linalg.norm(a)
+    b = np.cross(d, a)
+    return [d] + [np.cos(reach) * d + np.sin(reach) * (np.cos(t) * a + np.sin(t) * b)
+                  for t in np.linspace(0, 2 * np.pi, points, endpoint=False)]
+
+
+def build_deep(hyg: Path, *ngc: Path) -> dict:
+    stars = read_hyg(hyg)
+    dirs = equatorial_to_ecliptic(stars["ra"], stars["dec"])
+    colour = np.digitize(stars["bv"], [0.0, 0.45, 0.9, 1.4]).astype(np.float64)
+    near = nearness(stars["dist"])
+    names = sorted(set(stars["con"]))
+    turn = np.array([(names.index(c) * 7 + 1) % 3 for c in stars["con"]], dtype=np.float64)     # a constellation twinkles together
+    packed = (stars["mag"] + 2.0) + 100.0 * colour + 1000.0 * near + 10000.0 * turn
+    # how far from its centre anything of a star's can be: its disc and arms, and its parallax
+    reach = np.where(stars["mag"] < 2.6, np.radians(0.75), np.where(stars["mag"] < 5.0, np.radians(0.28), np.radians(0.10))) \
+        + PARALLAX * near / 9.0
+    entries = [(stars["mag"][i], dirs[i], packed[i], reach[i]) for i in range(len(packed))]
+
+    deep = read_openngc(*ngc)
+    for o in deep:
+        d = equatorial_to_ecliptic(np.array([o["ra"]]), np.array([o["dec"]]))[0]
+        size = int(np.argmin(np.abs(np.log(SIZE_CLASSES / max(o["radius"], SIZE_CLASSES[0])))))
+        o["size_class"] = size
+        entries.append((o["mag"] - 6.0,                        # listed ahead of the faint stars of its cell
+                        d, (9.99 - min(max(o["mag"], 0.0), 9.99)) + 100.0 * 9 + 1000.0 * KINDS[o["kind"]] + 10000.0 * size,
+                        float(SIZE_CLASSES[size]) * 1.25))
+
+    tex = np.zeros((DEEP_GRID, DEEP_GRID * DEEP_PER_CELL, 4), dtype=np.float32)
+    filled = np.zeros((DEEP_GRID, DEEP_GRID), dtype=int)
+    dropped = 0
+    for rank, d, w, r in sorted(entries, key=lambda e_: e_[0]):
+        pts = np.array(_ring_of(d, r, 8) + (_ring_of(d, 0.5 * r, 6)[1:] if r > np.radians(0.6) else []))
+        cells = np.minimum((oct_encode(pts) * DEEP_GRID).astype(int), DEEP_GRID - 1)
+        for cx, cy in {(int(c[0]), int(c[1])) for c in cells}:
+            k = filled[cy, cx]
+            if k >= DEEP_PER_CELL:
+                dropped += 1
+                continue
+            tex[cy, cx * DEEP_PER_CELL + k] = (*d, w)
+            filled[cy, cx] = k + 1
+    return {"texture": tex, "stars": len(packed), "deep": deep, "dropped_listings": dropped,
+            "fullest_cell": int(filled.max()), "mean_listed": float(filled.mean())}
+
