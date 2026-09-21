@@ -153,77 +153,179 @@ def _events(a: dict, kind: str, t: np.ndarray, amp: np.ndarray) -> None:
     a[f"ev_{kind}_t"], a[f"ev_{kind}_amp"] = np.asarray(t, np.float64), _norm(amp)
 
 
-def stand_ins(got: dict, mod: tuple[dict, dict] | None, sheet: dict) -> tuple[dict, tuple[dict, dict] | None]:
-    """For each part whose first choice is silent, the first stand-in that is really there."""
-    a, m = dict(got["arrays"]), dict(mod[0]) if mod else {}
-    meta = got["meta"]
-    beats, downbeats, bars = a["beats"], a["downbeats"], a["bar_t"]
-    meter = int(meta.get("meter", 4))
+# Each part's candidates, by the word the direction sheet uses for them, in the order they
+# are tried: the first is the part's own instrument, the rest stand in for it.
+CHOICES = {
+    "pulse": ("kick", "bass-on-beat", "low-end-on-beat", "beat", "silent"),
+    "ring": ("snare", "backbeat-accents", "silent"),
+    "stars": ("hats", "synth-highs", "mix-highs", "silent"),
+    "corona": ("bass", "synth-lows", "silent"),
+    "planets": ("synths", "silent"),
+    "heart": ("voice", "lead-synth", "silent"),
+}
+OWN = {"pulse": ("kick", "drums"), "ring": ("snare", "drums"), "stars": ("hat", "drums"),
+       "corona": ("bass_note", "bass"), "planets": ("note", "other"), "heart": ("syllable", "vocals")}
 
-    def take(part: str, why: str, source: str, t: np.ndarray) -> None:
-        sheet[part] = {"source": source, "why": why, "stand_in": True, "events": int(len(t)),
-                       "plays": _plays(got, source) if source in ("drums", "bass", "other", "vocals") else 1.0,
-                       "first_choice": sheet[part]["why"]}
 
-    if sheet["pulse"].get("silent"):
-        loud = a["loud"][np.clip((beats * RATE).astype(int), 0, len(a["loud"]) - 1)] > 0.35
-        down = np.isin(np.arange(len(beats)), _nearest(beats, downbeats))
-        for why, source, (t, amp) in (
-                ("bass attacks on the beat", "bass", on_beats(a["ev_bass_note_t"], a["ev_bass_note_amp"], beats)),
-                ("the mix's low end on the beat", "mix", on_beats(a.get("ev_mixlow_t", np.zeros(0)), a.get("ev_mixlow_amp", np.zeros(0)), beats)),
-                ("the beat itself, small", "grid", (beats[loud], np.where(down[loud], 0.6, 0.35)))):
-            if _stand_in(t, bars):
-                _events(a, "kick", t, amp)
-                if source == "grid":
-                    a["ev_kick_amp"] = np.asarray(amp, np.float32)          # small, as said: not scaled up
-                take("pulse", why, source, t)
-                break
+def _silence(part: str, a: dict, m: dict) -> None:
+    """A part that nothing plays: nothing of it is left to move the picture."""
+    kind = OWN[part][0]
+    a[f"ev_{kind}_t"], a[f"ev_{kind}_amp"] = np.zeros(0), np.zeros(0, np.float32)
+    if part == "ring":
+        a["ev_snare_bright"] = np.zeros(0, np.float32)
+    if part == "planets":
+        a["ev_note_pitch"] = np.zeros(0, np.float32)
+        for k in ("t", "end", "midi", "amp"):
+            if f"other_{k}" in m:
+                m[f"other_{k}"] = m[f"other_{k}"][:0]
+    if part == "corona":
+        if "bass" in a:
+            a["bass"] = np.zeros_like(a["bass"])
+        for k in ("t", "end", "midi", "amp"):
+            if f"bass_{k}" in m:
+                m[f"bass_{k}"] = m[f"bass_{k}"][:0]
+    if part == "heart":
+        for k in ("voice", "voice_presence", "voice_pitch"):
+            if k in a:
+                a[k] = np.zeros_like(a[k])
+        if "f0_conf" in m:
+            m["f0_conf"] = np.zeros_like(m["f0_conf"])
 
-    if sheet["ring"].get("silent"):
+
+def _candidate(part: str, token: str, got: dict, a: dict, m: dict) -> tuple[np.ndarray, dict] | None:
+    """What `token` would give `part`: the events it would play (for judging it) and a
+    function that puts them in place. None when there is nothing to take it from."""
+    beats, downbeats = a["beats"], a["downbeats"]
+    meter = int(got["meta"].get("meter", 4))
+    kind = OWN[part][0]
+    if token == CHOICES[part][0] or token == "silent":
+        return a[f"ev_{kind}_t"], {}
+    if part == "pulse":
+        if token == "bass-on-beat":
+            t, amp = on_beats(a["ev_bass_note_t"], a["ev_bass_note_amp"], beats)
+            return t, {"kick": (t, amp)}
+        if token == "low-end-on-beat":
+            t, amp = on_beats(a.get("ev_mixlow_t", np.zeros(0)), a.get("ev_mixlow_amp", np.zeros(0)), beats)
+            return t, {"kick": (t, amp)}
+        if token == "beat":
+            loud = a["loud"][np.clip((beats * RATE).astype(int), 0, len(a["loud"]) - 1)] > 0.35
+            down = np.isin(np.arange(len(beats)), _nearest(beats, downbeats))
+            t = beats[loud]
+            return t, {"kick_small": (t, np.where(down[loud], 0.6, 0.35).astype(np.float32))}
+    if part == "ring" and token == "backbeat-accents":
         t, amp = backbeats(a.get("ev_mixmid_t", np.zeros(0)), a.get("ev_mixmid_amp", np.zeros(0)), beats, downbeats, meter)
-        if _stand_in(t, bars):
-            _events(a, "snare", t, amp)
-            a["ev_snare_bright"] = np.full(len(t), 0.5, np.float32)
-            take("ring", "the mix's accents on the backbeat, the stronger half", "mix", t)
-
-    if sheet["stars"].get("silent"):
-        for why, source, key in (("the synths' high band", "other", "otherhi"), ("the mix's high band", "mix", "mixhi")):
-            t, amp = a.get(f"ev_{key}_t", np.zeros(0)), a.get(f"ev_{key}_amp", np.zeros(0))
-            if _stand_in(t, bars):
-                _events(a, "hat", t, amp)
-                take("stars", why, source, t)
-                break
-
-    if sheet["corona"].get("silent") and "other_midi" in m and len(m["other_midi"]):
+        return t, {"snare": (t, amp)}
+    if part == "stars" and token in ("synth-highs", "mix-highs"):
+        key = "otherhi" if token == "synth-highs" else "mixhi"
+        t, amp = a.get(f"ev_{key}_t", np.zeros(0)), a.get(f"ev_{key}_amp", np.zeros(0))
+        return t, {"hat": (t, amp)}
+    if part == "corona" and token == "synth-lows":
+        if "other_midi" not in m or not len(m["other_midi"]):
+            return None
         split = min(float(np.percentile(m["other_midi"], 33)), 60.0)
         low = m["other_midi"] <= split
-        t = m["other_t"][low]
-        if _stand_in(t, bars):
-            _events(a, "bass_note", t, m["other_amp"][low])
-            for k in ("t", "end", "midi", "amp"):
-                m[f"bass_{k}"] = m[f"other_{k}"][low]
-            a["bass"] = a["other_low"]
-            take("corona", f"the synths' low notes (MIDI {split:.0f} and under)", "other", t)
-
-    return {"arrays": a, "meta": meta}, ((m, mod[1]) if mod else mod)
+        return m["other_t"][low], {"synth_lows": (low, split)}
+    if part == "heart" and token == "lead-synth":
+        if "lead_keep" not in m:
+            return None
+        return m["lead_t"][m["lead_keep"]], {"lead": True}
+    return None
 
 
-def apply(got: dict, mod: tuple[dict, dict] | None) -> tuple[dict, tuple[dict, dict] | None, dict]:
-    """The listening and models as the directing code should read them, and the sheet."""
-    sheet = {part: _first_choice(got, part, kind, stem) for part, kind, stem in (
-        ("pulse", "kick", "drums"), ("ring", "snare", "drums"), ("stars", "hat", "drums"),
-        ("corona", "bass_note", "bass"), ("planets", "note", "other"))}
-    voice = _first_choice(got, "heart", "syllable", "vocals")
-    lead_covers = float(mod[0]["lead_keep"].mean()) if mod and "lead_keep" in mod[0] else 0.0
-    if not voice.get("silent"):
-        sheet["heart"] = {**voice, "why": "the voice"}
-    elif lead_covers >= LEAD_MIN and not sheet["planets"].get("silent"):
-        got, m_arr, info = heart_from_lead(got, mod)
-        mod = (m_arr, mod[1])
-        sheet["heart"] = {"source": "other", "why": f"nothing sings: the synths' lead line, in {lead_covers:.2f} of the song",
-                          "plays": _plays(got, "other"), "events": info["notes"], **info}
+def _take(part: str, token: str, got: dict, a: dict, m: dict, how: dict) -> dict:
+    """Put a candidate in place; returns what the sheet should say about it."""
+    info: dict = {}
+    if token == "silent":
+        _silence(part, a, m)
+    elif "kick" in how:
+        _events(a, "kick", *how["kick"])
+    elif "kick_small" in how:
+        t, amp = how["kick_small"]
+        a["ev_kick_t"], a["ev_kick_amp"] = np.asarray(t, np.float64), amp          # small, as said: not scaled up
+    elif "snare" in how:
+        _events(a, "snare", *how["snare"])
+        a["ev_snare_bright"] = np.full(len(how["snare"][0]), 0.5, np.float32)
+    elif "hat" in how:
+        _events(a, "hat", *how["hat"])
+    elif "synth_lows" in how:
+        low, split = how["synth_lows"]
+        _events(a, "bass_note", m["other_t"][low], m["other_amp"][low])
+        for k in ("t", "end", "midi", "amp"):
+            m[f"bass_{k}"] = m[f"other_{k}"][low]
+        a["bass"] = a["other_low"]
+        info["split_midi"] = split
+    elif "lead" in how:
+        g2, m2, info = heart_from_lead({"arrays": a, "meta": got["meta"]}, (m, {}))
+        a.update(g2["arrays"]); m.update(m2)
+    return info
+
+
+WHY = {"kick": "the kicks", "snare": "the snares", "hats": "the hats", "bass": "the bass notes",
+       "synths": "the notes", "voice": "the voice", "bass-on-beat": "bass attacks on the beat",
+       "low-end-on-beat": "the mix's low end on the beat", "beat": "the beat itself, small",
+       "backbeat-accents": "the mix's accents on the backbeat, the stronger half",
+       "synth-highs": "the synths' high band", "mix-highs": "the mix's high band",
+       "synth-lows": "the synths' low notes", "lead-synth": "nothing sings: the synths' lead line"}
+SOURCE = {"kick": "drums", "snare": "drums", "hats": "drums", "bass": "bass", "synths": "other", "voice": "vocals",
+          "bass-on-beat": "bass", "low-end-on-beat": "mix", "beat": "grid", "backbeat-accents": "mix",
+          "synth-highs": "other", "mix-highs": "mix", "synth-lows": "other", "lead-synth": "other", "silent": "none"}
+
+
+def apply(got: dict, mod: tuple[dict, dict] | None, choose: dict | None = None) -> tuple[dict, tuple[dict, dict] | None, dict]:
+    """The listening and models as the directing code should read them, and the cast.
+
+    Without `choose`, each part gets its own instrument if it is really there (playing in
+    MIN_PLAYS of the bars, MIN_EVENTS events), else the first stand-in that is (events in
+    FALLBACK_BARS of the bars), else silence - and the heart, when nothing sings, the synths'
+    lead line. With `choose` (the direction sheet's `cast`), a part gets what it names."""
+    a, m = dict(got["arrays"]), dict(mod[0]) if mod else {}
+    bars = a["bar_t"]
+    choose = choose or {}
+    own = {part: _first_choice(got, part, *OWN[part]) for part in CHOICES}
+    lead_covers = float(m["lead_keep"].mean()) if "lead_keep" in m else 0.0
+    sheet: dict = {}
+    # the heart first (the lead is taken from the synths as they are), then the others in order;
+    # the pulse's stand-ins read the bass before the corona's may replace it
+    for part in ("heart", "pulse", "ring", "stars", "corona", "planets"):
+        if part in choose:
+            token = choose[part]
+            if token not in CHOICES[part]:
+                raise ValueError(f"cast: {part} cannot be {token!r}; it can be {', '.join(CHOICES[part])}")
+            got_ = _candidate(part, token, got, a, m)
+            if got_ is None:
+                token, got_ = "silent", (np.zeros(0), {})
+            why = f"chosen: {WHY.get(token, token)}"
+        elif part == "heart":
+            if not own["heart"].get("silent"):
+                token = "voice"
+            elif lead_covers >= LEAD_MIN and not own["planets"].get("silent"):
+                token = "lead-synth"
+            else:
+                token = "silent"
+            got_ = _candidate(part, token, got, a, m)
+            why = WHY.get(token, own["heart"]["why"] + f"; and no lead line (covers {lead_covers:.2f})")
+            if token == "lead-synth":
+                why += f", in {lead_covers:.2f} of the song"
+        else:
+            token, got_ = "silent", None
+            if not own[part].get("silent"):
+                token = CHOICES[part][0]
+            else:
+                for cand in CHOICES[part][1:-1]:
+                    c = _candidate(part, cand, got, a, m)
+                    if c is not None and _stand_in(c[0], bars):
+                        token = cand
+                        break
+            got_ = _candidate(part, token, got, a, m) or (np.zeros(0), {})
+            why = WHY.get(token, own[part]["why"])
+        info = _take(part, token, got, a, m, got_[1])
+        n_ev = len(a[f"ev_{OWN[part][0]}_t"])
+        src = SOURCE[token]
+        sheet[part] = {"choice": token, "source": src, "why": why, "events": int(n_ev),
+                       "plays": _plays(got, src) if src in ("drums", "bass", "other", "vocals") else 1.0,
+                       "stand_in": token not in (CHOICES[part][0], "silent"), **info}
+        if token == "silent":
+            sheet[part]["silent"] = True
+    if sheet["heart"]["choice"] == "lead-synth" and sheet["planets"]["choice"] == "synths":
         sheet["planets"]["why"] += "; shares the synths with the heart"
-    else:
-        sheet["heart"] = {**voice, "why": voice["why"] + f"; and no lead line (covers {lead_covers:.2f})"}
-    got, mod = stand_ins(got, mod, sheet)
-    return got, mod, sheet
+    return {"arrays": a, "meta": got["meta"]}, ((m, mod[1]) if mod else mod), sheet

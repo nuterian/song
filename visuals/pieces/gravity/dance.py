@@ -118,7 +118,7 @@ def _impulses(times, amps, n: int) -> np.ndarray:
 
 def simulate(notes: list[tuple[np.ndarray, np.ndarray]], kicks: tuple[np.ndarray, np.ndarray],
              strikes: list[tuple[float, int, float]], downbeats: np.ndarray, grid: np.ndarray,
-             n: int, bar: float, find_threshold) -> dict:
+             n: int, bar: float, find_threshold, rings_every_bars: float = 1.5) -> dict:
     """Run the eight bodies through the song. `notes[i]` are planet i's (times, sizes);
     `strikes` are (arrival time, planet, size) of flares; `grid` is the lattice a ring may
     be thrown on. Returns the channels, and what was decided (rings, restless moments)."""
@@ -133,7 +133,7 @@ def simulate(notes: list[tuple[np.ndarray, np.ndarray]], kicks: tuple[np.ndarray
         if len(t) == 0:
             rings.append((np.zeros(0), np.zeros(0)))
         else:
-            rt, ra, _, _ = find_threshold(t, a, np.zeros(len(t)), grid, n, bar, every_bars=1.5, leak_bars=2.0, rest_bars=1.0)
+            rt, ra, _, _ = find_threshold(t, a, np.zeros(len(t)), grid, n, bar, every_bars=rings_every_bars, leak_bars=2.0, rest_bars=1.0)
             rings.append((rt, ra))
         # restless: in a long silence, something small on a bar line, at this planet's own interval
         every = (5 + (3 * i) % 4) * bar

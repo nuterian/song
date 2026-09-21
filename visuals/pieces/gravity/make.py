@@ -37,16 +37,42 @@ def modelled(track: Track, got: dict, force: bool = False, verbose: bool = True)
     return mod
 
 
-def make(track: Track, style: str = "cosmos", force: bool = False, with_render: bool = False) -> Path:
+def directed(track: Track, got: dict, fresh: bool = False):
+    """The song baked from its direction sheet (sheet.py): a curated one if there is one and
+    `fresh` is not asked for; else the director's own, which is written beside the bundle.
+    Returns the channels, the sheet, and where it came from."""
+    from . import render, sheet as sheet_
+
+    path = sheet_.path_for(track)
+    if not fresh and path.parent == sheet_.CURATED:
+        the = sheet_.read(path)
+        bad = sheet_.validate(the, got)
+        if bad:
+            raise SystemExit(f"{path} cannot be baked:\n  " + "\n  ".join(bad))
+        return render.bake(got, track, the), the, path
+    ch = render.bake(got, track)                      # the director's own decisions...
+    the = sheet_.default(track, got, ch)              # ...written down; baking that sheet gives the same (a test holds it)
+    ch.sheet = the
+    return ch, the, sheet_.write(the, track.out("cosmos") / "sheet.json")
+
+
+def make(track: Track, style: str = "cosmos", force: bool = False, with_render: bool = False,
+         fresh_sheet: bool = False, keep_sheet: bool = False) -> Path:
     """The bundle the player reads, for this track in this style, and its scorecard. No mp4."""
-    from . import render, scorecard
+    from . import render, scorecard, sheet as sheet_
 
     t0 = time.time()
     print(f"track: {track.slug}  ({track.source})" + (f"\n  lyrics from {track.project}" if track.project else ""))
     got = listened(track, force)
     modelled(track, got, force)
     render.STYLE = style
-    ch = render.bake(got, track)
+    if style == "cosmos":
+        ch, the, where = directed(track, got, fresh_sheet)
+        if keep_sheet:
+            where = sheet_.write(the, sheet_.CURATED / f"{track.slug}.json")
+        print(f"direction sheet: {where}")
+    else:
+        ch = render.bake(got, track)
     out = render.stage(got, track, track.out(style), ch=ch)
     print(f"staged {out}  ({time.time() - t0:.0f}s)")
     if style == "cosmos":

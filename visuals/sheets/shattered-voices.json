@@ -1,0 +1,44 @@
+{
+  "sheet": 1,
+  "song": {
+    "slug": "shattered-voices",
+    "tempo": 90.0,
+    "meter": 4,
+    "bars": 59,
+    "seconds": 155.36
+  },
+  "cast": {
+    "pulse": "kick",
+    "ring": "snare",
+    "stars": "hats",
+    "corona": "bass",
+    "planets": "synths",
+    "heart": "lead-synth"
+  },
+  "reentries": [
+    {"bar": 4, "strength": 0.7404983934901544},
+    {"bar": 14, "strength": 0.46361456361523573},
+    {"bar": 33, "strength": 0.8342006943778972},
+    {"bar": 42, "strength": 1.0}
+  ],
+  "acts": [
+    {"bars": [0, 14], "shot": "approach"},
+    {"bars": [14, 33], "shot": "wide"},
+    {"bars": [33, 42], "shot": "alignment"},
+    {"bars": [42, 59], "shot": "pullback"}
+  ],
+  "feel": {
+    "flares_every_bars": 2.0,
+    "planet_rings_every_bars": 1.5,
+    "camera_move_bars": 8.0,
+    "hybrid_turn_bars": 96.0,
+    "orbits_breathe": 0.55
+  },
+  "lyrics": {
+    "show": true,
+    "size": 0.03,
+    "unsung": 0.42,
+    "peak": 1.0,
+    "sung": 0.64
+  }
+}

@@ -182,7 +182,8 @@ def cmd_make(args) -> int:
     from .pieces.gravity import make
     from .pieces.gravity.track import Track
 
-    make.make(Track.resolve(args.song, args.audio), args.theme, force=args.force, with_render=args.render)
+    make.make(Track.resolve(args.song, args.audio), args.theme, force=args.force, with_render=args.render,
+              fresh_sheet=args.fresh_sheet, keep_sheet=args.keep_sheet)
     return 0
 
 
@@ -217,6 +218,10 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("--force", action="store_true", help="listen and run the models again")
     m.add_argument("--render", action="store_true",
                    help="add the scorecard's rendered checks: recall and frame time (minutes)")
+    m.add_argument("--fresh-sheet", action="store_true",
+                   help="ignore a curated direction sheet: bake the director's own decisions")
+    m.add_argument("--keep-sheet", action="store_true",
+                   help="keep the direction sheet used, in visuals/sheets/, to be edited")
     m.set_defaults(fn=cmd_make)
 
     r = sub.add_parser("render", help="render an mp4 and stage the player")

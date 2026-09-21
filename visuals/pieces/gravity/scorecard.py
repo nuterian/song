@@ -284,9 +284,11 @@ def frame_times(ch: direct.Channels, frames: int = 120, size: tuple[int, int] = 
 def words(track: Track, ch: direct.Channels) -> list[Line]:
     """The lyrics: where they come from, and whether they keep off the bodies."""
     from . import lyrics
-    lay = lyrics.layout(track, ch)
+    style = (getattr(ch, "sheet", None) or {}).get("lyrics")
+    lay = lyrics.layout(track, ch, style)
     if lay is None:
-        return [Line("lyrics", "lyrics", "none: no word timings for this song")]
+        why = "switched off in the direction sheet" if style and not style.get("show", True) else "no word timings for this song"
+        return [Line("lyrics", "lyrics", f"none: {why}")]
     n = sum(len(l["words"]) for l in lay["lines"])
     out = [Line("lyrics", "words", f"{len(lay['lines'])} lines, {n} words, from {lay['source']}; the longest line covers "
                 f"{100 * lay['largest_share_of_frame']:.1f} % of the frame", "<= 3 %",

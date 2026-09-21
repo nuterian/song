@@ -32,14 +32,17 @@ def shader_module(style: str | None = None):
     return {"ink": shader_ink, "cosmos": shader_cosmos}.get(style or STYLE, shader)
 
 
-def bake(got: dict, track: Track) -> direct.Channels:
-    """The channels the current style's shader reads, from the song as cast (cast.py)."""
+def bake(got: dict, track: Track, sheet: dict | None = None) -> direct.Channels:
+    """The channels the current style's shader reads, from the song as cast (cast.py) - and,
+    given a direction sheet (sheet.py), with its decisions rather than the director's."""
     from . import cast
     from .make import modelled
 
-    got, mod, sheet = cast.apply(got, modelled(track, got, verbose=False))
-    ch = cosmos.bake(got, mod) if STYLE == "cosmos" else direct.direct(got, mod)
-    ch.info = dict(ch.info or {}, cast=sheet)
+    got, mod, cast_sheet = cast.apply(got, modelled(track, got, verbose=False), choose=sheet["cast"] if sheet else None)
+    ch = (cosmos.bake(got, mod, sheet) if STYLE == "cosmos"
+          else direct.direct(got, mod, reentries=sheet["reentries"] if sheet else None))
+    ch.info = dict(ch.info or {}, cast=cast_sheet)
+    ch.sheet = sheet
     return ch
 
 
@@ -284,7 +287,7 @@ def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
                          "subject": a.subject if a.subject >= 0 else None} for a in ch.acts]
     if STYLE == "cosmos":
         from . import lyrics
-        words = lyrics.layout(track, ch)
+        words = lyrics.layout(track, ch, (getattr(ch, "sheet", None) or {}).get("lyrics"))
         if words:
             plan["lyrics"] = words
     (out_dir / "frames.bin").write_bytes(ch.data.astype("<f4").tobytes())

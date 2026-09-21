@@ -165,11 +165,11 @@ def _ease(x: float) -> float:
 # ------------------------------------------------------------------------ places
 
 
-def box(region: str, text: str) -> tuple[float, float, float, float]:
+def box(region: str, text: str, size: float = SIZE) -> tuple[float, float, float, float]:
     """The text's extent in frame heights (x0, y0, x1, y1), margin not included."""
     x, y, align = REGIONS[region]
-    w = len(text) * CHAR_W * SIZE
-    h = 1.3 * SIZE
+    w = len(text) * CHAR_W * size
+    h = 1.3 * size
     x0 = {"center": x - w / 2, "left": x, "right": x - w}[align]
     return x0, y - h / 2, x0 + w, y + h / 2
 
@@ -192,7 +192,7 @@ def crosses(b: tuple[float, float, float, float], x: np.ndarray, y: np.ndarray, 
     return (np.hypot(dx, dy) < r).any(axis=1)
 
 
-def place(lines: list[Line], ch: direct.Channels, camera: str, step: float = 0.1) -> dict:
+def place(lines: list[Line], ch: direct.Channels, camera: str, step: float = 0.1, size: float = SIZE) -> dict:
     """Each line's region for this camera: the fewest moments crossed, then the region the
     last line used, then the preferred order. Returns what that cost, for the scorecard."""
     prev, crossed, shown, moves = None, 0, 0, 0
@@ -201,7 +201,7 @@ def place(lines: list[Line], ch: direct.Channels, camera: str, step: float = 0.1
         x, y, r = obstacles(ch, times, camera)
         best, best_cost = None, None
         for k, region in enumerate(PREFER):
-            b = box(region, ln.text)
+            b = box(region, ln.text, size)
             if b[0] < -ASPECT / 2 + 0.02 or b[2] > ASPECT / 2 - 0.02:
                 continue                                   # it would not fit across the frame here
             hits = crosses(b, x, y, r)
@@ -210,7 +210,7 @@ def place(lines: list[Line], ch: direct.Channels, camera: str, step: float = 0.1
                 best, best_cost = region, cost
         if best is None:                                   # longer than any place: centred, low
             best = "low"
-        hits = crosses(box(best, ln.text), x, y, r)
+        hits = crosses(box(best, ln.text, size), x, y, r)
         crossed += int(hits.sum()); shown += len(times)
         moves += int(prev is not None and best != prev)
         ln.place[camera] = best
@@ -218,20 +218,23 @@ def place(lines: list[Line], ch: direct.Channels, camera: str, step: float = 0.1
     return {"camera": camera, "crossed": crossed / max(shown, 1), "moves": moves}
 
 
-def layout(track: Track, ch: direct.Channels) -> dict | None:
-    """Everything the player needs to set the words, and what placing them cost."""
+def layout(track: Track, ch: direct.Channels, style: dict | None = None) -> dict | None:
+    """Everything the player needs to set the words, and what placing them cost. `style` is
+    the direction sheet's `lyrics`: whether they show, their size and their inks."""
+    st = {"show": True, "size": SIZE, "unsung": UNSUNG, "peak": PEAK, "sung": SUNG} | (style or {})
     src = source(track)
-    if src is None:
+    if src is None or not st["show"]:
         return None
     lines = read(src)
     if not lines:
         return None
-    cost = [place(lines, ch, mode) for mode in cosmos.MODES]
-    covered = max(box(ln.place["static"], ln.text)[2] - box(ln.place["static"], ln.text)[0] for ln in lines) * 1.3 * SIZE / ASPECT
+    size = st["size"]
+    cost = [place(lines, ch, mode, size=size) for mode in cosmos.MODES]
+    covered = max(box(ln.place["static"], ln.text, size)[2] - box(ln.place["static"], ln.text, size)[0] for ln in lines) * 1.3 * size / ASPECT
     return {
         "source": str(src.relative_to(ROOT)) if src.is_relative_to(ROOT) else str(src),
-        "style": {"size": SIZE, "intro": INTRO, "outro": OUTRO, "fade_out": FADE_OUT, "lead": LEAD,
-                  "unsung": UNSUNG, "peak": PEAK, "sung": SUNG},
+        "style": {"size": size, "intro": INTRO, "outro": OUTRO, "fade_out": FADE_OUT, "lead": LEAD,
+                  "unsung": st["unsung"], "peak": st["peak"], "sung": st["sung"]},
         "regions": {k: {"x": x, "y": y, "align": a} for k, (x, y, a) in REGIONS.items()},
         "lines": [{"in": [round(ln.in0, 4), round(ln.in1, 4)], "out": [round(ln.out0, 4), round(ln.out1, 4)], "place": ln.place,
                    "words": [[w, round(s, 4), round(e, 4)] for w, s, e in ln.words]} for ln in lines],

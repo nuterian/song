@@ -50,14 +50,16 @@ class Act:
     sections: list                 # decide.Section
     function: str = "wide"
     subject: int = -1              # a planet, for the shots that have one
+    t0: float | None = None        # an act the direction sheet drew: its own bounds
+    t1: float | None = None
 
     @property
     def start(self) -> float:
-        return self.sections[0].start
+        return self.sections[0].start if self.t0 is None else self.t0
 
     @property
     def end(self) -> float:
-        return self.sections[-1].end
+        return self.sections[-1].end if self.t1 is None else self.t1
 
     @property
     def bars(self) -> int:
@@ -280,11 +282,27 @@ def best_turn(tilt: float, catalogue_dir) -> float:
 # ------------------------------------------------------------------------ bake
 
 
-def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
-    """Everything `direct` bakes, plus the place and the camera."""
-    from . import ROOT, shader_cosmos
+def acts_from(sheet: dict, sections: list, bar_t: np.ndarray, duration: float) -> list[Act]:
+    """The direction sheet's acts, bounded exactly as the director's own would be."""
+    from .sheet import PLANETS, span
 
-    ch = direct.direct(got, mod)
+    acts = []
+    for i, entry in enumerate(sheet["acts"]):
+        t0, t1 = span(bar_t, duration, entry["bars"])
+        mine = [s for s in sections if s.bar0 < entry["bars"][1] and s.bar1 > entry["bars"][0]] or sections[:1]
+        subject = PLANETS.index(entry["subject"]) if entry.get("subject") in PLANETS else -1
+        acts.append(Act(i, mine, entry["shot"], subject, t0, t1))
+    return acts
+
+
+def bake(got: dict, mod: tuple[dict, dict] | None, sheet: dict | None = None) -> direct.Channels:
+    """Everything `direct` bakes, plus the place and the camera. With a direction sheet,
+    its decisions are the ones made (sheet.py); without, the director's own."""
+    from . import ROOT, shader_cosmos
+    from .sheet import FEEL
+
+    feel = {k: v[0] for k, v in FEEL.items()} | ((sheet or {}).get("feel") or {})
+    ch = direct.direct(got, mod, reentries=sheet["reentries"] if sheet else None)
     a, meta = got["arrays"], got["meta"]
     n, period = int(meta["n"]), float(meta["period"])
     bar = int(meta.get("meter", 4)) * period
@@ -292,7 +310,7 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     col = {name: ch.data[:, i].astype(np.float64) for i, name in enumerate(ch.names)}
     extra: dict[str, tuple[str, np.ndarray]] = {}
 
-    acts = find_acts(ch.sections, ch.drops)
+    acts = acts_from(sheet, ch.sections, a["bar_t"], float(meta["duration"])) if sheet else find_acts(ch.sections, ch.drops)
     hold = col["uHold"]
 
     # The orbits widen when the floor goes and draw in when it returns - and it is the
@@ -305,7 +323,7 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     drop_a = np.array([d["strength"] for d in ch.drops])
     reentry = anticipating_pulse(drop_t, drop_a, n, bar, 1.1 * bar)
     wide = arriving(1.0 - hold, bar, 2 * bar)
-    spread = 1.0 + 0.55 * wide - 0.055 * reentry
+    spread = 1.0 + feel["orbits_breathe"] * wide - 0.055 * reentry
 
     # mass does not jump: the Sun and the planets swell *into* their hits
     kt, ka = a["ev_kick_t"], a["ev_kick_amp"]
@@ -367,7 +385,7 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     # and strikes whatever planets lie in its way. The threshold is the song's own: see
     # `flares`. The charge is drawn (the corona stands further out and hotter as it builds,
     # and snaps back on the discharge), so a flare is seen coming.
-    fl_t, fl_a, _, charge = flares(bt, ba, where, a["beats"].astype(np.float64), n, bar)
+    fl_t, fl_a, _, charge = flares(bt, ba, where, a["beats"].astype(np.float64), n, bar, every_bars=feel["flares_every_bars"])
     flare_times, flare_sizes = fl_t, fl_a           # where each is thrown is decided below, once the planets are placed
     extra["uCharge"] = (direct.LERP, ease.smooth(charge, 0.30))       # it is spent over a third of a second, not in a sample
 
@@ -425,7 +443,8 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     # ---- the dancers ---------------------------------------------------------------------------
     beats = a["beats"].astype(np.float64)
     grid = np.sort(np.concatenate([beats, 0.5 * (beats[:-1] + beats[1:])])) if len(beats) > 1 else beats
-    danced = dance.simulate(planet_notes, (kt[strong], ka[strong]), strikes, a["downbeats"].astype(np.float64), grid, n, bar, flares)
+    danced = dance.simulate(planet_notes, (kt[strong], ka[strong]), strikes, a["downbeats"].astype(np.float64), grid, n, bar, flares,
+                            rings_every_bars=feel["planet_rings_every_bars"])
     ping_cols = []
     for i in range(shader_cosmos.N_PLANETS):
         for name in ("uLean", "uHop", "uGlow", "uBig", "uSwing", "uSpin"):
@@ -442,7 +461,8 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     # spread, the tug of a kick - is sized for the frame it is seen in. Close on Saturn, a
     # spread that is handsome from afar would throw the Sun across the picture at three
     # frame-heights a second (it did); so the closer the camera, the less the system heaves.
-    cams = cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, off, rise)
+    cams = cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, off, rise,
+                   blend_bars=feel["camera_move_bars"], turn_bars=feel["hybrid_turn_bars"])
     pulse = extra["uSunPulse"][1]
     for mode, cam in cams.items():
         # (a kick's pull on the planets is the shader's and `orrery`'s: inverse-square, and it travels)
@@ -510,7 +530,8 @@ def _shot(act: Act, e: np.ndarray, tilt_s: float) -> dict:
                 subject=-1, toward=0 * full, off=(0.0, 0.0))
 
 
-def cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, offsets, heights, blend_bars: float = 8.0) -> dict:
+def cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, offsets, heights, blend_bars: float = 8.0,
+            turn_bars: float = 96.0) -> dict:
     """Three ways of watching the same system.
 
     static      the picture that worked: the section's tilt and roll, no zoom, no slide.
@@ -609,7 +630,7 @@ def cameras(acts, t, bar, t_c, turn0, tilt_s, roll_s, phases, spread, offsets, h
                 "uCamX": cr * sx + sr * sy, "uCamY": -sr * sx + cr * sy, "uSpreadSlow": mine}
 
     zero = np.zeros(n)
-    drift = 2 * np.pi * (t - t_c) / (96.0 * bar)
+    drift = 2 * np.pi * (t - t_c) / (turn_bars * bar)
     lean_in = np.clip(0.35 * cin["lspan"], np.log(0.85), np.log(1.50))
     return {
         "static": finish(zero, tilt_s, zero, 0.0, roll_s),

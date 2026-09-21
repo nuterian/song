@@ -1,0 +1,53 @@
+{
+  "sheet": 1,
+  "song": {
+    "slug": "gravity-in-motion",
+    "tempo": 125.0004,
+    "meter": 4,
+    "bars": 149,
+    "seconds": 285.8
+  },
+  "cast": {
+    "pulse": "kick",
+    "ring": "snare",
+    "stars": "hats",
+    "corona": "bass",
+    "planets": "synths",
+    "heart": "voice"
+  },
+  "reentries": [
+    {"bar": 2, "strength": 0.9528614031358555},
+    {"bar": 34, "strength": 0.4767202611296437},
+    {"bar": 42, "strength": 0.3515412023872829},
+    {"bar": 50, "strength": 0.7644962283897911},
+    {"bar": 66, "strength": 0.5990507814112185},
+    {"bar": 82, "strength": 0.7157004025325219},
+    {"bar": 90, "strength": 0.862245542452712},
+    {"bar": 98, "strength": 0.7348776698822986},
+    {"bar": 116, "strength": 0.7588343399628458},
+    {"bar": 132, "strength": 1.0}
+  ],
+  "acts": [
+    {"bars": [0, 14], "shot": "approach"},
+    {"bars": [14, 50], "shot": "intimate", "subject": "earth"},
+    {"bars": [50, 77], "shot": "wide"},
+    {"bars": [77, 98], "shot": "eclipse", "subject": "saturn"},
+    {"bars": [98, 116], "shot": "wide"},
+    {"bars": [116, 132], "shot": "alignment"},
+    {"bars": [132, 149], "shot": "pullback"}
+  ],
+  "feel": {
+    "flares_every_bars": 2.0,
+    "planet_rings_every_bars": 1.5,
+    "camera_move_bars": 8.0,
+    "hybrid_turn_bars": 96.0,
+    "orbits_breathe": 0.55
+  },
+  "lyrics": {
+    "show": true,
+    "size": 0.03,
+    "unsung": 0.42,
+    "peak": 1.0,
+    "sung": 0.64
+  }
+}

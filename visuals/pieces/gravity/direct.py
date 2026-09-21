@@ -205,7 +205,23 @@ CHORD_ROOTS = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 
                "Gb": 6, "G": 7, "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}
 
 
-def direct(got: dict, mod: tuple[dict, dict] | None = None) -> Channels:
+def with_reentries(found: list[dict], reentries: list[dict], a: dict, period: float, meter: int) -> list[dict]:
+    """The direction sheet's re-entries, as `find_drops` gives them: a bar it also found
+    keeps what was measured there (the jump, the floor) and takes the sheet's strength; a
+    bar it did not is a re-entry by decision, with nothing measured."""
+    bar_t, bar = a["bar_t"], meter * period
+    out = []
+    for r in reentries:
+        t = float(bar_t[r["bar"]])
+        same = next((d for d in found if abs(d["t"] - t) < 1e-6), None)
+        d = dict(same) if same else {"t": t, "jump_db": 0.0, "floor": 0.0,
+                                      "bar": int(round((t - a["downbeats"][0]) / bar))}
+        d["strength"] = float(r["strength"])
+        out.append(d)
+    return sorted(out, key=lambda d: d["t"])
+
+
+def direct(got: dict, mod: tuple[dict, dict] | None = None, reentries: list[dict] | None = None) -> Channels:
     a, meta = got["arrays"], got["meta"]
     n, period, duration = int(meta["n"]), float(meta["period"]), float(meta["duration"])
     t = np.arange(n) / RATE
@@ -390,6 +406,8 @@ def direct(got: dict, mod: tuple[dict, dict] | None = None) -> Channels:
 
     # --- per section: palette, layers, the plane ------------------------------------
     drops = find_drops(a, period, duration, int(meta.get("meter", 4)))
+    if reentries is not None:
+        drops = with_reentries(drops, reentries, a, period, int(meta.get("meter", 4)))
     sections, info = decide.plan(a, drops, duration, mod)
     starts = np.array([s.start for s in sections])
     ramp = SECTION_RAMP_BARS * bar
