@@ -253,10 +253,11 @@ def run(got: dict, audio: Path, stems_dir: Path, project: Path | None, model_dir
         notes = decode_notes(basic_pitch_activations(stems[stem], ssr, model_dir / "nmp.onnx"),
                              midi_range=rng)
         snapped = snap(notes["t"], attacks)
-        meta[f"notes_{stem}"] = {"count": int(len(snapped)),
-                                 "snapped_to_an_attack": float((snapped != notes["t"]).mean())}
-        arrays[f"{stem}_t"], arrays[f"{stem}_end"] = snapped, notes["end"]
-        arrays[f"{stem}_midi"], arrays[f"{stem}_amp"] = notes["midi"], notes["amp"]
+        keep = playing_at(a, stem, snapped)       # the model hears leakage too
+        meta[f"notes_{stem}"] = {"count": int(keep.sum()), "dropped_not_playing": int((~keep).sum()),
+                                 "snapped_to_an_attack": float((snapped[keep] != notes["t"][keep]).mean()) if keep.any() else 0.0}
+        arrays[f"{stem}_t"], arrays[f"{stem}_end"] = snapped[keep], notes["end"][keep]
+        arrays[f"{stem}_midi"], arrays[f"{stem}_amp"] = notes["midi"][keep], notes["amp"][keep]
         say(f"basic-pitch {stem}: {meta[f'notes_{stem}']}  ({time.time() - t0:.0f}s)")
     w = np.concatenate([(arrays["other_end"] - arrays["other_t"]).clip(0.05) * arrays["other_amp"],
                         2 * (arrays["bass_end"] - arrays["bass_t"]).clip(0.05) * arrays["bass_amp"]])
@@ -264,7 +265,8 @@ def run(got: dict, audio: Path, stems_dir: Path, project: Path | None, model_dir
     say(f"key: {meta['key']['name']} (fit {meta['key']['fit']:.2f})")
 
     f0 = sung_melody(stems["vocals"], ssr)
-    arrays["f0_t"], arrays["f0_hz"], arrays["f0_conf"] = f0["t"], f0["hz"], f0["conf"]
+    arrays["f0_t"], arrays["f0_hz"] = f0["t"], f0["hz"]
+    arrays["f0_conf"] = np.where(playing_at(a, "vocals", f0["t"]), f0["conf"], 0.0)
 
     # chords, from everything pitched and nothing struck
     t0 = time.time()
@@ -311,6 +313,13 @@ def run(got: dict, audio: Path, stems_dir: Path, project: Path | None, model_dir
 
 def cache_paths(cache: Path) -> tuple[Path, Path]:
     return cache / "models.npz", cache / "models.json"
+
+
+def playing_at(a: dict, stem: str, t: np.ndarray) -> np.ndarray:
+    """Whether `stem` is playing (or about to) in the bar of each time: listen.presence."""
+    from .listen import near_playing
+
+    return near_playing(t, a["bar_t"], a[f"near_{stem}"]) if f"near_{stem}" in a else np.ones(len(t), bool)
 
 
 def listened_key(lmeta: dict) -> list:

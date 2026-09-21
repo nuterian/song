@@ -35,9 +35,18 @@ from .grid import fit_grid, latency  # noqa: F401  (the grid is grid.py's; kept 
 
 RATE = 120          # the grid streams live on; matches visuals.listen.RATE
 ENV_RATE = 1000     # envelopes used for timing attacks
-VERSION = 8          # 8: the grid is found (grid.py), not assumed; Beat This! runs here
+VERSION = 9          # 8: the grid is found (grid.py); 9: stems that are not playing are silent
 
 STEMS = ("drums", "bass", "other", "vocals")
+# Which stem each kind of event is heard in.
+OWNER = {"kick": "drums", "snare": "drums", "hat": "drums", "crash": "drums",
+         "bass_note": "bass", "note": "other", "syllable": "vocals"}
+# A stem is playing in a bar when its energy there is within PRESENT_DB of the mix's
+# (and the mix is within AUDIBLE_DB of its loudest bar). Measured per bar on three songs:
+# a part that plays sits at -25 dB and up; Demucs' leakage of a part that does not
+# never rises above -40 (Shattered Voices' "vocals": -60 to -40, all of them).
+PRESENT_DB = -30.0
+AUDIBLE_DB = -40.0
 
 
 # ------------------------------------------------------------------ primitives
@@ -105,6 +114,43 @@ def unit(x: np.ndarray, lo_pct: float, hi_pct: float, mask: np.ndarray | None = 
 
 def db(x: np.ndarray) -> np.ndarray:
     return 20.0 * np.log10(np.maximum(x, 1e-7))
+
+
+# -------------------------------------------------------------------- presence
+
+
+def presence(x: np.ndarray, mix: np.ndarray, sr: int, starts: np.ndarray, duration: float) -> dict:
+    """Per bar: the stem's energy against the mix's (dB); whether it is playing; and
+    `near` - playing, or next to a bar that is - which is where its events are kept, so
+    that a line sung from the last beat of a bar keeps its first syllable."""
+    idx = np.clip((np.append(np.maximum(starts, 0.0), duration) * sr).astype(int), 0, len(mix) - 1)
+
+    def bar_db(y: np.ndarray) -> np.ndarray:
+        e = np.add.reduceat(y * y, idx[:-1]) / np.maximum(np.diff(idx), 1)
+        return 10.0 * np.log10(np.maximum(e, 1e-14))
+
+    m = bar_db(mix)
+    share = bar_db(x) - m
+    playing = (share > PRESENT_DB) & (m > m.max() + AUDIBLE_DB)
+    near = playing.copy()
+    near[1:] |= playing[:-1]
+    near[:-1] |= playing[1:]
+    return {"share_db": share, "playing": playing, "near": near}
+
+
+def near_playing(t: np.ndarray, bars: np.ndarray, near: np.ndarray) -> np.ndarray:
+    """For each time, whether its bar is one its stem plays in or next to."""
+    if not len(t) or not len(bars):
+        return np.ones(len(t), bool)
+    return near[np.clip(np.searchsorted(bars, t, side="right") - 1, 0, len(bars) - 1)].astype(bool)
+
+
+def bar_gate(near: np.ndarray, starts: np.ndarray, n: int, period: float) -> np.ndarray:
+    """1 where a stem's bars are near playing, 0 where not, eased over a beat either side:
+    a part that stops fades rather than being cut at the bar line."""
+    t = np.arange(n) / RATE
+    k = np.clip(np.searchsorted(starts, t, side="right") - 1, 0, len(starts) - 1)
+    return np.clip(smooth(near[k].astype(float), RATE, 2 * period), 0.0, 1.0)
 
 
 # ---------------------------------------------------------------------- onsets
@@ -270,6 +316,15 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     say(f"kick band reads {1000 * kick_lag:.1f} ms late; corrected" if on_lattice
         else "kick lag not measured: no lattice")
 
+    # --- presence: which stems are really playing, bar by bar ------------------
+    bars = downbeats[(downbeats > -period) & (downbeats < duration)]
+    pres = {name: presence(stem[name], mix, sr, bars, duration) for name in STEMS}
+    gate = {name: bar_gate(pres[name]["near"], bars, n, period) for name in STEMS}
+    n_env = -(-len(mix) // (sr // ENV_RATE))            # the length power_env gives
+    gate_env = {name: np.interp(np.arange(n_env) / ENV_RATE, np.arange(n) / RATE, gate[name])
+                for name in STEMS}
+    say("playing, share of bars: " + ", ".join(f"{k} {v['playing'].mean():.2f}" for k, v in pres.items()))
+
     # --- sub: is there a floor under the song or not --------------------------
     sub_env = power_env(band(mix, sr, 25, 90), sr, 30)
     sub_db = db(sub_env) - db(np.percentile(sub_env, 90))
@@ -285,13 +340,15 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     # beats in its power envelope at 49 Hz, and at 60 frames a second that would
     # reach the screen as an 11 Hz shimmer that nothing in the music asked for.
     bass_env = power_env(stem["bass"], sr, 12)
-    out["bass"] = to_grid(unit(bass_env, 5, 99), ENV_RATE, n)
+    # Levels keep the whole song's scale - its floor is silence, which is what a quiet
+    # passage should be measured against - and are shut where the stem is not playing.
+    out["bass"] = to_grid(unit(bass_env, 5, 99) * gate_env["bass"][: len(bass_env)], ENV_RATE, n)
     bass_lag = latency(bass.t, beats, div) if on_lattice else 0.0
     bass = Onsets(bass.t - bass_lag, bass.amp)
 
     # --- voice -----------------------------------------------------------------
     vox_env = power_env(stem["vocals"], sr, 25)
-    vox_unit = unit(vox_env, 20, 99)
+    vox_unit = unit(vox_env, 20, 99) * gate_env["vocals"][: len(vox_env)]
     out["voice"] = to_grid(vox_unit, ENV_RATE, n)
     out["voice_presence"] = to_grid(smooth(trailing_max(vox_unit, 2 * beat_w), ENV_RATE, 0.6),
                                     ENV_RATE, n)
@@ -314,13 +371,13 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
         pitch = smooth(held - centre, f_rate, 0.09)
     else:
         pitch = np.zeros(len(f0))
-    out["voice_pitch"] = to_grid(np.clip(pitch / 12.0, -1, 1), f_rate, n)
+    out["voice_pitch"] = to_grid(np.clip(pitch / 12.0, -1, 1), f_rate, n) * gate["vocals"]
     say(f"voice pitch: voiced {100 * good.mean():.0f}% of frames, "
         f"range {np.percentile(semis[good], 5):.1f}..{np.percentile(semis[good], 95):.1f} st re A3")
 
     # --- other: synths, pads, leads -------------------------------------------
     oth_env = power_env(stem["other"], sr, 30)
-    out["other"] = to_grid(unit(oth_env, 5, 99), ENV_RATE, n)
+    out["other"] = to_grid(unit(oth_env, 5, 99) * gate_env["other"][: len(oth_env)], ENV_RATE, n)
     o22 = librosa.resample(stem["other"].astype(np.float32), orig_sr=sr, target_sr=22050)
     S = np.abs(librosa.stft(o22, n_fft=2048, hop_length=512))
     c_rate = 22050 / 512
@@ -392,7 +449,6 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     mfcc = librosa.feature.mfcc(y=m22, sr=22050, n_mfcc=14, hop_length=1024)[1:]
     chroma_bar = librosa.feature.chroma_cqt(y=h22, sr=22050, hop_length=1024)
     fr_t = np.arange(mfcc.shape[1]) * 1024 / 22050
-    bars = downbeats[(downbeats > -period) & (downbeats < duration)]
     bar_edges = np.append(bars, duration)
     feats = []
     for b0, b1 in zip(bar_edges[:-1], bar_edges[1:]):
@@ -409,10 +465,23 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
 
     events = {"kick": kick, "snare": snare, "hat": hat, "bass_note": bass,
               "syllable": syll, "note": note, "crash": crash}
+    # An event is kept only where its stem is playing or about to be: Demucs' leakage
+    # of an absent part has onsets too, and they are noise.
+    dropped = {}
     for k, ev in events.items():
-        out[f"ev_{k}_t"] = ev.t.astype(np.float64)
-        out[f"ev_{k}_amp"] = ev.amp.astype(np.float32)
+        keep = near_playing(ev.t, bars, pres[OWNER[k]]["near"])
+        dropped[k] = int((~keep).sum())
+        if k == "note":
+            note_pitch = note_pitch[keep]
+        out[f"ev_{k}_t"] = ev.t[keep].astype(np.float64)
+        out[f"ev_{k}_amp"] = ev.amp[keep].astype(np.float32)
     out["ev_note_pitch"] = note_pitch.astype(np.float32)
+    say("events dropped where their stem is not playing: " + ", ".join(f"{k} {v}" for k, v in dropped.items() if v))
+    for name in STEMS:
+        out[f"present_{name}"] = pres[name]["playing"]
+        out[f"near_{name}"] = pres[name]["near"]
+        out[f"share_db_{name}"] = pres[name]["share_db"].astype(np.float32)
+        out[f"gate_{name}"] = gate[name].astype(np.float32)
     # how bright each clap is: the top of its band against the bottom, just after it
     si = np.clip((out["ev_snare_t"] * ENV_RATE).astype(int) + 8, 0, len(snare_hi) - 1)
     out["ev_snare_bright"] = (snare_hi[si] / np.maximum(snare_hi[si] + snare_lo[si], 1e-9)).astype(np.float32)
@@ -424,7 +493,9 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
             "tempo": grid["tempo"], "period": period, "meter": meter,
             "grid": {k: v for k, v in grid.items() if k not in ("beats", "downbeats")},
             "lag_ms": {"kick": 1000 * kick_lag, "bass_note": 1000 * bass_lag,
-                       "note": 1000 * note_lag}}
+                       "note": 1000 * note_lag},
+            "presence": {name: {"playing": float(pres[name]["playing"].mean()), "dropped": {
+                k: v for k, v in dropped.items() if OWNER[k] == name}} for name in STEMS}}
     return {"arrays": out, "meta": meta}
 
 

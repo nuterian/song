@@ -658,3 +658,45 @@ def test_the_deep_sky_is_the_real_one_with_its_distances():
         assert sep < 0.2 and int(k) == sky.KINDS[kind] and int(sz) == size, (kind, sep, k, sz)
     assert built["stars"] > 20000 and len(built["deep"]) > 150
 
+
+
+# ------------------------------------------------------------------ presence
+
+
+def _bars_of(levels_db, sr=8000, bar=0.5, seed=0):
+    """A stem whose level against a steady mix is `levels_db` bar by bar."""
+    rng = np.random.default_rng(seed)
+    n = int(bar * sr)
+    mix = rng.standard_normal(n * len(levels_db))
+    stem = np.concatenate([rng.standard_normal(n) * 10 ** (db / 20) for db in levels_db])
+    return stem, mix, sr, bar * np.arange(len(levels_db)), bar * len(levels_db)
+
+
+def test_leakage_is_not_playing_and_a_quiet_part_is():
+    """Measured per bar on three songs: parts that play sit at -25 dB and up against the
+    mix; Demucs' leakage of a part that does not never rises above -40."""
+    levels = [-50, -45, -55, -12, -26, -8, -48, -60]
+    got = listen.presence(*_bars_of(levels))
+    assert got["playing"].tolist() == [False, False, False, True, True, True, False, False]
+    assert np.allclose(got["share_db"], levels, atol=1.0)
+    # events are kept a bar either side, so a line sung from the last beat keeps its first word
+    assert got["near"].tolist() == [False, False, True, True, True, True, True, False]
+
+
+def test_a_part_that_stops_fades_rather_than_being_cut():
+    near = np.array([False, False, True, True, False, False, False, True])
+    starts = 0.5 * np.arange(len(near))
+    n = int(4.0 * listen.RATE)
+    g = listen.bar_gate(near, starts, n, period=0.125)
+    t = np.arange(n) / listen.RATE
+    # open in the middle of the near bars and shut away from them, three beats from an edge
+    assert g[(t > 1.375) & (t < 1.625)].min() > 0.99 and g[(t > 2.375) & (t < 3.125)].max() < 0.01
+    assert g[(t > 0.9) & (t < 1.1)].min() > 0.2              # the edge itself is on its way, not a wall
+    assert np.abs(np.diff(g)).max() < 0.05                   # no step
+
+
+def test_events_of_a_stem_that_is_not_playing_are_dropped():
+    bars = np.arange(8) * 2.0
+    near = np.array([False, True, True, False, False, False, True, False])
+    t = np.array([0.5, 2.1, 5.9, 7.0, 11.0, 13.2, 15.5])
+    assert listen.near_playing(t, bars, near).tolist() == [False, True, True, False, False, True, False]

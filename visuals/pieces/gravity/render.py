@@ -248,6 +248,9 @@ def stage(got: dict, track: Track, out_dir: str | Path) -> Path:
 
 def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
     """plan.json + frames.bin + audio, in the format visuals/player already reads."""
+    bad = [name for name, col in zip(ch.names, ch.data.T) if not np.isfinite(col).all()]
+    if bad:
+        raise ValueError(f"channels that are not finite, which the player would draw as nothing: {bad}")
     meta = got["meta"]
     bar = int(meta.get("meter", 4)) * meta["period"]
     edges = [0.0] + [d["t"] for d in ch.drops if d["t"] > bar] + [ch.duration]
