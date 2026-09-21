@@ -87,6 +87,11 @@ def signals(ch: direct.Channels, start: float = 0.0, duration: float | None = No
     fy = (-(yy + 0.5 - h / 2) / h).astype(np.float32)          # frames come top row first
     out = {k: np.full(len(times), np.nan) for k in DETECTORS}
     out["change"] = np.zeros(len(times))
+    # the plane, ring by ring: the lit share of each thin annulus about the Sun, along the
+    # plane, so a clap's ring can be followed out at the radius it should be at (ring_follow)
+    n_ring = int(RING_REACH / RING_STEP)
+    out["ring_prof"] = np.full((len(times), n_ring), np.nan)
+    out["ring_r"], out["span"] = g["sun_r"], g["span"]
     r = render.Renderer(w, h)
     r.bind(ch.names)
     prev = None
@@ -139,6 +144,12 @@ def signals(ch: direct.Channels, start: float = 0.0, duration: float | None = No
             # clap's ring is born and where it is seen edge to edge
             # (from 1.9 radii out: a new ring is there within its second frame, and the corona's
             # tongues are not. Thin lines, so: the share of the region that is lit, not its mean.)
+            along = (np.abs(ux) > 1.4 * np.abs(uy)) & ~near_planet
+            idx = (rho / RING_STEP).astype(np.int64)
+            ok = along & (idx < n_ring)
+            counts = np.bincount(idx[ok], minlength=n_ring)
+            lit_n = np.bincount(idx[ok & (lum > 0.20)], minlength=n_ring)
+            out["ring_prof"][k] = np.where(counts >= 8, lit_n / np.maximum(counts, 1), np.nan)
             plane = (rho > 1.90 * rest) & (rho < 3.4 * rest) & (np.abs(ux) > 1.4 * np.abs(uy)) & ~near_planet
             if plane.sum() > 40:
                 out["plane"][k] = (lum[plane] > 0.20).mean()
@@ -162,6 +173,61 @@ def _rise(sig: np.ndarray, frames: np.ndarray) -> np.ndarray:
     compares with the frame just before - right for something that appears whole on its
     frame, and blind to something that eases in.)"""
     return np.maximum(sig[frames], sig[frames + 1]) - np.minimum(sig[frames - BACK], sig[frames - BACK - 1])
+
+
+RING_STEP, RING_REACH = 0.004, 0.8        # frame heights: the annuli ring_follow reads
+
+
+def ring_radius(sun_r: float, span: float, age: float) -> float:
+    """Where a clap's ring is, in frame heights from the Sun, `age` seconds after the clap:
+    the shader's R + 0.035 + 0.66 age^0.72 (the 0.035 it is born with, once born), R being
+    the Sun's radius with the kick's swell. Checked frame by frame against a ring drawn
+    alone: without the 0.035 it was a steady 0.034 frame heights short."""
+    return sun_r + (0.035 + 0.66 * max(age, 0.0) ** 0.72) / max(span, 1e-6)
+
+
+def ring_follow(sig: dict, fps: float, start: float, events: np.ndarray, rng,
+                ages: tuple[float, float] = (0.05, 0.35), before: float = 0.12) -> dict:
+    """Is each clap's ring seen where it should be? For the frames `ages` after the clap,
+    the lit share of the annulus at the ring's radius, less that of the same annulus
+    `before` the clap, averaged. A ring standing still - the heart's - is lit both before
+    and after, and cancels; a ring that is thrown lights the annulus it has reached.
+    Recall is against the same measure at moments with no clap near (95th percentile)."""
+    prof, R, span = sig["ring_prof"], sig["ring_r"], sig["span"]
+    n = len(prof)
+
+    def score(t0: float) -> float:
+        # frame k shows the moment start + (k + 1) / fps: each frame's own age, unrounded (the
+        # young ring moves five annuli a frame, so half a frame of rounding misses it)
+        k_first = int(np.ceil((t0 + ages[0] - start) * fps)) - 1
+        k_last = int(np.floor((t0 + ages[1] - start) * fps)) - 1
+        kb = int(np.floor((t0 - before - start) * fps)) - 1
+        if kb < 0 or k_last >= n or k_last < k_first:
+            return np.nan
+        vals = []
+        for k in range(k_first, k_last + 1):
+            b = int(ring_radius(R[k], span[k], start + (k + 1) / fps - t0) / RING_STEP)
+            if b + 1 >= prof.shape[1]:
+                continue
+            now, then = prof[k, b - 1:b + 2], prof[kb, b - 1:b + 2]
+            if not (np.isfinite(now).all() and np.isfinite(then).all()):
+                continue
+            vals.append(float(now.max() - then.max()))          # the brightest of the three annuli about it
+        return float(np.mean(vals)) if len(vals) >= 3 else np.nan
+
+    dur = n / fps
+    ev = events[(events > start + 0.3) & (events < start + dur - ages[1] - 0.05)]
+    got = np.array([score(t) for t in ev])
+    got = got[np.isfinite(got)]
+    cand = rng.uniform(start + 0.3, start + dur - ages[1] - 0.05, 3000)
+    far = np.abs(cand[:, None] - events[None, :]).min(axis=1) > 0.45 if len(events) else np.ones(len(cand), bool)
+    null = np.array([score(t) for t in cand[far][:600]])
+    null = null[np.isfinite(null)]
+    if len(got) < 5 or len(null) < 20:
+        return {"recall": float("nan"), "asked": int(len(got))}
+    thr = float(np.percentile(null, 95))
+    return {"recall": float((got > thr).mean()), "asked": int(len(got)), "threshold": thr,
+            "median_rise": float(np.median(got)), "null_median": float(np.median(null))}
 
 
 def _recall(sig: np.ndarray, fps: float, start: float, events: np.ndarray, rng) -> tuple[float, int]:
@@ -206,6 +272,13 @@ def sync(got: dict, ch: direct.Channels, camera: str, start: float = 0.0, durati
         centres, avg, _ = measure.triggered_average(np.nan_to_num(sig[det], nan=float(np.nanmedian(sig[det]))), fps, start, ev)
         onset, peak = measure.onset_of(centres, avg)
         out["roles"][name] = {"detector": det, "recall": rec, "asked": n, "onset_ms": 1000 * onset, "peak": peak}
+    # The clap's ring is followed out at the radius it should be at: the lit share of the
+    # plane near the Sun could not tell a ring just thrown from the heart's standing one
+    # (Shattered Voices, 60-100 s: that said 0.04; the ring is there for every clap).
+    claps = a["ev_snare_t"][a["ev_snare_amp"] > ASK["snare"][1]]
+    r = ring_follow(sig, fps, start, claps, rng)
+    out["roles"]["snare"].update({"detector": "ring follower", "recall": r["recall"], "asked": r["asked"],
+                                  "band_recall": out["roles"]["snare"]["recall"]})
     change = sig["change"]
     for act in getattr(ch, "acts", []):
         seg = change[int(max(act.start - start, 0) * fps):int(max(act.end - start, 0) * fps)]

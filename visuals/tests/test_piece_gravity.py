@@ -743,3 +743,28 @@ def test_attacks_are_on_time_at_any_sample_rate(sr):
     got = listen.pick_onsets(listen.power_env(x, sr, 120), min_gap=0.05, sensitivity=0.2)
     assert len(got) == len(truth) and np.abs(got.t - truth).max() < 0.002
     assert len(listen.power_env(x, sr, 120)) == listen.env_length(len(x), sr)
+
+
+def test_the_ring_follower_sees_a_thrown_ring_and_not_a_standing_one():
+    """A lit share over a band near the Sun said 0.04 for Shattered Voices' claps: it could
+    not tell a ring just thrown from the heart's, standing in the same band. Followed out
+    at its radius, every clap's ring is there."""
+    from visuals.pieces.gravity import follow
+
+    fps, dur = 60, 40.0
+    n, nb = int(dur * fps), int(follow.RING_REACH / follow.RING_STEP)
+    sun_r, span = np.full(n, 0.10), np.ones(n)
+    claps = np.arange(1.0, 39.0, 1.33)
+    base = np.full((n, nb), 0.02)
+    standing = base.copy()
+    standing[:, int(0.21 / follow.RING_STEP)] = 0.9                  # the heart's ring, always there
+    thrown = standing.copy()
+    for t0 in claps:
+        for k in range(int(t0 * fps), min(int((t0 + 0.6) * fps), n)):
+            age = (k + 1) / fps - t0
+            if age > 0:
+                thrown[k, int(follow.ring_radius(0.10, 1.0, age) / follow.RING_STEP)] = 0.8
+    rng = np.random.default_rng(0)
+    seen = follow.ring_follow({"ring_prof": thrown, "ring_r": sun_r, "span": span}, fps, 0.0, claps, rng)
+    none = follow.ring_follow({"ring_prof": standing, "ring_r": sun_r, "span": span}, fps, 0.0, claps, rng)
+    assert seen["recall"] > 0.95 and none["recall"] < 0.1

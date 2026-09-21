@@ -754,3 +754,157 @@ the moons' share of a planet's notes, and TIDAL CORE's camera tilting 0.06 rad f
 What each of these asks of M1 - a checked grid with an honest fallback, presence per
 stem, casting, form that does not need a kick, and a scorecard - is in
 `NEXT-music-video-product.md`.
+
+
+# M1: any song, measured (in progress)
+
+Decided along the way (2026-09-20): the product is for **rights holders** - artists and
+AI-song makers make the video for their own song and take it everywhere the song lives.
+Listener-side sync to Spotify, Apple Music or TIDAL is ruled out by their terms (see
+`NEXT-music-video-product.md`).
+
+## The test set, and songs with parts taken out
+
+Three real songs are not a test set, and all three are the same kind of song. Without
+downloading anything, `testset.py` makes more from songs already separated here, by
+leaving stems out of the remix: Gravity with no drums, TIDAL CORE with no drums and no
+bass, Shattered Voices with only its synths. What is left is real playing, and the truth
+- the grid, the bars - is the whole song's. They found more than the real songs did.
+
+## The grid (`grid.py`)
+
+The lattice's spacing comes from a coarse-to-fine scan of how well the hats and claps
+line up; which multiple of it is the beat, from Beat This!; then the least-squares fit,
+iterated to a fixed point (three passes stopped 13 us short of it on Gravity). Trusted if
+half the sharp hits fall within 4 ms, and - when Beat This! is steady enough to referee -
+half its beats agree. Otherwise a tracked grid: Beat This!'s beats less its lateness (the
+mode, looked for 60 ms before to 20 ms after its beats), snapped to lag-free attacks where
+the snap agrees with the local tempo, bars following its downbeats one by one. Only what
+is playing places the grid: presence is judged on 2 s windows before there are bars.
+
+| song | grid | tempo | on the lattice | Beat This! steady / agrees | against the truth |
+|---|---|---|---|---|---|
+| Gravity | lattice | 125.0004 | 0.83 | 0.98 / 0.96 | - |
+| Shattered Voices | lattice | 90.0000 (was 125.39) | 0.93 | 1.00 / 0.99 | - |
+| TIDAL CORE | lattice | 127.9997 | 0.99 | 0.92 / 0.93 | - |
+| Gravity, no drums | tracked (18 hats left) | 125.0000 | - | 0.96 / - | beats 0.87 within 25 ms (median 7 ms); bars 0.78 |
+| TIDAL CORE, no drums or bass | lattice | 127.9996 | 0.60 | 0.59 / 0.33 | beats 1.00 (median 0.4 ms); bars 1.00 |
+
+Forced onto the tracked grid, the three real songs keep 96 / 100 / 91 % of their beats -
+Beat This!'s own ceiling - at a 1-2 ms median. Two things were tried and dropped: the
+synths' attacks as a lattice (21-48 % within 4 ms; their accents did not find the beat),
+and letting an unsteady Beat This! veto (it threw out TIDAL-without-drums' exact lattice
+for beats that found 32 % of the truth).
+
+**Every 44.1 kHz song was 0.23 % fast.** `power_env` stepped `sr // 1000` = 44 samples
+and called it a millisecond: every event early, 0.65 s by five minutes. Found because the
+derived songs are written at the stems' 44.1 kHz and fitted 124.715 where the truth is
+125.000 - both songs off by 44/44.1 exactly. The three real songs are 48 kHz. Fixed and
+tested at three rates; nothing at 48 kHz changed.
+
+## Presence
+
+Per bar, a stem plays when its energy is within 30 dB of the mix's (measured: parts that
+play sit at -25 dB and up; leakage never above -40; -20 would have silenced 3 % of
+Gravity's pad bars). Its events are kept a bar either side; its levels keep the whole
+song's scale and are shut, over a beat, where it does not play (normalising over sung bars
+alone made the voice's floor quiet singing, and moved Gravity's voice in 90 % of frames).
+Shattered Voices: all 299 "syllables" were leakage; the voice went dark.
+
+## Casting (`cast.py`)
+
+| part | first choice | stand-ins, in order |
+|---|---|---|
+| pulse | kick | bass attacks on the beat; the mix's low end on the beat; the beat itself, small |
+| ring | snare / clap | the mix's strongest accents on the backbeat, the stronger half |
+| stars | hats | the synths' high band; the mix's high band |
+| corona | bass notes | the synths' low notes (the lowest third, MIDI 60 and under) |
+| planets | the synths' notes | (none yet: no song has lacked them) |
+| heart | the voice | the synths' lead line (Jugal's call) |
+
+A first choice needs its stem playing in 15 % of bars (real drums 77-97 %; leakage of
+removed drums 3-5 %); a stand-in, events in a fifth of the bars. The heart's lead line is
+SwiftF0 on the synths, made into phrases (start at 0.6 confidence, carry on above 0.3,
+bridge and drop under 0.25 s): against a sung melody mixed into TIDAL CORE's synths it
+finds 78 % of sung frames on the right pitch (60 % raw; a skyline of basic-pitch notes
+35-40 %), in phrases a median 2.6 s long. Its notes are its moves of 0.7 semitones and
+more, timed by the synths' own attacks, inside phrases.
+
+| song | pulse | ring | stars | corona | heart |
+|---|---|---|---|---|---|
+| Shattered Voices | kick | snare | hats | bass | **lead synth**, 411 notes |
+| Gravity, no drums | **bass on the beat**, 224 | **mix backbeats**, 60 | **synths' highs**, 1901 | bass | voice |
+| TIDAL CORE, no drums or bass | **mix low end on the beat**, 108 | **mix backbeats**, 70 | **synths' highs**, 1455 | **synths' low notes**, 1418 | voice |
+
+## Drive
+
+A bar drives at three quarters of what this song's pulse puts in a bar, rounded - 3 for
+four on the floor, as it always was, 2 for a half-time kick. Shattered Voices went from
+0-8 % of bars driving to 92 %.
+
+## The scorecard (`scorecard.py`)
+
+`visuals make` ends with one screen, and `scorecard.json` beside the bundle: grid, presence,
+casting (each part judged by its own channels - a role's list includes channels others
+move, so "did any move" never found a dead part), structure, jolt per camera, channels
+outside the range Gravity was tuned in; `--render` adds recall of the sparse parts and
+frame time at 1080p (one-pixel readback per frame: with `finish()` alone Apple's GL skips
+frames nobody reads). Gravity passes; so, with warnings, do the other four.
+
+Gravity and TIDAL CORE are byte-identical through all of it.
+
+## Four more songs, four more breaks
+
+Rise and Glow (130.0002 BPM, 96 % of hits on the lattice), Infinite Fire (124.0001, 98 %)
+and the 39 s Untitled Project (100.998, 88 %) came through with every part cast. Getting
+there, and getting Shattered Voices' synths alone through, found:
+
+- the stems' alignment was checked on six seconds from a minute in - a 39 s song has none
+  (from its middle now, when under 66 s)
+- a section under a second gave CLAP nothing to hear (heard whole now)
+- 32 leaked "hats" in 155 s made a lattice at 180.2 BPM (a lattice now needs a hit every
+  two seconds; real drums give three or four a second)
+- a line through Beat This!'s beats, 80 ms apart there, put a beat 235 ms before its
+  predecessor (tracked beats only go forward now)
+- with no drums Beat This! took eighth notes for the beat - 182 BPM in two, where the
+  song is 90 in four - and the scorecard failed the camera and the planets on jolt. A
+  tempo prior: at 160 BPM and above the picture follows every other beat, a bar keeping
+  its length. The synths alone now pass at 90.5 BPM, with an honest warning that their
+  bar lines are a guess (Beat This!'s downbeats split evenly over the four beats).
+
+## The clap's ring is drowned by the heart
+
+On the rendered picture the clap's ring is seen for 0.76 of Gravity's claps, 0.25 of TIDAL
+CORE's and 0.16 of Shattered Voices'. Drawn alone, Shattered Voices' ring is seen for 0.84
+(Gravity's, over the same length, 0.69): the rings are thrown and read. Each part drawn
+alone, the band the ring is looked for in (1.9-3.4 Sun radii, along the plane) is lit at
+the baseline 0.023 - except by the voice, 0.068, nearly all of the 0.083 of everything.
+The heart's ring stands at 1.55-2.70 radii with the pitch, and its crown strokes off it:
+the same band. The more the heart sings, the less the clap is seen (voice in 64 % of
+Gravity's bars, 94 % of TIDAL CORE's). Whether that was the picture or only the detector
+- a lit-share measure cannot tell a new ring from a standing one - was measured before
+anything was decided (Jugal: "measure first").
+
+**It was the detector.** `follow.ring_follow` follows each clap's ring out at the radius
+the shader puts it (`R + 0.035 + 0.66 age^0.72`, found frame by frame against a ring drawn
+alone - the first version left out the 0.035 and was a steady 0.034 frame heights short,
+and rounded the clap to a frame, half a frame being five annuli at birth): the lit share
+of the annulus at that radius, 0.05-0.35 s after the clap, less the same annulus just
+before it. A standing ring is lit both times and cancels. Shattered Voices, 60-100 s:
+
+| drawn | ring follower | the band detector |
+|---|---|---|
+| the ring alone | 1.00 (rise +0.86) | 0.84 |
+| the heart alone, no rings - the control | 0.11 | 0.11 |
+| everything | **1.00** (rise +0.81, threshold 0.05) | 0.04 |
+
+The ring is there for every clap, heart or no heart. The picture is unchanged; `sync`
+(and so the scorecard's `--render`) reports the follower for the clap, and the band
+detector's figure alongside.
+
+## Open
+- Re-entries still use fixed thresholds (1.5 dB, 0.12 of floor); every song so far has
+  some, so nothing has yet shown them wrong.
+- Gravity-without-drums' tracked grid: 87 % of beats, 78 % of bars.
+- Frame time measured 8.3-9.8 ms at 1080p with the machine busy (QuickTime, Chrome);
+  version 4.2 recorded 6.0. Inside the budget either way; not a regression (A/B).
