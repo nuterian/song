@@ -187,6 +187,32 @@ def cmd_make(args) -> int:
     return 0
 
 
+def cmd_edit(args) -> int:
+    from .pieces.gravity import editor, make, sheet as sheet_
+    from .pieces.gravity.track import Track
+
+    track = Track.resolve(args.song, args.audio)
+    got = make.listened(track, verbose=False)
+    _, sheet, path = make.directed(track, got)
+    print(f"sheet: {path}\nasking {args.model}: {args.request}")
+    got_back = editor.edit(track, got, sheet, args.request, model=args.model)
+    print(f"  said: {got_back['said']}  ({got_back['seconds']:.1f}s, {got_back['attempts']} attempt(s))")
+    for d in got_back["did"]:
+        print(f"  - {d}")
+    if got_back["refused"]:
+        print("  refused: " + "; ".join(got_back["refused"]))
+        return 1
+    if got_back["sheet"] is None:
+        print("  it is already so: nothing to change" if got_back.get("already") else "  nothing to change")
+        return 0
+    if args.dry:
+        print(sheet_.dumps(got_back["sheet"]))
+        return 0
+    print(f"kept: {sheet_.write(got_back['sheet'], sheet_.CURATED / f'{track.slug}.json')}")
+    make.make(track, "cosmos")
+    return 0
+
+
 def cmd_serve(args) -> int:
     """A static server rooted at visuals/, so /player/ can fetch /out/<track>/."""
     handler = functools.partial(_RangeHandler, directory=str(HERE))
@@ -223,6 +249,14 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("--keep-sheet", action="store_true",
                    help="keep the direction sheet used, in visuals/sheets/, to be edited")
     m.set_defaults(fn=cmd_make)
+
+    e = sub.add_parser("edit", help="change a song's direction sheet by asking, with a local model")
+    e.add_argument("song", help="an audio file or a song workdir")
+    e.add_argument("request", help='what to change, in words: "close on Saturn in the second chorus"')
+    e.add_argument("--model", default="qwen3.5:9b", help="an Ollama model on this machine")
+    e.add_argument("--audio", default=None)
+    e.add_argument("--dry", action="store_true", help="show the edited sheet; keep nothing")
+    e.set_defaults(fn=cmd_edit)
 
     r = sub.add_parser("render", help="render an mp4 and stage the player")
     r.add_argument("workdir", help="a song workdir, read-only")
