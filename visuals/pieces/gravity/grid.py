@@ -7,7 +7,8 @@ Two sources, in order of trust:
             scan of how well the hits line up at every spacing; which multiple of it is
             the beat comes from Beat This!, whose tempo is coarse but whose octave is
             right; then `fit_grid` refines both by least squares. Used only when at least
-            half the sharp hits fall within 4 ms of the result.
+            half the sharp hits fall within 4 ms of the result, and - if Beat This! is
+            steady enough to be a referee - half its beats agree.
   tracked   Otherwise - no drums, live playing, a tempo that moves: Beat This!'s beats,
             less its own lateness (the mode of how far the song's onsets sit from them),
             each snapped to an onset within 25 ms when the snap agrees with its
@@ -27,7 +28,9 @@ from __future__ import annotations
 import numpy as np
 from scipy import ndimage
 
-GATE = 0.5                   # sharp hits within 4 ms of the lattice, for it to be trusted
+GATE = 0.5                   # sharp hits within 4 ms of the lattice, for it to be trusted...
+BT_GATE = 0.5                # ...and, if Beat This! is steady, its beats within 25 ms of it
+BT_STEADY = 0.8              # Beat This! is steady when this share of its beat gaps is within 5 % of the median
 ON_LATTICE = 0.004           # s
 MIN_SHARP = 32               # fewer sharp hits than this and there is no lattice to find
 OCTAVE_TOL = 0.06            # a lattice beat within 6 % of Beat This!'s
@@ -184,15 +187,18 @@ def meter_of(bt: dict) -> tuple[int, float]:
     return int(vals[cnt.argmax()]), float(cnt.max() / len(per))
 
 
-def lateness(bt_beats: np.ndarray, t: np.ndarray, amp: np.ndarray, reach: float = 0.08) -> float:
+def lateness(bt_beats: np.ndarray, t: np.ndarray, amp: np.ndarray,
+             early: float = 0.06, late: float = 0.02) -> float:
     """How far the song's onsets sit from Beat This!'s beats, by the mode of every onset
     near every beat, weighted by its size. (A median is pulled about by the notes and
-    hats between beats: it said -14 ms where the truth was -38.)"""
-    near = [t[np.abs(t - b) < reach] - b for b in bt_beats]
-    wts = [amp[np.abs(t - b) < reach] for b in bt_beats]
+    hats between beats: it said -14 ms where the truth was -38.) Looked for only where it
+    can be: Beat This! reads 14-38 ms late on three songs, so onsets from `early` before
+    its beat to `late` after - a syncopated line's cluster lies outside."""
+    near = [t[(t - b > -early) & (t - b < late)] - b for b in bt_beats]
+    wts = [amp[(t - b > -early) & (t - b < late)] for b in bt_beats]
     if not near or not sum(len(x) for x in near):
         return 0.0
-    h, e = np.histogram(np.concatenate(near), bins=np.arange(-reach, reach + 5e-4, 1e-3),
+    h, e = np.histogram(np.concatenate(near), bins=np.arange(-early, late + 5e-4, 1e-3),
                         weights=np.concatenate(wts))
     return float(e[int(np.argmax(ndimage.gaussian_filter1d(h, 2)))] + 5e-4)
 
@@ -267,6 +273,17 @@ def kick_votes(beats: np.ndarray, kicks: np.ndarray, meter: int) -> list[int]:
     return np.bincount(_nearest_beat(beats, back) % meter, minlength=meter).tolist()
 
 
+def agreement(bt_beats: np.ndarray, beats: np.ndarray, onsets: np.ndarray) -> float:
+    """Share of Beat This!'s beats, less their lateness against `onsets`, within 25 ms of
+    `beats`. On three real songs its beats agree 0.92-0.99 with the lattice; with a lattice
+    fitted to leakage, 0.12."""
+    if len(bt_beats) < 2 or len(beats) < 2:
+        return 0.0
+    b = bt_beats + lateness(bt_beats, onsets, np.ones(len(onsets)))
+    j = np.clip(np.searchsorted(beats, b), 1, len(beats) - 1)
+    return float((np.minimum(np.abs(b - beats[j - 1]), np.abs(b - beats[j])) < 0.025).mean())
+
+
 def bar_phase(beats: np.ndarray, kicks: np.ndarray, bt_downbeats: np.ndarray,
               meter: int) -> tuple[int, str, list[int], list[int]]:
     """The downbeat's place among the beats: the kick's re-entries if they are enough
@@ -305,9 +322,11 @@ def find(sharp: np.ndarray, kicks: np.ndarray, onsets: tuple[np.ndarray, np.ndar
     `force` ("lattice" or "tracked") is for measuring one source against the other."""
     meter, meter_agree = meter_of(bt)
     bt_period = float(np.median(np.diff(bt["beats"]))) if len(bt["beats"]) > 1 else float("nan")
+    gaps = np.diff(bt["beats"])
     out: dict = {"meter": meter, "meter_agreement": meter_agree,
                  "beat_this": {"tempo": 60.0 / bt_period if np.isfinite(bt_period) else None,
-                               "beats": int(len(bt["beats"])), "downbeats": int(len(bt["downbeats"]))}}
+                               "beats": int(len(bt["beats"])), "downbeats": int(len(bt["downbeats"])),
+                               "steady": float(np.mean(np.abs(gaps / bt_period - 1) < 0.05)) if len(gaps) else 0.0}}
 
     lat = None
     if len(sharp) >= MIN_SHARP and np.isfinite(bt_period) and force != "tracked":
@@ -320,8 +339,15 @@ def find(sharp: np.ndarray, kicks: np.ndarray, onsets: tuple[np.ndarray, np.ndar
             lat = fit_grid(sharp, kicks, duration, div * spacing, div=div, meter=meter)
             lat["on_lattice"] = lat["sharp_used"] / len(sharp)
             lat["div"] = div
+            lat["beat_this_agrees"] = agreement(bt["beats"], lat["beats"], sharp)
             out["lattice"] = {k: v for k, v in lat.items() if k not in ("beats", "downbeats")}
-    if lat is not None and (lat["on_lattice"] >= GATE or force == "lattice"):
+    # Beat This! may veto a lattice only when its own beats are steady. On TIDAL CORE with
+    # no drums or bass its beats were steady for 59 % of gaps and agreed with 33 % of a
+    # lattice that was exact (every true beat, 0.4 ms); vetoed, the song got its beats.
+    # No song yet has needed the veto - it is kept because it is independent and cheap.
+    steady = out["beat_this"]["steady"]
+    trusted = lat is not None and lat["on_lattice"] >= GATE and (steady < BT_STEADY or lat["beat_this_agrees"] >= BT_GATE)
+    if lat is not None and (trusted or force == "lattice"):
         beats, source = lat["beats"], "lattice"
     elif len(bt["beats"]) >= 8:
         t, a = onsets

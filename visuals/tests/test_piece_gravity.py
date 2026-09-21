@@ -724,3 +724,22 @@ def test_a_part_that_never_moves_is_dead():
                          np.stack([np.zeros(n), live], axis=1).astype(np.float32), [], n / 120.0)
     assert scorecard._moves(ch, ("uVoice",)) == 0.0
     assert scorecard._moves(ch, ("uKickA",)) > 0.9
+
+
+@pytest.mark.parametrize("sr", [44100, 48000, 22050])
+def test_attacks_are_on_time_at_any_sample_rate(sr):
+    """At 44.1 kHz the envelope was stepped 44 samples at a time and called a millisecond:
+    every event 0.23 % early, 0.65 s by the end of a five-minute song."""
+    # a click every ~0.3 s to the end (picking is relative to the loudest 1 % of rises, so
+    # they must be more than 1 % of the signal), each off any sample grid
+    truth = 1.0 + 0.3001 * np.arange(990) + 0.00007 * (np.arange(990) % 7)
+    rng = np.random.default_rng(0)
+    x = 0.002 * rng.standard_normal(int(300.0 * sr))
+    n = int(6 * 0.015 * sr)
+    burst = np.sin(2 * np.pi * 3000.0 * np.arange(n) / sr) * np.exp(-np.arange(n) / (0.015 * sr))
+    for t in truth:
+        i = int(round(t * sr))
+        x[i:i + n] += burst
+    got = listen.pick_onsets(listen.power_env(x, sr, 120), min_gap=0.05, sensitivity=0.2)
+    assert len(got) == len(truth) and np.abs(got.t - truth).max() < 0.002
+    assert len(listen.power_env(x, sr, 120)) == listen.env_length(len(x), sr)

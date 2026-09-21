@@ -76,6 +76,15 @@ class Section:
         return self.bar1 - self.bar0
 
 
+def drive_at(pulses: np.ndarray) -> int:
+    """How many strong pulses make a bar drive, for this song: three quarters of what a bar
+    has when the pulse is playing, rounded. Four on the floor gives 3, as it always was; a
+    half-time kick, two to a bar, gives 2 (at a fixed 3, Shattered Voices had no bar that
+    drove though its kick played in 97 % of them)."""
+    playing = pulses[pulses > 0]
+    return max(1, int(np.floor(0.75 * np.median(playing) + 0.5))) if len(playing) else 3
+
+
 def bar_table(a: dict, duration: float) -> dict[str, np.ndarray]:
     """Per bar: what is playing. Bar 0 starts at the first downbeat at or before 0."""
     t = a["bar_t"]
@@ -91,7 +100,7 @@ def bar_table(a: dict, duration: float) -> dict[str, np.ndarray]:
 
     kicks = count("kick", 0.5)
     sub, loud = mean("sub"), mean("loud")
-    state = np.where(loud < 0.30, 3, np.where(kicks >= 3, 0, np.where(sub < 0.06, 2, 1)))
+    state = np.where(loud < 0.30, 3, np.where(kicks >= drive_at(kicks), 0, np.where(sub < 0.06, 2, 1)))
     return {"t": t, "kicks": kicks, "hats": count("hat", 0.25), "snares": count("snare", 0.30),
             "notes": count("note", 0.25), "voice": mean("voice"), "sub": sub, "loud": loud,
             "bright": mean("bright"), "state": state}

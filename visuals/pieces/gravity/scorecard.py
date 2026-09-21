@@ -26,6 +26,18 @@ from .track import Track
 
 PASS, WARN, FAIL, INFO = "pass", "warn", "fail", "info"
 
+# Each part's own channels: what it alone moves. (A role in render.ROLES also lists
+# channels others move - the planets' lean answers the kick and their own idle dance - so
+# "did any of them move" never finds a dead part.)
+OWN = {
+    "pulse": ("uKickA", "uSunPulse", "uKickE"),
+    "ring": tuple(f"uRingA{k}" for k in range(direct.N_RINGS)),
+    "stars": ("uHatA", "uHatE0", "uHatE1", "uHatE2"),
+    "corona": ("uBass",) + tuple(f"uPromA{k}" for k in range(4)),
+    "planets": tuple(f"uNoteA{k}" for k in range(direct.N_SATS)),
+    "heart": ("uVoice", "uSyllA", "uSyllE"),
+}
+
 # The theme's parts, and what plays each until casting decides otherwise: the event
 # kind, the stem it is heard in, and the channels (render.ROLES) that move with it.
 PARTS = {
@@ -88,8 +100,13 @@ def listening(got: dict) -> list[Line]:
         b = a["bt_beats"] + late
         j = np.clip(np.searchsorted(beats, b), 1, len(beats) - 1)
         share = float((np.minimum(np.abs(b - beats[j - 1]), np.abs(b - beats[j])) < 0.025).mean())
-        out.append(Line("listening", "Beat This! agrees", f"{share:.2f} of its beats within 25 ms (after its {1000 * -late:.0f} ms lateness)",
-                        ">= 0.80", _check(share >= 0.8, WARN)))
+        steady = g.get("beat_this", {}).get("steady", 1.0)
+        if steady < grid.BT_STEADY:
+            out.append(Line("listening", "Beat This! agrees", f"{share:.2f} of its beats within 25 ms; not a referee here: "
+                            f"its beats are steady for only {steady:.2f} of gaps"))
+        else:
+            out.append(Line("listening", "Beat This! agrees", f"{share:.2f} of its beats within 25 ms (after its {1000 * -late:.0f} ms lateness)",
+                            ">= 0.80", _check(share >= 0.8, WARN)))
     pres = m.get("presence", {})
     for s in STEMS:
         p = pres.get(s)
@@ -123,10 +140,11 @@ def casting(got: dict, ch: direct.Channels) -> list[Line]:
     out = []
     for part, (kind, stem, role) in PARTS.items():
         c = cast.get(part, {"source": stem, "why": "by stem name"})
-        moves = _moves(ch, render.ROLES[role])
-        plays = float(np.mean(a[f"present_{c['source']}"])) if f"present_{c['source']}" in a else float("nan")
+        moves = _moves(ch, OWN[part])
+        plays = float(np.mean(a[f"present_{c['source']}"])) if f"present_{c['source']}" in a else None
         n_ev = c.get("events", len(a.get(f"ev_{kind}_t", [])))
-        value = f"{c['source']} ({c.get('why', '')}): plays in {plays:.2f} of bars, {n_ev} events; moves in {moves:.2f} of the song"
+        where = f"plays in {plays:.2f} of bars" if plays is not None else f"from the {c['source']}"
+        value = f"{c['source']} ({c.get('why', '')}): {where}, {n_ev} events; moves in {moves:.2f} of the song"
         if c.get("silent"):
             out.append(Line("casting", part, f"silent: {c.get('why', '')}", "", WARN, {"moves": moves}))
         else:
@@ -138,16 +156,20 @@ def casting(got: dict, ch: direct.Channels) -> list[Line]:
 # ------------------------------------------------------------------- structure
 
 
-def structure(got: dict, ch: direct.Channels) -> list[Line]:
+def structure(got: dict, ch: direct.Channels, cast_got: dict | None = None) -> list[Line]:
+    """`cast_got` is the song as cast: the pulse's events are whatever plays the pulse."""
     m = got["meta"]
     secs = ch.sections or []
     states = [s.state for s in secs for _ in range(max(s.bar1 - s.bar0, 0))]
     share = {st: states.count(st) / max(len(states), 1) for st in ("drive", "float", "void", "silent")}
     out = [Line("structure", "sections", f"{len(secs)}; bars " + ", ".join(f"{k} {v:.2f}" for k, v in share.items()))]
-    pulse = ((ch.info or {}).get("cast", {}) if isinstance(ch.info, dict) else {}).get("pulse", {"source": "drums"})
-    pulse_plays = 0.0 if pulse.get("silent") else float(np.mean(got["arrays"].get(f"present_{pulse['source']}", [0])))
-    out.append(Line("structure", "drive", f"{share['drive']:.2f} of bars drive; the pulse's stem plays in {pulse_plays:.2f}",
-                    "drive >= half of where the pulse plays", _check(share["drive"] >= 0.5 * pulse_plays, WARN)))
+    a = (cast_got or got)["arrays"]
+    kicks = a["ev_kick_t"][a["ev_kick_amp"] > 0.5]
+    bars = a["bar_t"]
+    pulse_plays = (len(np.unique(np.clip(np.searchsorted(bars, kicks, side="right") - 1, 0, len(bars) - 1))) / len(bars)
+                   if len(kicks) and len(bars) else 0.0)
+    out.append(Line("structure", "drive", f"{share['drive']:.2f} of bars drive; the pulse strikes in {pulse_plays:.2f} of them",
+                    "drive >= half of where the pulse strikes", _check(share["drive"] >= 0.5 * pulse_plays, WARN)))
     out.append(Line("structure", "re-entries", f"{len(ch.drops)}", ">= 1", _check(len(ch.drops) >= 1, WARN)))
     acts = getattr(ch, "acts", []) or []
     out.append(Line("structure", "acts", f"{len(acts)}: " + " ".join(x.function for x in acts)))
@@ -264,12 +286,13 @@ def build(track: Track, got: dict, ch: direct.Channels, with_render: bool = Fals
     from .make import modelled
 
     reference = Track.resolve().out("cosmos")
+    cast_got = cast_.apply(got, modelled(track, got, verbose=False))[0]
     lines = listening(got)
     cast = casting(got, ch)
-    lines += cast + structure(got, ch) + picture(ch, reference)
+    lines += cast + structure(got, ch, cast_got) + picture(ch, reference)
     if with_render:
         # judged by what each part was given: on an instrumental the heart's notes are the lead's
-        lines += rendered(cast_.apply(got, modelled(track, got, verbose=False))[0], ch, cast)
+        lines += rendered(cast_got, ch, cast)
     fails = [f"{ln.group}/{ln.name}" for ln in lines if ln.verdict == FAIL]
     warns = [f"{ln.group}/{ln.name}" for ln in lines if ln.verdict == WARN]
     verdict = f"fail: {', '.join(fails)}" if fails else ("pass" if not warns else f"pass, {len(warns)} warnings")

@@ -35,7 +35,7 @@ from .grid import fit_grid, latency  # noqa: F401  (the grid is grid.py's; kept 
 
 RATE = 120          # the grid streams live on; matches visuals.listen.RATE
 ENV_RATE = 1000     # envelopes used for timing attacks
-VERSION = 9          # 8: the grid is found (grid.py); 9: stems that are not playing are silent
+VERSION = 13         # 8: grid found; 9: absent stems silent; 10: fallback onsets; 11: no leakage in the grid; 12: any sample rate; 13: Beat This! a referee only when steady
 
 STEMS = ("drums", "bass", "other", "vocals")
 # Which stem each kind of event is heard in.
@@ -80,8 +80,15 @@ def power_env(x: np.ndarray, sr: int, fc: float) -> np.ndarray:
     onset time rather than one that is early by half a window.
     """
     p = band(x * x, sr, None, fc, order=2)
-    step = sr // ENV_RATE
-    return np.sqrt(np.maximum(p[::step], 0.0))
+    # Sampled at exactly ENV_RATE. A step of sr // ENV_RATE samples is 44 at 44.1 kHz, which
+    # made every "millisecond" 0.998 ms and every event 0.23 % early: 0.65 s by five minutes.
+    idx = np.round(np.arange(env_length(len(x), sr)) * (sr / ENV_RATE)).astype(np.int64)
+    return np.sqrt(np.maximum(p[np.minimum(idx, len(p) - 1)], 0.0))
+
+
+def env_length(samples: int, sr: int) -> int:
+    """How many ENV_RATE samples an envelope of `samples` audio samples has."""
+    return int(np.ceil(samples * ENV_RATE / sr))
 
 
 def trailing_max(x: np.ndarray, width: int) -> np.ndarray:
@@ -286,22 +293,38 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     t_bt = time.time()
     bt = grid_.tracked_beats(mix, sr)
     say(f"Beat This!: {len(bt['beats'])} beats, {len(bt['downbeats'])} downbeats  ({time.time() - t_bt:.0f}s)")
-    sharp = np.sort(np.concatenate([hat.t[hat.amp > 0.5], snare.t[snare.amp > 0.8]]))
-    strong_kicks = kick.t[kick.amp > 0.5]
+    # Only what is really playing may say where the grid is. There are no bars yet, so
+    # presence is judged on 2 s windows: Demucs' leakage of absent drums has "hats" too,
+    # and on Gravity without its drums they made a lattice at 124.72 BPM that 67 % of
+    # them sat on (Beat This! agreed with 12 % of it).
+    win = np.arange(0.0, duration, 2.0)
+    drums_near = presence(stem["drums"], mix, sr, win, duration)["near"]
+    other_near = presence(stem["other"], mix, sr, win, duration)["near"]
+    real = lambda ev, near: near_playing(ev.t, win, near)
+    hat_r, snare_r, kick_r, note_r = real(hat, drums_near), real(snare, drums_near), real(kick, drums_near), real(note, other_near)
+    # (The synths' attacks were tried as a lattice for songs with no drums: 21-48 % of them
+    # sit within 4 ms of the true one, and their accents did not find the beat. Not used.)
+    sharp = np.sort(np.concatenate([hat.t[hat_r & (hat.amp > 0.5)], snare.t[snare_r & (snare.amp > 0.8)]]))
+    lattice_from = "hats and claps"
+    strong_kicks = kick.t[kick_r & (kick.amp > 0.5)]
     # Snap tracked beats only to attacks with no lag of their own - a raw kick reads
     # 7-24 ms late and would drag beats with it - unless the song has too few of them.
-    if len(hat) + len(snare) >= 0.5 * len(bt["beats"]):
-        onsets = (np.concatenate([hat.t, snare.t]), np.concatenate([hat.amp, snare.amp]))
+    if hat_r.sum() + snare_r.sum() >= 0.5 * len(bt["beats"]):
+        onsets = (np.concatenate([hat.t[hat_r], snare.t[snare_r]]), np.concatenate([hat.amp[hat_r], snare.amp[snare_r]]))
     else:
-        onsets = (np.concatenate([note.t, bass.t, kick.t]), np.concatenate([note.amp, bass.amp, kick.amp]))
+        # the synths' attacks: a bass line is often off the beat, and its cluster was taken
+        # for Beat This!'s lateness (-78 ms on Gravity without drums; it is late by 14-38)
+        onsets = (note.t[note_r], note.amp[note_r])
     grid = grid_.find(sharp, strong_kicks, onsets, bt, duration)
+    grid["lattice_from"] = lattice_from
     beats, downbeats = grid["beats"], grid["downbeats"]
     period, meter = grid["period"], grid["meter"]
     lat = grid.get("lattice", {})
     say(f"grid: {grid['tempo']:.4f} bpm in {meter} ({grid['source']}); first beat at {1000 * grid['t0']:.1f} ms; "
-        + (f"{lat['sharp_used']} of {len(sharp)} hats+claps within 4 ms ({lat['on_lattice']:.2f}), "
+        + (f"{lat['sharp_used']} of {len(sharp)} {lattice_from} within 4 ms ({lat['on_lattice']:.2f}), "
+           f"Beat This! agreeing {lat.get('beat_this_agrees', float('nan')):.2f}, "
            f"{lat['sharp_residual_ms']:.2f} ms rms; drift per 30 s {lat['drift_ms_per_30s']} ms; "
-           if lat else f"no lattice ({len(sharp)} hats+claps); ")
+           if lat else f"no lattice ({len(sharp)} {lattice_from}); ")
         + f"bar phase from {grid['bar_phase_from']} (kick {grid['bar_phase_votes']}, "
           f"Beat This! {grid['beat_this_downbeat_votes']})")
     beat_w = int(round(period * ENV_RATE))
@@ -320,7 +343,7 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     bars = downbeats[(downbeats > -period) & (downbeats < duration)]
     pres = {name: presence(stem[name], mix, sr, bars, duration) for name in STEMS}
     gate = {name: bar_gate(pres[name]["near"], bars, n, period) for name in STEMS}
-    n_env = -(-len(mix) // (sr // ENV_RATE))            # the length power_env gives
+    n_env = env_length(len(mix), sr)
     gate_env = {name: np.interp(np.arange(n_env) / ENV_RATE, np.arange(n) / RATE, gate[name])
                 for name in STEMS}
     say("playing, share of bars: " + ", ".join(f"{k} {v['playing'].mean():.2f}" for k, v in pres.items()))
@@ -477,6 +500,26 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
         out[f"ev_{k}_amp"] = ev.amp[keep].astype(np.float32)
     out["ev_note_pitch"] = note_pitch.astype(np.float32)
     say("events dropped where their stem is not playing: " + ", ".join(f"{k} {v}" for k, v in dropped.items() if v))
+
+    # --- what can play a part whose instrument is missing (cast.py) ---------------
+    # A song with no drums still has a low end that lands on the beat, accents in the
+    # middle and air at the top; a song with no bass still has the synths' low notes.
+    spare = {
+        "mixlow": pick_onsets(power_env(band(mix, sr, None, 140), sr, 45), min_gap=0.16, sensitivity=0.22),
+        "mixmid": pick_onsets(power_env(band(mix, sr, 180, 4500), sr, 90), min_gap=0.11, sensitivity=0.22),
+        "mixhi": pick_onsets(power_env(band(mix, sr, 7000, None), sr, 120), min_gap=0.055, sensitivity=0.10),
+        "otherhi": pick_onsets(power_env(band(stem["other"], sr, 7000, None), sr, 120), min_gap=0.055, sensitivity=0.10),
+    }
+    # the low band fills slowly, as a kick's does: measured against the lattice, when there is one
+    low_lag = latency(spare["mixlow"].t[spare["mixlow"].amp > 0.5], beats, 1) if on_lattice else 0.0
+    spare["mixlow"] = Onsets(spare["mixlow"].t - low_lag, spare["mixlow"].amp)
+    keep = near_playing(spare["otherhi"].t, bars, pres["other"]["near"])
+    spare["otherhi"] = Onsets(spare["otherhi"].t[keep], spare["otherhi"].amp[keep])
+    for k, ev in spare.items():
+        out[f"ev_{k}_t"] = ev.t.astype(np.float64)
+        out[f"ev_{k}_amp"] = ev.amp.astype(np.float32)
+    olow = power_env(band(stem["other"], sr, None, 250), sr, 12)
+    out["other_low"] = to_grid(unit(olow, 5, 99) * gate_env["other"][: len(olow)], ENV_RATE, n)
     for name in STEMS:
         out[f"present_{name}"] = pres[name]["playing"]
         out[f"near_{name}"] = pres[name]["near"]
@@ -492,7 +535,7 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     meta = {"version": VERSION, "duration": duration, "rate": RATE, "n": n,
             "tempo": grid["tempo"], "period": period, "meter": meter,
             "grid": {k: v for k, v in grid.items() if k not in ("beats", "downbeats")},
-            "lag_ms": {"kick": 1000 * kick_lag, "bass_note": 1000 * bass_lag,
+            "lag_ms": {"kick": 1000 * kick_lag, "bass_note": 1000 * bass_lag, "mixlow": 1000 * low_lag,
                        "note": 1000 * note_lag},
             "presence": {name: {"playing": float(pres[name]["playing"].mean()), "dropped": {
                 k: v for k, v in dropped.items() if OWNER[k] == name}} for name in STEMS}}

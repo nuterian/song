@@ -16,9 +16,24 @@ def _got(seconds=60.0, vocals=0.0, rng=None):
     for kind, rate in (("kick", 2), ("snare", 1), ("hat", 4), ("bass_note", 3), ("note", 6), ("syllable", 3 if vocals else 0)):
         a[f"ev_{kind}_t"] = ev(kind, rate)
         a[f"ev_{kind}_amp"] = np.ones(len(a[f"ev_{kind}_t"]), np.float32)
-    meta = {"period": 0.5, "duration": seconds, "presence": {
+    beats = 0.5 * np.arange(int(seconds / 0.5) + 1)
+    a.update({"beats": beats, "downbeats": beats[::4], "bar_t": beats[::4], "loud": np.full(n, 0.8, np.float32),
+              "other_low": np.full(n, 0.4, np.float32)})
+    for key in ("mixlow", "mixmid", "mixhi", "otherhi"):
+        a[f"ev_{key}_t"], a[f"ev_{key}_amp"] = np.zeros(0), np.zeros(0, np.float32)
+    meta = {"period": 0.5, "duration": seconds, "meter": 4, "presence": {
         "drums": {"playing": 0.9}, "bass": {"playing": 0.9}, "other": {"playing": 1.0}, "vocals": {"playing": vocals}}}
     return {"arrays": a, "meta": meta}
+
+
+def _no(g, *stems):
+    """Take stems away, as presence would have: not playing, and no events of theirs."""
+    own = {"drums": ("kick", "snare", "hat"), "bass": ("bass_note",), "other": ("note",), "vocals": ("syllable",)}
+    for s_ in stems:
+        g["meta"]["presence"][s_]["playing"] = 0.0
+        for k in own[s_]:
+            g["arrays"][f"ev_{k}_t"], g["arrays"][f"ev_{k}_amp"] = np.zeros(0), np.zeros(0, np.float32)
+    return g
 
 
 def _lead(seconds=60.0, covers=0.8):
@@ -54,12 +69,68 @@ def test_nothing_to_sing_and_no_lead_is_silent_with_the_reason():
     assert sheet["heart"]["silent"] and "no lead line" in sheet["heart"]["why"]
 
 
-def test_a_part_whose_stem_is_absent_is_silent_not_fed_leakage():
-    g = _got()
-    g["meta"]["presence"]["drums"]["playing"] = 0.0
+def test_with_nothing_to_stand_in_a_missing_part_is_silent_not_fed_leakage():
+    g = _no(_got(), "drums", "bass")
+    g["arrays"]["loud"][:] = 0.0                          # not even a beat to fall back on
     _, _, sheet = cast.apply(g, (_lead(), {}))
     for part in ("pulse", "ring", "stars"):
         assert sheet[part]["silent"] and "drums plays in 0.00" in sheet[part]["why"]
+
+
+def test_no_drums_the_pulse_is_the_bass_on_the_beat():
+    g = _no(_got(), "drums")
+    beats = g["arrays"]["beats"]
+    g["arrays"]["ev_bass_note_t"] = np.sort(np.concatenate([beats[::2] + 0.01, beats[1::2] + 0.23]))   # half on, half off
+    g["arrays"]["ev_bass_note_amp"] = np.ones(len(g["arrays"]["ev_bass_note_t"]), np.float32)
+    got, _, sheet = cast.apply(g, (_lead(), {}))
+    assert sheet["pulse"]["why"] == "bass attacks on the beat" and sheet["pulse"]["stand_in"]
+    assert np.allclose(got["arrays"]["ev_kick_t"], beats[::2] + 0.01)
+
+
+def test_no_drums_no_bass_the_pulse_is_the_low_end_then_the_beat_itself():
+    g = _no(_got(), "drums", "bass")
+    beats = g["arrays"]["beats"]
+    g["arrays"]["ev_mixlow_t"], g["arrays"]["ev_mixlow_amp"] = beats[::4] + 0.005, np.ones(len(beats[::4]), np.float32)
+    got, _, sheet = cast.apply(g, (_lead(), {}))
+    assert sheet["pulse"]["why"] == "the mix's low end on the beat"
+    g = _no(_got(), "drums", "bass")
+    got, _, sheet = cast.apply(g, (_lead(), {}))
+    assert sheet["pulse"]["why"] == "the beat itself, small" and sheet["pulse"]["source"] == "grid"
+    amp = got["arrays"]["ev_kick_amp"]
+    assert amp.max() == np.float32(0.6) and np.isclose(amp.min(), 0.35)          # small, the one a little stronger
+
+
+def test_no_drums_the_ring_is_the_backbeat_accents_and_rarer():
+    g = _no(_got(), "drums")
+    beats = g["arrays"]["beats"]
+    rng = np.random.default_rng(3)
+    t = np.sort(np.concatenate([beats + 0.003, beats + 0.25]))            # accents on every beat, and between
+    g["arrays"]["ev_mixmid_t"], g["arrays"]["ev_mixmid_amp"] = t, rng.uniform(0.2, 1.0, len(t)).astype(np.float32)
+    got, _, sheet = cast.apply(g, (_lead(), {}))
+    assert sheet["ring"]["stand_in"]
+    rt = got["arrays"]["ev_snare_t"]
+    pos = np.round((rt - 0.003) / 0.5).astype(int) % 4
+    assert set(pos.tolist()) <= {1, 3}                                   # 2 and 4, never the one or the offbeats
+    assert len(rt) <= 0.55 * len(beats) / 2                              # the stronger half of the backbeats
+
+
+def test_no_bass_the_corona_is_the_synths_low_notes():
+    g = _no(_got(), "bass")
+    t = np.arange(0.0, 60.0, 0.25)
+    midi = np.where(np.arange(len(t)) % 3 == 0, 45, 72).astype(float)   # a low line under a high one
+    mod = ({**_lead(), "other_t": t, "other_end": t + 0.2, "other_midi": midi, "other_amp": np.ones(len(t))}, {})
+    got, m, sheet = cast.apply(g, mod)
+    assert sheet["corona"]["stand_in"] and "low notes" in sheet["corona"]["why"]
+    assert np.all(m[0]["bass_midi"] == 45) and len(got["arrays"]["ev_bass_note_t"]) == int(np.sum(midi == 45))
+    assert np.array_equal(got["arrays"]["bass"], g["arrays"]["other_low"])
+
+
+def test_drive_is_this_songs_pulse_not_four_on_the_floor():
+    from visuals.pieces.gravity import decide
+
+    assert decide.drive_at(np.array([4, 4, 4, 3, 0, 0, 4, 4.0])) == 3              # four on the floor: as it was
+    assert decide.drive_at(np.array([2, 2, 2, 1, 0, 2, 2.0])) == 2                 # half time
+    assert decide.drive_at(np.zeros(8)) == 3
 
 
 def test_the_lead_line_is_phrases_not_flicker():

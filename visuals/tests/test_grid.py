@@ -135,3 +135,15 @@ def test_the_bar_phase_comes_from_the_kick_only_when_it_is_sure(votes, expect):
     phase, source, kv, _ = grid.bar_phase(beats, beats[np.array(idx)], beats[2::4], 4)
     assert kv == votes and source == expect
     assert phase == (0 if expect == "kick re-entries" else 2)
+
+
+def test_an_unsteady_beat_tracker_cannot_veto_a_good_lattice():
+    """TIDAL CORE with no drums or bass: Beat This! wandered (steady on 59 % of its gaps),
+    agreed with a third of an exact lattice, and the song was given its wandering beats."""
+    rng = np.random.default_rng(8)
+    beats, sharp, kicks = half_time(128.0, 60, rng)
+    bt = fake_beat_this(beats, 4, 0.02, rng)
+    bt["beats"] = np.sort(bt["beats"] + rng.choice([0.0, 0.12, -0.12, 0.23], len(bt["beats"])))   # lost, a sixteenth off, half a beat off
+    g = grid.find(sharp, kicks, (sharp, np.ones(len(sharp))), bt, beats[-1] + 1)
+    assert g["beat_this"]["steady"] < grid.BT_STEADY and g["lattice"]["beat_this_agrees"] < grid.BT_GATE
+    assert g["source"] == "lattice" and abs(g["tempo"] - 128.0) < 0.01
