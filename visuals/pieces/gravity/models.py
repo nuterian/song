@@ -25,9 +25,9 @@ from pathlib import Path
 
 import numpy as np
 import soundfile as sf
-from scipy import signal
+from scipy import ndimage, signal
 
-VERSION = 1
+VERSION = 2          # 2: the synths' lead line, for the heart when nothing sings
 
 # ------------------------------------------------------------------ basic-pitch
 
@@ -131,6 +131,40 @@ def sung_melody(vocals: np.ndarray, sr: int) -> dict[str, np.ndarray]:
     return {"t": np.asarray(res.timestamps, dtype=np.float64),
             "hz": np.asarray(res.pitch_hz, dtype=np.float32),
             "conf": np.asarray(res.confidence, dtype=np.float32)}
+
+
+def _runs(mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    e = np.diff(np.concatenate([[0], mask.astype(int), [0]]))
+    return np.flatnonzero(e == 1), np.flatnonzero(e == -1)
+
+
+def lead_line(f0: dict, sure: float = 0.6, still: float = 0.3, bridge: float = 0.25,
+              shortest: float = 0.25, median: float = 0.07) -> dict:
+    """The most prominent single line in a busy stem, in phrases.
+
+    SwiftF0 on the synths alone is choppy (on Shattered Voices, 434 confident runs of a
+    median 0.13 s). A line starts where it is sure and carries on while it is fairly
+    sure; gaps under `bridge` are closed and fragments under `shortest` dropped. Tried
+    against a sung melody mixed into TIDAL CORE's synths: 78 % of its frames found on the
+    right pitch (60 % before; a skyline of basic-pitch's notes, 35-40 %), in phrases a
+    median 2.6 s long. Where nothing is sung it follows whichever synth line leads."""
+    t, hz, conf = f0["t"], np.asarray(f0["hz"], np.float64), np.asarray(f0["conf"], np.float64)
+    dt = float(np.median(np.diff(t))) if len(t) > 1 else 0.01
+    keep = np.zeros(len(t), bool)
+    for a, b in zip(*_runs(conf > still)):
+        if (conf[a:b] > sure).any():
+            keep[a:b] = True
+    for a, b in zip(*_runs(~keep)):
+        if 0 < a and b < len(t) and (b - a) * dt < bridge:
+            keep[a:b] = True
+    for a, b in zip(*_runs(keep)):
+        if (b - a) * dt < shortest:
+            keep[a:b] = False
+    st = 12.0 * np.log2(np.maximum(hz, 1.0) / 220.0)
+    idx = np.where(conf > still, np.arange(len(st)), 0)
+    np.maximum.accumulate(idx, out=idx)
+    st = ndimage.median_filter(st[idx], size=max(1, int(median / dt)) | 1)
+    return {"t": t, "st": st.astype(np.float32), "keep": keep}
 
 
 from .grid import tracked_beats  # noqa: E402,F401  (Beat This! runs while listening now)
@@ -267,6 +301,13 @@ def run(got: dict, audio: Path, stems_dir: Path, project: Path | None, model_dir
     f0 = sung_melody(stems["vocals"], ssr)
     arrays["f0_t"], arrays["f0_hz"] = f0["t"], f0["hz"]
     arrays["f0_conf"] = np.where(playing_at(a, "vocals", f0["t"]), f0["conf"], 0.0)
+
+    # the synths' lead line: what the heart follows when nothing sings (cast.py)
+    lead = lead_line(sung_melody(stems["other"], ssr))
+    lead["keep"] &= playing_at(a, "other", lead["t"])
+    arrays["lead_t"], arrays["lead_st"], arrays["lead_keep"] = lead["t"], lead["st"], lead["keep"]
+    meta["lead"] = {"covers": float(lead["keep"].mean())}
+    say(f"lead line in the synths: {meta['lead']['covers']:.2f} of the song")
 
     # chords, from everything pitched and nothing struck
     t0 = time.time()

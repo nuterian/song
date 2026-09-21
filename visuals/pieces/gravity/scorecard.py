@@ -125,7 +125,7 @@ def casting(got: dict, ch: direct.Channels) -> list[Line]:
         c = cast.get(part, {"source": stem, "why": "by stem name"})
         moves = _moves(ch, render.ROLES[role])
         plays = float(np.mean(a[f"present_{c['source']}"])) if f"present_{c['source']}" in a else float("nan")
-        n_ev = len(a.get(f"ev_{kind}_t", []))
+        n_ev = c.get("events", len(a.get(f"ev_{kind}_t", [])))
         value = f"{c['source']} ({c.get('why', '')}): plays in {plays:.2f} of bars, {n_ev} events; moves in {moves:.2f} of the song"
         if c.get("silent"):
             out.append(Line("casting", part, f"silent: {c.get('why', '')}", "", WARN, {"moves": moves}))
@@ -144,7 +144,8 @@ def structure(got: dict, ch: direct.Channels) -> list[Line]:
     states = [s.state for s in secs for _ in range(max(s.bar1 - s.bar0, 0))]
     share = {st: states.count(st) / max(len(states), 1) for st in ("drive", "float", "void", "silent")}
     out = [Line("structure", "sections", f"{len(secs)}; bars " + ", ".join(f"{k} {v:.2f}" for k, v in share.items()))]
-    pulse_plays = float(np.mean(got["arrays"].get("present_drums", [0])))
+    pulse = ((ch.info or {}).get("cast", {}) if isinstance(ch.info, dict) else {}).get("pulse", {"source": "drums"})
+    pulse_plays = 0.0 if pulse.get("silent") else float(np.mean(got["arrays"].get(f"present_{pulse['source']}", [0])))
     out.append(Line("structure", "drive", f"{share['drive']:.2f} of bars drive; the pulse's stem plays in {pulse_plays:.2f}",
                     "drive >= half of where the pulse plays", _check(share["drive"] >= 0.5 * pulse_plays, WARN)))
     out.append(Line("structure", "re-entries", f"{len(ch.drops)}", ">= 1", _check(len(ch.drops) >= 1, WARN)))
@@ -259,12 +260,16 @@ def frame_times(ch: direct.Channels, frames: int = 120, size: tuple[int, int] = 
 
 
 def build(track: Track, got: dict, ch: direct.Channels, with_render: bool = False) -> dict:
+    from . import cast as cast_
+    from .make import modelled
+
     reference = Track.resolve().out("cosmos")
     lines = listening(got)
     cast = casting(got, ch)
     lines += cast + structure(got, ch) + picture(ch, reference)
     if with_render:
-        lines += rendered(got, ch, cast)
+        # judged by what each part was given: on an instrumental the heart's notes are the lead's
+        lines += rendered(cast_.apply(got, modelled(track, got, verbose=False))[0], ch, cast)
     fails = [f"{ln.group}/{ln.name}" for ln in lines if ln.verdict == FAIL]
     warns = [f"{ln.group}/{ln.name}" for ln in lines if ln.verdict == WARN]
     verdict = f"fail: {', '.join(fails)}" if fails else ("pass" if not warns else f"pass, {len(warns)} warnings")

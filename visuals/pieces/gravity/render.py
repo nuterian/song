@@ -33,11 +33,14 @@ def shader_module(style: str | None = None):
 
 
 def bake(got: dict, track: Track) -> direct.Channels:
-    """The channels the current style's shader reads."""
+    """The channels the current style's shader reads, from the song as cast (cast.py)."""
+    from . import cast
     from .make import modelled
 
-    mod = modelled(track, got, verbose=False)
-    return cosmos.bake(got, mod) if STYLE == "cosmos" else direct.direct(got, mod)
+    got, mod, sheet = cast.apply(got, modelled(track, got, verbose=False))
+    ch = cosmos.bake(got, mod) if STYLE == "cosmos" else direct.direct(got, mod)
+    ch.info = dict(ch.info or {}, cast=sheet)
+    return ch
 
 
 CATALOGUE = ROOT / "visuals" / "cache" / "catalogues" / "bsc5.dat"
