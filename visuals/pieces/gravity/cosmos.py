@@ -287,7 +287,7 @@ def bake(got: dict, mod: tuple[dict, dict] | None) -> direct.Channels:
     ch = direct.direct(got, mod)
     a, meta = got["arrays"], got["meta"]
     n, period = int(meta["n"]), float(meta["period"])
-    bar = 4 * period
+    bar = int(meta.get("meter", 4)) * period
     t = np.arange(n) / RATE
     col = {name: ch.data[:, i].astype(np.float64) for i, name in enumerate(ch.names)}
     extra: dict[str, tuple[str, np.ndarray]] = {}

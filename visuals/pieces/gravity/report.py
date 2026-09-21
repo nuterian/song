@@ -40,7 +40,7 @@ def print_models(got: dict, arrays: dict, meta: dict) -> None:
     print("key:", meta["key"]["name"], f"(fit {meta['key']['fit']:.2f})")
     ch = meta["chords"]
     print(f"chords: {len(ch)} spans; first twelve:", " ".join(c["chord"] for c in ch[:12]))
-    drops = direct.find_drops(a, lmeta["period"], lmeta["duration"])
+    drops = direct.find_drops(a, lmeta["period"], lmeta["duration"], int(lmeta.get("meter", 4)))
     sections = decide.find_sections(a, drops, lmeta["duration"])
     sim = arrays["clap_similarity"]
     names = list(decide.AXES)

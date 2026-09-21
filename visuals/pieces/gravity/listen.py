@@ -22,6 +22,7 @@ Stems come from a four-stem htdemucs run, once, from the repository's root venv
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,9 +30,12 @@ import numpy as np
 import soundfile as sf
 from scipy import ndimage, signal
 
+from . import grid as grid_
+from .grid import fit_grid, latency  # noqa: F401  (the grid is grid.py's; kept here by their old names)
+
 RATE = 120          # the grid streams live on; matches visuals.listen.RATE
 ENV_RATE = 1000     # envelopes used for timing attacks
-VERSION = 7
+VERSION = 8          # 8: the grid is found (grid.py), not assumed; Beat This! runs here
 
 STEMS = ("drums", "bass", "other", "vocals")
 
@@ -157,85 +161,7 @@ def pick_onsets(env: np.ndarray, min_gap: float, sensitivity: float,
     return Onsets(t, amp)
 
 
-# ------------------------------------------------------------------- beat grid
-
-
-def fit_grid(sharp: np.ndarray, kicks: np.ndarray, duration: float,
-             period_hint: float) -> dict:
-    """A constant-tempo grid through the sharp percussion, phased by the kick.
-
-    Hats and claps have attacks a millisecond long, so they say where the grid is.
-    `sharp` is fitted on a quarter-beat lattice by iterated least squares over the
-    inliers. The bar phase comes from where the kick re-enters after each long
-    rest: a drop lands on a downbeat, and on this track every one of them agrees.
-
-    The beat tracker's own grid is not used. On this track it sits half a beat
-    late - on the off-beat hat - and wanders by a frame.
-    """
-    T = period_hint
-    # Phase of the lattice at the hint, then refine period and phase together.
-    q = T / 4
-    z = np.exp(2j * np.pi * sharp / q).mean()
-    t0 = (np.angle(z) / (2 * np.pi)) * q
-    for tol in (0.012, 0.006, 0.004):
-        q = T / 4
-        idx = np.round((sharp - t0) / q)
-        r = sharp - (t0 + idx * q)
-        ok = np.abs(r) < tol
-        slope, icpt = np.polyfit(idx[ok], sharp[ok], 1)
-        T, t0 = 4 * slope, icpt
-    q = T / 4
-    idx = np.round((sharp - t0) / q)
-    resid = sharp - (t0 + idx * q)
-    ok = np.abs(resid) < 0.004
-
-    # t0 is on the quarter-beat lattice; move it onto a beat using the kicks, whose
-    # (late-reading) times still sit far closer to a beat than to any other quarter.
-    kq = np.round((kicks - t0) / q).astype(int)
-    t0 += q * int(np.bincount(kq % 4).argmax())
-    t0 -= T * np.floor(t0 / T)            # first beat at or after zero...
-    if t0 > T / 2:
-        t0 -= T                           # ...unless the file starts just after one
-
-    # Bar phase: kicks that follow at least two bars without one.
-    kb = np.round((kicks - t0) / T).astype(int)
-    re_entry = kb[1:][np.diff(kicks) > 2 * 4 * T * 0.9]
-    votes = np.bincount(re_entry % 4, minlength=4)
-    phase = int(votes.argmax())
-
-    n_beats = int(np.ceil((duration - t0) / T)) + 1
-    beats = t0 + T * np.arange(n_beats)
-    downbeats = beats[(np.arange(n_beats) - phase) % 4 == 0]
-
-    # Does the tempo drift? Mean residual of the sharp events in 30 s windows.
-    drift = [float(1000 * resid[ok & (sharp >= a) & (sharp < a + 30)].mean())
-             for a in range(0, int(duration), 30)
-             if (ok & (sharp >= a) & (sharp < a + 30)).sum() > 8]
-    return {
-        "beats": beats,
-        "downbeats": downbeats,
-        "period": float(T),
-        "tempo": float(60.0 / T),
-        "t0": float(t0),
-        "bar_phase": phase,
-        "bar_phase_votes": votes.tolist(),
-        "sharp_used": int(ok.sum()),
-        "sharp_residual_ms": float(1000 * resid[ok].std()),
-        "drift_ms_per_30s": [round(d, 2) for d in drift],
-    }
-
-
-def latency(ev_t: np.ndarray, beats: np.ndarray, division: int, limit: float = 0.06) -> float:
-    """Median distance of a stream's attacks from the lattice: the detector's lag.
-
-    A quantised part played by a machine is on the lattice. If its detected
-    attacks sit a steady 23 ms after it, that is how long this band's envelope
-    takes to get half way up, not where the part is.
-    """
-    q = (beats[1] - beats[0]) / division
-    r = ((ev_t - beats[0] + q / 2) % q) - q / 2
-    r = r[np.abs(r) < limit]
-    return float(np.median(r)) if len(r) > 20 else 0.0
+# ---------------------------------------------------------------------- clocks
 
 
 def beat_clock(t: np.ndarray, beats: np.ndarray) -> np.ndarray:
@@ -304,23 +230,45 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     snare_hi = power_env(band(stem["drums"], sr, 2500, 9000), sr, 90)
     snare_lo = power_env(band(stem["drums"], sr, 180, 1200), sr, 90)
 
-    # --- the grid, from the sharp percussion ------------------------------------
+    # Every attack the grid might be judged by, before the grid: the pitched ones too,
+    # for a song whose only regular attacks are notes.
+    bass = pick_onsets(power_env(stem["bass"], sr, 35), min_gap=0.10, sensitivity=0.18)
+    note = pick_onsets(power_env(band(stem["other"], sr, 300, None), sr, 60),
+                       min_gap=0.08, sensitivity=0.16)
+
+    # --- the grid (grid.py) --------------------------------------------------------
+    t_bt = time.time()
+    bt = grid_.tracked_beats(mix, sr)
+    say(f"Beat This!: {len(bt['beats'])} beats, {len(bt['downbeats'])} downbeats  ({time.time() - t_bt:.0f}s)")
     sharp = np.sort(np.concatenate([hat.t[hat.amp > 0.5], snare.t[snare.amp > 0.8]]))
     strong_kicks = kick.t[kick.amp > 0.5]
-    hint = float(np.median(np.diff(strong_kicks)[np.diff(strong_kicks) < 0.8]))
-    grid = fit_grid(sharp, strong_kicks, duration, hint)
+    # Snap tracked beats only to attacks with no lag of their own - a raw kick reads
+    # 7-24 ms late and would drag beats with it - unless the song has too few of them.
+    if len(hat) + len(snare) >= 0.5 * len(bt["beats"]):
+        onsets = (np.concatenate([hat.t, snare.t]), np.concatenate([hat.amp, snare.amp]))
+    else:
+        onsets = (np.concatenate([note.t, bass.t, kick.t]), np.concatenate([note.amp, bass.amp, kick.amp]))
+    grid = grid_.find(sharp, strong_kicks, onsets, bt, duration)
     beats, downbeats = grid["beats"], grid["downbeats"]
-    say(f"grid: {grid['tempo']:.4f} bpm, first beat at {1000 * grid['t0']:.1f} ms; "
-        f"{grid['sharp_used']} hats+claps within {grid['sharp_residual_ms']:.2f} ms rms; "
-        f"drift per 30 s window {grid['drift_ms_per_30s']} ms; bar phase votes {grid['bar_phase_votes']}")
-    period = grid["period"]
+    period, meter = grid["period"], grid["meter"]
+    lat = grid.get("lattice", {})
+    say(f"grid: {grid['tempo']:.4f} bpm in {meter} ({grid['source']}); first beat at {1000 * grid['t0']:.1f} ms; "
+        + (f"{lat['sharp_used']} of {len(sharp)} hats+claps within 4 ms ({lat['on_lattice']:.2f}), "
+           f"{lat['sharp_residual_ms']:.2f} ms rms; drift per 30 s {lat['drift_ms_per_30s']} ms; "
+           if lat else f"no lattice ({len(sharp)} hats+claps); ")
+        + f"bar phase from {grid['bar_phase_from']} (kick {grid['bar_phase_votes']}, "
+          f"Beat This! {grid['beat_this_downbeat_votes']})")
     beat_w = int(round(period * ENV_RATE))
+    div = int(lat.get("div", 4))
 
     # A kick's low band takes a while to fill; its click does not. Time the kick by
     # how late its band reads against the lattice, measured here rather than guessed.
-    kick_lag = latency(strong_kicks, beats, 1)
+    # Without a lattice there is nothing to measure it against.
+    on_lattice = grid["source"] == "lattice"
+    kick_lag = latency(strong_kicks, beats, 1) if on_lattice else 0.0
     kick = Onsets(kick.t - kick_lag, kick.amp)
-    say(f"kick band reads {1000 * kick_lag:.1f} ms late; corrected")
+    say(f"kick band reads {1000 * kick_lag:.1f} ms late; corrected" if on_lattice
+        else "kick lag not measured: no lattice")
 
     # --- sub: is there a floor under the song or not --------------------------
     sub_env = power_env(band(mix, sr, 25, 90), sr, 30)
@@ -338,8 +286,7 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     # reach the screen as an 11 Hz shimmer that nothing in the music asked for.
     bass_env = power_env(stem["bass"], sr, 12)
     out["bass"] = to_grid(unit(bass_env, 5, 99), ENV_RATE, n)
-    bass = pick_onsets(power_env(stem["bass"], sr, 35), min_gap=0.10, sensitivity=0.18)
-    bass_lag = latency(bass.t, beats, 4)
+    bass_lag = latency(bass.t, beats, div) if on_lattice else 0.0
     bass = Onsets(bass.t - bass_lag, bass.amp)
 
     # --- voice -----------------------------------------------------------------
@@ -374,9 +321,6 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     # --- other: synths, pads, leads -------------------------------------------
     oth_env = power_env(stem["other"], sr, 30)
     out["other"] = to_grid(unit(oth_env, 5, 99), ENV_RATE, n)
-    note = pick_onsets(power_env(band(stem["other"], sr, 300, None), sr, 60),
-                       min_gap=0.08, sensitivity=0.16)
-
     o22 = librosa.resample(stem["other"].astype(np.float32), orig_sr=sr, target_sr=22050)
     S = np.abs(librosa.stft(o22, n_fft=2048, hop_length=512))
     c_rate = 22050 / 512
@@ -401,7 +345,7 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     z = smooth(z.real, h_rate, period * 2) + 1j * smooth(z.imag, h_rate, period * 2)
     out["harmony"] = to_grid(np.unwrap(np.angle(z)), h_rate, n)
     out["harmony_clarity"] = to_grid(np.abs(z), h_rate, n)
-    note_lag = latency(note.t, beats, 4)
+    note_lag = latency(note.t, beats, div) if on_lattice else 0.0
     note = Onsets(note.t - note_lag, note.amp)
 
     # What pitch each note is: the strongest constant-Q bin in the 70 ms after its
@@ -474,9 +418,10 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     out["ev_snare_bright"] = (snare_hi[si] / np.maximum(snare_hi[si] + snare_lo[si], 1e-9)).astype(np.float32)
     out["beats"] = beats
     out["downbeats"] = downbeats
+    out["bt_beats"], out["bt_downbeats"] = bt["beats"], bt["downbeats"]
 
     meta = {"version": VERSION, "duration": duration, "rate": RATE, "n": n,
-            "tempo": grid["tempo"], "period": period,
+            "tempo": grid["tempo"], "period": period, "meter": meter,
             "grid": {k: v for k, v in grid.items() if k not in ("beats", "downbeats")},
             "lag_ms": {"kick": 1000 * kick_lag, "bass_note": 1000 * bass_lag,
                        "note": 1000 * note_lag}}

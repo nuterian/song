@@ -133,13 +133,7 @@ def sung_melody(vocals: np.ndarray, sr: int) -> dict[str, np.ndarray]:
             "conf": np.asarray(res.confidence, dtype=np.float32)}
 
 
-def tracked_beats(mix: np.ndarray, sr: int) -> dict[str, np.ndarray]:
-    from beat_this.inference import Audio2Beats
-
-    beats, downbeats = Audio2Beats(checkpoint_path="final0", device="cpu", dbn=False)(
-        mix.astype(np.float32), sr)
-    return {"beats": np.asarray(beats, dtype=np.float64),
-            "downbeats": np.asarray(downbeats, dtype=np.float64)}
+from .grid import tracked_beats  # noqa: E402,F401  (Beat This! runs while listening now)
 
 
 def chords(path: Path) -> list[dict]:
@@ -233,25 +227,25 @@ def run(got: dict, audio: Path, stems_dir: Path, project: Path | None, model_dir
     a, lmeta = got["arrays"], got["meta"]
     period, duration = float(lmeta["period"]), float(lmeta["duration"])
     arrays: dict[str, np.ndarray] = {}
-    meta: dict = {"version": VERSION}
+    meta: dict = {"version": VERSION, "listened": listened_key(lmeta)}
 
     mix, sr = load_stem(audio)
     stems = {name: load_stem(stems_dir / f"{name}.wav")[0] for name in ("bass", "other", "vocals")}
     ssr = load_stem(stems_dir / "bass.wav")[1]
 
-    # beats: a second opinion on the bar line, and only on the bar line
-    t0 = time.time()
-    tb = tracked_beats(mix, sr)
+    # beats: Beat This! ran while listening (the grid needs it); how far it agrees
+    meter = int(lmeta.get("meter", 4))
+    tb = {"beats": a["bt_beats"], "downbeats": a["bt_downbeats"]}
     beats = a["beats"]
     r = ((tb["beats"] - beats[0] + period / 2) % period) - period / 2
-    phase = np.round((tb["downbeats"] - a["downbeats"][0]) / period) % 4
+    phase = np.round((tb["downbeats"] - a["downbeats"][0]) / period) % meter
     meta["beat_this"] = {
         "tempo": float(60.0 / np.median(np.diff(tb["beats"]))),
         "median_offset_from_lattice_ms": float(1000 * np.median(r)),
         "within_25ms": float((np.abs(r) < 0.025).mean()),
         "downbeats_agreeing_with_kick_reentries": [int((phase == 0).sum()), int(len(phase))],
     }
-    say(f"Beat This!  {meta['beat_this']}  ({time.time() - t0:.0f}s)")
+    say(f"Beat This!  {meta['beat_this']}")
 
     # notes: what the model names, when the stems say
     for stem, rng, attacks in (("other", (36, 96), a["ev_note_t"]), ("bass", (24, 60), a["ev_bass_note_t"])):
@@ -282,7 +276,7 @@ def run(got: dict, audio: Path, stems_dir: Path, project: Path | None, model_dir
 
     # what each section sounds like
     t0 = time.time()
-    drops = direct.find_drops(a, period, duration)
+    drops = direct.find_drops(a, period, duration, meter)
     sections = decide.find_sections(a, drops, duration)
     prompts = [p for pair in decide.AXES.values() for p in pair]
     clap = clap_scores(mix, sr, [(s.start, s.end) for s in sections], prompts)
@@ -317,6 +311,12 @@ def run(got: dict, audio: Path, stems_dir: Path, project: Path | None, model_dir
 
 def cache_paths(cache: Path) -> tuple[Path, Path]:
     return cache / "models.npz", cache / "models.json"
+
+
+def listened_key(lmeta: dict) -> list:
+    """Which listening these models were run on: sections, and so CLAP's rows, follow the grid."""
+    return [lmeta.get("version"), round(float(lmeta["period"]), 9), round(float(lmeta["grid"].get("t0", 0.0)), 9),
+            int(lmeta.get("meter", 4))]
 
 
 def save(arrays: dict, meta: dict, cache: Path) -> None:

@@ -28,6 +28,8 @@ def modelled(track: Track, got: dict, force: bool = False, verbose: bool = True)
     from . import models
 
     mod = None if force else models.load_cached(track.cache)
+    if mod is not None and mod[1].get("listened") != models.listened_key(got["meta"]):
+        mod = None                      # run on another listening: its sections are stale
     if mod is None:
         arrays, meta = models.run(got, track.audio, track.stems_dir, track.project, MODELS, verbose=verbose)
         models.save(arrays, meta, track.cache)

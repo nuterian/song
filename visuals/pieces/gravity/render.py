@@ -34,7 +34,9 @@ def shader_module(style: str | None = None):
 
 def bake(got: dict, track: Track) -> direct.Channels:
     """The channels the current style's shader reads."""
-    mod = models.load_cached(track.cache)
+    from .make import modelled
+
+    mod = modelled(track, got, verbose=False)
     return cosmos.bake(got, mod) if STYLE == "cosmos" else direct.direct(got, mod)
 
 
@@ -247,13 +249,13 @@ def stage(got: dict, track: Track, out_dir: str | Path) -> Path:
 def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
     """plan.json + frames.bin + audio, in the format visuals/player already reads."""
     meta = got["meta"]
-    bar = 4 * meta["period"]
+    bar = int(meta.get("meter", 4)) * meta["period"]
     edges = [0.0] + [d["t"] for d in ch.drops if d["t"] > bar] + [ch.duration]
     sections = [{"index": i, "name": f"from bar {int(round(a / bar))}", "start": a, "end": b,
                  "scene": "gravity"} for i, (a, b) in enumerate(zip(edges[:-1], edges[1:]))]
     plan = {
         "version": 1, "track": track.slug, "duration": ch.duration, "tempo": meta["tempo"],
-        "meter": 4, "seed": 0, "grid": ch.header(), "per_frame": ["uTime"],
+        "meter": int(meta.get("meter", 4)), "seed": 0, "grid": ch.header(), "per_frame": ["uTime"],
         "sections": sections,
         "program": {"key": f"{track.slug}-{STYLE}",
                     "fragment": shader_module().fragment_source(shader.WEBGL_HEADER)},

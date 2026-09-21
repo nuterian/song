@@ -149,7 +149,7 @@ def trailing_max(x: np.ndarray, width: int) -> np.ndarray:
 # ------------------------------------------------------------------ structure
 
 
-def find_drops(a: dict, period: float, duration: float) -> list[dict]:
+def find_drops(a: dict, period: float, duration: float, meter: int = 4) -> list[dict]:
     """Downbeats where the floor comes back.
 
     At each downbeat: how much louder is the beat after it than the bar before it,
@@ -157,7 +157,7 @@ def find_drops(a: dict, period: float, duration: float) -> list[dict]:
     added, scaled so the biggest in the song is 1.
     """
     loud, floor = a["loud_db"], a["sub"]
-    bar = 4 * period
+    bar = meter * period
     found = []
     for d in a["downbeats"]:
         if d < bar or d > duration - bar:
@@ -210,7 +210,7 @@ def direct(got: dict, mod: tuple[dict, dict] | None = None) -> Channels:
     n, period, duration = int(meta["n"]), float(meta["period"]), float(meta["duration"])
     t = np.arange(n) / RATE
     beat_w = int(round(period * RATE))
-    bar = 4 * period
+    bar = int(meta.get("meter", 4)) * period
     cols: dict[str, tuple[str, np.ndarray]] = {}
     m_arr, m_meta = mod if mod is not None else ({}, {})
     tonic = int(m_meta.get("key", {}).get("tonic", 9))
@@ -389,7 +389,7 @@ def direct(got: dict, mod: tuple[dict, dict] | None = None) -> Channels:
     cols["uExposure"] = (LERP, follow(exposure, 0.02, 0.18))
 
     # --- per section: palette, layers, the plane ------------------------------------
-    drops = find_drops(a, period, duration)
+    drops = find_drops(a, period, duration, int(meta.get("meter", 4)))
     sections, info = decide.plan(a, drops, duration, mod)
     starts = np.array([s.start for s in sections])
     ramp = SECTION_RAMP_BARS * bar

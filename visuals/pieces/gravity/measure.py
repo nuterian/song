@@ -368,11 +368,12 @@ def smoothness(got: dict, track: Track) -> dict:
     for a step. Reported as the largest frame-to-frame change against the median one,
     overall and at each section boundary: in a ramp the boundary frame is an ordinary
     frame; in a cut it is tens of times the median."""
-    from . import models, render
+    from . import render
+    from .make import modelled
 
     video = render.render(got, track, track.out(render.STYLE) / "solo", start=0.0, duration=got["meta"]["duration"] - 0.01,
                           size=(640, 360), crf=18, solo="sections", quiet=True)
-    ch = direct.direct(got, models.load_cached(track.cache))
+    ch = direct.direct(got, modelled(track, got, verbose=False))
     step, prev = [], None
     keep: dict[int, np.ndarray] = {}
     wanted = {int(s_.start * 60) + d for s_ in ch.sections[1:] for d in (-480, 480)}
@@ -439,8 +440,8 @@ def main(got: dict, track: Track, video: str | None, start: float = 0.0, save: b
         except ValueError:
             pass
     a, meta = got["arrays"], got["meta"]
-    from . import models
-    ch = direct.direct(got, models.load_cached(track.cache))
+    from .make import modelled
+    ch = direct.direct(got, modelled(track, got, verbose=False))
     fps = probe_fps(video)
     sig = frame_signals(video)
     n = len(sig["lum"])
