@@ -908,3 +908,86 @@ detector's figure alongside.
 - Gravity-without-drums' tracked grid: 87 % of beats, 78 % of bars.
 - Frame time measured 8.3-9.8 ms at 1080p with the machine busy (QuickTime, Chrome);
   version 4.2 recorded 6.0. Inside the budget either way; not a regression (A/B).
+
+# M2: the words (`lyrics.py`, `player/lyrics.js`)
+
+Agreed with Jugal: subtle, elegant, never pulling the eye off the system; "just the right
+amount of attention". One line at a time, small (0.03 of the frame's height, 32 px at
+1080p), a light face letter-spaced, in warm off-white. No colour and no karaoke bar - the
+system keeps its real colours, and so do its words; the song is in how they move. A word
+lifts from 0.42 ink to full over the 90 ms before it is sung and peaks on it, then settles
+to 0.64, so what has been sung reads a little brighter than what is to come. A line eases
+in over 0.35 s, arriving on its first word, and out 0.5 s after its last; lines back to
+back dissolve into each other in the middle of the gap, never quicker than 0.16 s.
+Instrumental stretches are clean.
+
+**Where.** For each line and each camera, the first of 14 places in the frame that nothing
+crosses while the line is up: the Sun out to three radii (its corona can stand out that
+far) and each planet out to 2.5 (its rings and moons; four left too few places). Other
+things equal, the place the last line used. A line never moves while it is up. On
+Gravity, text comes within its margin of a body in 0.0 % of lyric moments on the static
+camera, 0.4 % on the hybrid and 2.7 % on the cinematic.
+
+**One definition.** `lyrics.ink` and `lyrics.opacity` say how bright a word and a line are
+at a moment; the player's copies are held to them by a test (Node, both sides). The player
+sets the words in percentages of the frame and container units, so they are right at any
+size. The first version slid each line in from the corner: a CSS transition animating from
+where the element was made. Transitions are gone; `seating` fixes a line's place when it
+appears, for as long as it is up, whatever the camera does.
+
+Words come from the song tool's timings: Gravity's hand-timed gold (34 lines, 182 words -
+the committed gold file lacks a sung chorus line), else the tool's own alignment. The
+mp4 burn-in waits for Jugal's look at them in the player.
+
+# The direction sheet (`sheet.py`)
+
+Everything the director decides about a song, in about fifty lines a person - or a small
+model, prompted - can read and change: who plays each part (`cast`), the bars where the
+floor comes back and how hard (`reentries`), the song cut into acts with a shot each and,
+for the close shots, a planet (`acts`), five dials with a range and a meaning (`feel`), and
+the words' settings (`lyrics`). What was heard is not in it - that is the song.
+
+**The default sheet is the video.** Baking from the sheet the director writes gives the
+same channels, byte for byte, as a bake with no sheet, on all nine songs of the test set;
+so everything the video does is in the sheet, and an edit to the sheet is an edit to the
+video. Tests hold that an edit changes what it names and little else: a shot moves only
+the cinematic camera and only near its act; a re-entry taken out is gone from the
+picture; `flares_every_bars` 6 gives a third as many flares. `validate` turns away
+anything outside the vocabulary with the reason ("the eclipse shot needs a subject",
+"acts must follow on, no gaps or overlaps").
+
+Sheets a person has edited are kept in `visuals/sheets/` (Gravity's and Shattered Voices'
+are there); any other song's is written beside its bundle and remade with it.
+
+## Editing by asking (`editor.py`)
+
+A request in words ("close on Saturn during the second chorus") goes to a model on this
+machine (Ollama), with the song as a person would describe it - its sections by name, in
+bars and minutes, the acts, moments, cast and dials, and what each part of the cast does in
+the picture - and comes back as edits from the sheet's five kinds: shot, cast, reentry,
+feel, lyrics. The answer is held to a JSON schema in which each kind has exactly its own
+fields, all given, and a part can only be given one of its own choices; every edit is then
+checked by `validate`, and a refused answer is shown back to the model, with why, once.
+
+`editor_eval` asks 20 requests with known right outcomes - 17 on Gravity, 3 on Shattered
+Voices, among them two that cannot be done ("let the drums play the heart", "make the sun
+blue") and one that is already so - and a request passes only if the sheet it leads to
+does what was asked and changes nothing else. An answer the checker refused fails, even
+where the sheet already had what was asked.
+
+| model | one loose shape (first run) | strict shapes | strict, parts described |
+|---|---|---|---|
+| gpt-oss:20b (13.8 GB) | 0/18 - see below | **20/20**, 6.6 s | **19/20**, 7.7 s |
+| qwen3.5:9b (6.6 GB) | 16/18, 13.1 s | 16/20, 12.0 s | 17/20, 10.7 s |
+| qwen3:8b (5.2 GB) | 16/18, 34.7 s | 15/20, 4.5 s | 16/20, 4.9 s |
+
+(median seconds a request, the model loaded.) The first run was unfair twice over: gpt-oss
+cannot answer with its thinking off - it returns nothing - and was asked that way; and
+qwen3:8b ran with another model still in memory. gpt-oss now thinks at its lowest level,
+and each model is run alone. With one loose shape for every edit the small models left
+fields out (a shot with no shot) and filled in fields of other edits, and qwen3.5 silenced
+every part of the cast while giving Saturn a close shot. Their failures now are the same
+kind, rarer: an edit nobody asked for ("a two-shot of the Sun and Jupiter" also silences
+the planets' rings), or the sheet restated whole. gpt-oss's one miss: asked for the drums
+to play the heart, it silenced the heart. **gpt-oss:20b is the default**; the others stay
+a `--model` away for a machine with less memory. A cold start adds about 20 s, loading it.

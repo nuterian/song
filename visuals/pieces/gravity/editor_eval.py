@@ -4,7 +4,9 @@ should have, on Gravity (whose sections have names) and Shattered Voices (which 
     python -m visuals.pieces.gravity.editor_eval [--models qwen3.5:9b qwen3:8b gpt-oss:20b]
 
 A request passes when the sheet it leads to - after validation - does what was asked and
-leaves the rest alone. A request that cannot be done passes when nothing is changed.
+leaves the rest alone. A request that cannot be done passes when nothing is changed; any
+other request fails if the model's answer was refused, even where the sheet already had
+what was asked (an answer refused twice changes nothing, and that is not the model's doing).
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ import argparse
 import json
 import os
 import time
+import urllib.request
 
 from . import editor, make, sheet as sheet_
 from .track import GRAVITY_AUDIO, Track
@@ -45,9 +48,13 @@ GRAVITY = [
                      (covers(a, sec(n, "Chorus 2"), ("eclipse", "intimate"), "saturn") and only(b, a, "acts"))),
     ("a two-shot of the Sun and Jupiter through the bridge",
      lambda b, a, n: covers(a, sec(n, "Bridge"), "intimate", "jupiter") and only(b, a, "acts")),
-    ("the planets should line up during the final chorus",
-     lambda b, a, n: (covers(a, sec(n, "Final Chorus"), "alignment") or (a is None and covers(b, sec(n, "Final Chorus"), "alignment", share=0.7)))
-                     and sum(x["shot"] == "alignment" for x in (a or b)["acts"]) == 1),
+    ("the planets should line up during the final chorus",           # already so, near enough
+     lambda b, a, n: (a is None and covers(b, sec(n, "Final Chorus"), "alignment", share=0.7)) or
+                     (covers(a, sec(n, "Final Chorus"), "alignment") and only(b, a, "acts")
+                      and sum(x["shot"] == "alignment" for x in a["acts"]) == 1)),
+    ("the planets should line up during the first chorus",           # the climax moves
+     lambda b, a, n: covers(a, sec(n, "Chorus 1"), "alignment") and only(b, a, "acts")
+                     and sum(x["shot"] == "alignment" for x in a["acts"]) == 1),
     ("a wide shot for the whole of the first verse",
      lambda b, a, n: covers(a, sec(n, "Verse 1"), "wide") and only(b, a, "acts")),
     ("fewer solar flares, please", lambda b, a, n: a is not None and a["feel"]["flares_every_bars"] > b["feel"]["flares_every_bars"] and only(b, a, "feel")),
@@ -65,7 +72,8 @@ GRAVITY = [
     ("add a strong re-entry at bar 58",
      lambda b, a, n: a is not None and any(r["bar"] == 58 and r["strength"] >= 0.7 for r in a["reentries"]) and only(b, a, "reentries")),
     ("the heart should be silent", lambda b, a, n: a is not None and a["cast"]["heart"] == "silent" and only(b, a, "cast")),
-    ("let the drums play the heart", lambda b, a, n: a is None),       # the heart cannot be the drums: nothing changes
+    ("let the drums play the heart", lambda b, a, n: a is None, True),  # the heart cannot be the drums: nothing changes
+    ("make the sun blue", lambda b, a, n: a is None, True),             # the colours are fixed
     ("keep everything as it is", lambda b, a, n: a is None),
 ]
 SHATTERED = [
@@ -75,6 +83,12 @@ SHATTERED = [
     ("more rings from the planets",
      lambda b, a, n: a is not None and a["feel"]["planet_rings_every_bars"] < b["feel"]["planet_rings_every_bars"] and only(b, a, "feel")),
 ]
+
+
+def _unload(model: str) -> None:
+    body = json.dumps({"model": model, "keep_alive": 0}).encode()
+    urllib.request.urlopen(urllib.request.Request(editor.OLLAMA.replace("/chat", "/generate"), data=body,
+                                                  headers={"Content-Type": "application/json"}), timeout=60).read()
 
 
 def main(argv=None) -> int:
@@ -90,13 +104,15 @@ def main(argv=None) -> int:
         prepared.append((tr, got, sh, editor.named_sections(tr, got["arrays"]["bar_t"]), cases))
     report = {}
     for model in args.models:
+        _unload(model)                                     # each model starts alone in memory, and cold
+    for model in args.models:
         rows = []
         for tr, got, sh, named, cases in prepared:
-            for prompt, ok in cases:
+            for prompt, ok, *impossible in cases:
                 t0 = time.time()
                 try:
                     r = editor.edit(tr, got, sh, prompt, model=model)
-                    passed = bool(ok(sh, r["sheet"], named))
+                    passed = bool(ok(sh, r["sheet"], named)) and (bool(impossible) or not r["refused"])
                     rows.append({"song": tr.slug, "request": prompt, "passed": passed, "did": r["did"], "said": r["said"],
                                  "refused": r["refused"], "attempts": r["attempts"], "seconds": round(r["seconds"], 1)})
                 except Exception as e:                    # a model that cannot answer fails the request
@@ -108,6 +124,7 @@ def main(argv=None) -> int:
         report[model] = {"passed": sum(r["passed"] for r in rows), "of": n,
                          "median_seconds": sorted(r["seconds"] for r in rows)[n // 2], "rows": rows}
         print(f"{model}: {report[model]['passed']}/{n} passed, median {report[model]['median_seconds']}s a request", flush=True)
+        _unload(model)                                     # so the next model has the memory to itself
     out = sheet_.ROOT / "visuals" / "out" / "editor-eval.json"
     out.write_text(json.dumps(report, indent=1))
     print(f"written {out}")

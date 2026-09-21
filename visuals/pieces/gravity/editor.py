@@ -1,6 +1,6 @@
 """Edit a song's direction sheet by asking, with a small model that runs on this machine.
 
-    python -m visuals edit <song> "close on Saturn in the second chorus" [--model qwen3.5:9b] [--dry]
+    python -m visuals edit <song> "close on Saturn in the second chorus" [--model gpt-oss:20b] [--dry]
 
 The model is shown the song as a person would describe it - its sections by name, in bars
 and in minutes and seconds - and its sheet, and asked for edits from a short vocabulary.
@@ -30,7 +30,7 @@ from .cast import CHOICES
 from .track import Track
 
 OLLAMA = "http://localhost:11434/api/chat"
-MODEL = "qwen3.5:9b"
+MODEL = "gpt-oss:20b"             # 20/20 and 19/20 on editor_eval, ~7 s a request (NOTES.md)
 
 
 # ------------------------------------------------------------------ the song, in words
@@ -87,6 +87,8 @@ def song_map(track: Track, got: dict, sheet: dict) -> str:
              + (f" on {a['subject']}" if a.get("subject") else "") for i, a in enumerate(sheet["acts"])]
     rows.append("Re-entries now (where the beat comes back, with strength): "
                 + ", ".join(f"bar {r['bar']} ({at(r['bar'])}) {r['strength']:.2f}" for r in sheet["reentries"]))
+    rows.append("Parts of the cast (what each does in the picture; a part cast silent stops doing it, and every "
+                "body is still there): " + "; ".join(f"{k} - {v}" for k, v in sheet_.PARTS.items()))
     rows.append("Cast now (what plays each part): " + ", ".join(f"{k} = {v}" for k, v in sheet["cast"].items()))
     rows.append("Shots: " + "; ".join(f"{k} - {v}" for k, v in sheet_.SHOTS.items()))
     rows.append("Planets (subjects): " + ", ".join(sheet_.PLANETS))
@@ -102,25 +104,27 @@ def song_map(track: Track, got: dict, sheet: dict) -> str:
 
 
 def schema() -> dict:
-    """The only shape an answer can take."""
+    """The only shape an answer can take: each edit one of the five, with exactly its own
+    fields, all of them given, and a part's choice one of that part's own. (With one loose
+    shape for all five, a model left fields out - a shot with no shot - or filled in ones
+    that belonged to another edit.)"""
+    def op(name: str, **fields) -> dict:
+        return {"type": "object", "properties": {"op": {"const": name}} | fields,
+                "required": ["op", *fields], "additionalProperties": False}
+
     num = {"type": "number"}
-    edit = {"type": "object", "properties": {
-        "op": {"enum": ["shot", "cast", "reentry", "feel", "lyrics"]},
-        "bars": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
-        "shot": {"enum": list(sheet_.SHOTS)},
-        "subject": {"enum": list(sheet_.PLANETS) + ["none"]},
-        "part": {"enum": list(CHOICES)},
-        "choice": {"enum": sorted({c for v in CHOICES.values() for c in v})},
-        "bar": {"type": "integer"},
-        "strength": num,
-        "dial": {"enum": list(sheet_.FEEL)},
-        "key": {"enum": list(sheet_.LYRICS)},
-        "value": {"type": ["number", "boolean"]},
-    }, "required": ["op"]}
+    edits = [op("shot", bars={"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+                shot={"enum": list(sheet_.SHOTS)}, subject={"enum": list(sheet_.PLANETS) + ["none"]})]
+    edits += [op("cast", part={"const": part}, choice={"enum": list(choices)}) for part, choices in CHOICES.items()]
+    edits += [op("reentry", bar={"type": "integer"}, strength=num),
+              op("feel", dial={"enum": list(sheet_.FEEL)}, value=num)]
+    flags = [k for k, v in sheet_.LYRICS.items() if isinstance(v[0], bool)]
+    edits += [op("lyrics", key={"enum": flags}, value={"type": "boolean"}),
+              op("lyrics", key={"enum": [k for k in sheet_.LYRICS if k not in flags]}, value=num)]
     return {"type": "object", "properties": {
-        "edits": {"type": "array", "items": edit},
+        "edits": {"type": "array", "items": {"anyOf": edits}},
         "said": {"type": "string"},
-    }, "required": ["edits", "said"]}
+    }, "required": ["edits", "said"], "additionalProperties": False}
 
 
 SYSTEM = """You edit the direction sheet of a music video: a solar system that moves with the song.
@@ -131,18 +135,27 @@ Answer only with edits, from this vocabulary:
   {"op": "feel", "dial": <dial>, "value": <number in its range>}
   {"op": "lyrics", "key": <setting>, "value": <number in its range, or true/false for show>}
 Use the song's bars: find the section the request names in the map, and use its bars exactly.
-Make the smallest change that does what is asked, and nothing else. If the request cannot be
-done with this vocabulary, answer with no edits and say why in "said". "said" is one short
-sentence saying what you changed."""
+Make the smallest change that does what is asked, and nothing else: only the edits the request
+needs, never one that restates what the sheet already has. If the request cannot be done with
+this vocabulary, answer with no edits and say why in "said". "said" is one short sentence
+saying what you changed."""
+
+# Models that cannot answer with their thinking off (gpt-oss answers nothing at all), and
+# the least thinking they can do instead.
+THINK = {"gpt-oss": "low"}
 
 
-def ask(prompt: str, context: str, model: str = MODEL, feedback: str | None = None, timeout: float = 300.0) -> dict:
+def ask(prompt: str, context: str, model: str = MODEL, retry: tuple[dict, str] | None = None,
+        timeout: float = 300.0) -> dict:
+    """The model's answer to a request; `retry` is its last answer and why it was refused."""
     messages = [{"role": "system", "content": SYSTEM},
                 {"role": "user", "content": f"{context}\n\nRequest: {prompt}"}]
-    if feedback:
-        messages.append({"role": "user", "content": f"Those edits were refused: {feedback}\nTry again."})
+    if retry:
+        messages += [{"role": "assistant", "content": json.dumps(retry[0])},
+                     {"role": "user", "content": f"Those edits were refused: {retry[1]}\nTry again."}]
+    think = next((v for k, v in THINK.items() if model.startswith(k)), False)
     body = {"model": model, "messages": messages, "format": schema(), "stream": False,
-            "think": False, "options": {"temperature": 0}}
+            "think": think, "options": {"temperature": 0}}
     req = urllib.request.Request(OLLAMA, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         reply = json.loads(r.read())
@@ -170,13 +183,19 @@ def set_shot(acts: list[dict], bars: list[int], shot: str, subject: str | None) 
             out.append(new)
         if x1 > b:
             out.append(dict(act, bars=[b, x1]))
+    out = _join(out)
     if shot == "alignment":
-        out = [dict(x, shot="wide") if x is not new and x["shot"] == "alignment" else x for x in out]
-        for x in out:
-            if x["shot"] == "wide":
-                x.pop("subject", None)
+        # the climax is the alignment act the span is now part of - joined, first, to the
+        # alignment act beside it, if it was moving that act's edge; any other goes wide
+        out = _join([x if x["bars"][0] <= a and x["bars"][1] >= b or x["shot"] != "alignment"
+                     else {"bars": x["bars"], "shot": "wide"} for x in out])
+    return out
+
+
+def _join(acts: list[dict]) -> list[dict]:
+    """Neighbours with the same shot and subject, made one."""
     joined = []
-    for x in out:
+    for x in acts:
         if joined and joined[-1]["shot"] == x["shot"] and joined[-1].get("subject") == x.get("subject"):
             joined[-1] = dict(joined[-1], bars=[joined[-1]["bars"][0], x["bars"][1]])
         else:
@@ -192,6 +211,8 @@ def apply(sheet: dict, edits: list[dict]) -> tuple[dict, list[str]]:
         op = e.get("op")
         if op == "shot":
             subject = e.get("subject") if e.get("subject") not in (None, "none") else None
+            if e.get("shot") not in sheet_.NEEDS_SUBJECT:
+                subject = None                          # every shot is asked for one; only two have one
             n = s["acts"][-1]["bars"][1]
             a, b = (list(e.get("bars", [0, 0])) + [0, 0])[:2]
             a, b = max(0, min(int(a), n)), max(0, min(int(b), n))       # a span past the song's end stops at it
@@ -223,9 +244,9 @@ def edit(track: Track, got: dict, sheet: dict, prompt: str, model: str = MODEL, 
     """Ask; apply; check; if refused, say why and ask once more. Returns the new sheet (or
     None), what was done, what the model said, what was refused, and how long it took."""
     context = song_map(track, got, sheet)
-    feedback, t0 = None, time.time()
+    retry, t0 = None, time.time()
     for attempt in range(tries):
-        answer = ask(prompt, context, model, feedback)
+        answer = ask(prompt, context, model, retry)
         new, did = apply(sheet, answer.get("edits", []))
         bad = sheet_.validate(new, got)
         if not bad:
@@ -233,6 +254,6 @@ def edit(track: Track, got: dict, sheet: dict, prompt: str, model: str = MODEL, 
             return {"sheet": new if changed else None, "did": did, "already": bool(did) and not changed,
                     "said": answer.get("said", ""), "refused": [],
                     "attempts": attempt + 1, "seconds": time.time() - t0, "edits": answer.get("edits", [])}
-        feedback = "; ".join(bad)
+        retry = (answer, "; ".join(bad))
     return {"sheet": None, "did": did, "said": answer.get("said", ""), "refused": bad,
             "attempts": tries, "seconds": time.time() - t0, "edits": answer.get("edits", [])}

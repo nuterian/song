@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from visuals.pieces.gravity import editor, sheet as sheet_
+from visuals.pieces.gravity.cast import CHOICES
 
 ACTS = [{"bars": [0, 14], "shot": "approach"}, {"bars": [14, 50], "shot": "intimate", "subject": "earth"},
         {"bars": [50, 77], "shot": "wide"}, {"bars": [77, 98], "shot": "eclipse", "subject": "saturn"},
@@ -32,9 +33,11 @@ def test_a_shot_across_acts_keeps_what_is_left_of_them():
 
 
 def test_there_is_one_climax():
-    got = editor.set_shot(ACTS, [98, 116], "alignment", None)
+    got = editor.set_shot(ACTS, [33, 50], "alignment", None)              # elsewhere: the climax moves
     assert [a["shot"] for a in got].count("alignment") == 1
-    assert (98, 116, "alignment", None) in bars(got)
+    assert (33, 50, "alignment", None) in bars(got) and (98, 132, "wide", None) in bars(got)
+    got = editor.set_shot(ACTS, [98, 116], "alignment", None)             # beside it: the climax grows
+    assert [a["shot"] for a in got].count("alignment") == 1 and (98, 132, "alignment", None) in bars(got)
 
 
 def test_asking_for_what_is_already_so_changes_nothing():
@@ -59,10 +62,16 @@ def test_a_span_past_the_end_stops_at_it():
 
 
 def test_the_answer_can_only_name_what_the_sheet_knows():
-    props = editor.schema()["properties"]["edits"]["items"]["properties"]
-    assert set(props["shot"]["enum"]) == set(sheet_.SHOTS)
-    assert set(props["dial"]["enum"]) == set(sheet_.FEEL) and set(props["key"]["enum"]) == set(sheet_.LYRICS)
-    assert set(props["subject"]["enum"]) == set(sheet_.PLANETS) | {"none"}
+    kinds = editor.schema()["properties"]["edits"]["items"]["anyOf"]
+    of = lambda name: [k["properties"] for k in kinds if k["properties"]["op"]["const"] == name]
+    (shot,), (feel,) = of("shot"), of("feel")
+    assert set(shot["shot"]["enum"]) == set(sheet_.SHOTS) and set(shot["subject"]["enum"]) == set(sheet_.PLANETS) | {"none"}
+    assert set(feel["dial"]["enum"]) == set(sheet_.FEEL)
+    assert {k for p in of("lyrics") for k in p["key"]["enum"]} == set(sheet_.LYRICS)
+    # a part can only be given one of its own choices: the heart cannot be the kick
+    assert {p["part"]["const"]: tuple(p["choice"]["enum"]) for p in of("cast")} == CHOICES
+    # and every edit must say everything it needs, and nothing it does not
+    assert all(set(k["required"]) == set(k["properties"]) and k["additionalProperties"] is False for k in kinds)
 
 
 def test_the_second_chorus_is_where_the_lyric_sheet_puts_it():
@@ -75,3 +84,7 @@ def test_the_second_chorus_is_where_the_lyric_sheet_puts_it():
         pytest.skip("no listening cache for the real track")
     named = {n: (b0, b1) for n, b0, b1 in editor.named_sections(tr, got["arrays"]["bar_t"])}
     assert named["Chorus 2"] == (81, 90) and "Final Chorus" in named and named["Verse 1"][0] < named["Chorus 1"][0]
+
+
+def test_every_part_is_described_to_the_model():
+    assert set(sheet_.PARTS) == set(CHOICES)

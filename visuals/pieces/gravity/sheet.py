@@ -47,6 +47,16 @@ SHOTS = {
     "pullback": "up over the plane and away, until the system is a mark on the galaxy",
 }
 NEEDS_SUBJECT = ("intimate", "eclipse")
+# What each part of the cast does in the picture. A part cast silent stops doing it; every
+# body is still there.
+PARTS = {
+    "pulse": "the Sun swells, and the orbits are tugged in, on each hit",
+    "ring": "a ring goes out from the Sun across the plane, striking the planets it reaches",
+    "stars": "the stars swell and subside, a third of them at a time",
+    "corona": "the corona charges with the line and lets go in flares",
+    "planets": "each planet throws out rings on the notes, in its own manner",
+    "heart": "the light inside the Sun, and a band off its corona that reaches with the melody",
+}
 PLANETS = ("mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune")
 
 # name: (default, low, high, what it means)
@@ -145,7 +155,7 @@ def validate(sheet: dict, got: dict | None = None) -> list[str]:
         if act.get("shot") not in SHOTS:
             bad.append(f"acts[{i}]: shot {act.get('shot')!r} is not one of {', '.join(SHOTS)}")
         if act.get("shot") in NEEDS_SUBJECT and act.get("subject") not in PLANETS:
-            bad.append(f"acts[{i}]: a {act.get('shot')} shot needs a subject: one of {', '.join(PLANETS)}")
+            bad.append(f"acts[{i}]: the {act.get('shot')} shot needs a subject: one of {', '.join(PLANETS)}")
     if acts and at != n_bars:
         bad.append(f"acts: they end at bar {at}, the song has {n_bars}")
     for group, spec in (("feel", FEEL), ("lyrics", LYRICS)):
@@ -177,11 +187,27 @@ def write(sheet: dict, path: Path) -> Path:
     return path
 
 
+def normal(sheet: dict) -> dict:
+    """The sheet with each number the kind the vocabulary says: a dial or a strength a
+    decimal, a bar a whole number. A sheet that has been through a browser comes back with
+    2 for 2.0; written as it came, the file would change where nothing had."""
+    s = json.loads(json.dumps(sheet))
+    for r in s.get("reentries", []):
+        if isinstance(r.get("strength"), (int, float)) and not isinstance(r["strength"], bool):
+            r["strength"] = float(r["strength"])
+    for group, spec in (("feel", FEEL), ("lyrics", LYRICS)):
+        for k, v in s.get(group, {}).items():
+            if k in spec and not isinstance(spec[k][0], bool) and isinstance(v, (int, float)) and not isinstance(v, bool):
+                s[group][k] = float(v)
+    return s
+
+
 def dumps(sheet: dict) -> str:
     """JSON, one act or re-entry to a line and one dial to a line, so a sheet reads - and
-    diffs - like a list. Numbers are written exactly (a re-entry's strength round-trips)."""
+    diffs - like a list. Numbers are written exactly (a re-entry's strength round-trips),
+    and each as the kind it is (`normal`)."""
     parts = []
-    for k, v in sheet.items():
+    for k, v in normal(sheet).items():
         if isinstance(v, list) and v:
             body = ",\n".join("    " + json.dumps(x) for x in v)
             parts.append(f"  {json.dumps(k)}: [\n{body}\n  ]")
