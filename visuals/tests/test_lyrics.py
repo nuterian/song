@@ -89,3 +89,34 @@ def test_on_the_gold_example_no_line_crosses_a_body_on_the_static_camera():
     for ln in lines:                                           # and each fits across the frame where it went
         x0, _, x1, _ = lyrics.box(ln.place["static"], ln.text)
         assert x0 >= -lyrics.ASPECT / 2 and x1 <= lyrics.ASPECT / 2
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="no node to run the player's copy")
+def test_a_line_stays_where_it_appeared_even_if_the_camera_changes(tmp_path):
+    """Jugal, watching the cinematic camera: the lyrics moved from one corner to another while
+    shown. A line is set where it belongs the moment it appears and held there until it has
+    gone; the next line takes the camera's place then."""
+    script = f"""
+import {{ seating }} from {json.dumps(PLAYER_LYRICS.as_uri())};
+const lines = [
+  {{ in: [1.0, 1.35], out: [3.0, 3.4], place: {{ static: "low", cinematic: "top-left" }} }},
+  {{ in: [3.2, 3.6], out: [5.0, 5.4], place: {{ static: "high", cinematic: "side-right" }} }},
+];
+const seat = seating();
+const seen = [[], []];
+for (let t = 0; t < 6; t += 1 / 60) {{
+  const cam = t < 2.0 ? "cinematic" : "static";       // switched in the middle of the first line
+  lines.forEach((line, k) => {{ const r = seat(k, line, t, cam); if (r !== null) seen[k].push(r); }});
+}}
+console.log(JSON.stringify(seen.map(s => [...new Set(s)])));
+"""
+    (tmp_path / "seat.mjs").write_text(script)
+    got = json.loads(subprocess.run(["node", str(tmp_path / "seat.mjs")], capture_output=True, text=True, check=True).stdout)
+    assert got == [["top-left"], ["high"]]
+
+
+def test_nothing_animates_a_lyric_into_place():
+    css = (lyrics.ROOT / "visuals" / "player" / "index.html").read_text()
+    rule = css[css.index("#lyrics .line {"):]
+    rule = rule[: rule.index("}")]
+    assert "transition" not in rule and "animation" not in rule

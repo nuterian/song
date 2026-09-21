@@ -22,3 +22,16 @@ export function lyricOpacity(t, line) {
   if (t <= in0 || t >= out1) return 0;
   return Math.min(ease((t - in0) / Math.max(in1 - in0, 1e-3)), ease((out1 - t) / Math.max(out1 - out0, 1e-3)));
 }
+
+// Where each line is: set the moment it appears, for the camera then, and held until it has
+// gone - a line never moves while it is up, even if the camera is switched meanwhile; the
+// next line takes the new camera's place. `seat(k, line, t, camera)` answers the region, or
+// null while the line is not up.
+export function seating() {
+  const at = new Map();
+  return function seat(k, line, t, camera) {
+    if (lyricOpacity(t, line) <= 0) { at.delete(k); return null; }
+    if (!at.has(k)) at.set(k, line.place[camera] || "low");
+    return at.get(k);
+  };
+}

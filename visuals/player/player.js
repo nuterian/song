@@ -9,7 +9,7 @@
 // The shaders are the identical source, under `#version 300 es` instead of
 // `#version 410 core`.
 
-import { lyricInk, lyricOpacity } from "./lyrics.js";
+import { lyricInk, lyricOpacity, seating } from "./lyrics.js";
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("gl");
@@ -196,16 +196,25 @@ function makeLyrics(spec, canvas, bar, camera) {
     el.style.textAlign = r.align;
   }
 
+  // A line is set where it belongs the moment it appears and stays there until it has gone
+  // (lyrics.js, `seating`). It once slid there from the corner every line began in: a
+  // transition on its position, meant for camera switches, which is not allowed back.
+  const seat = seating();
+  const placed = new Map();                          // line index -> the region its element is in
   return {
     show(t) {
       if (!on) return;
       const cam = camera() || "static";
       spec.lines.forEach((line, k) => {
-        const up = lyricOpacity(t, line);
-        if (up <= 0) { if (els.has(k)) els.get(k).style.opacity = "0"; return; }
+        const region = seat(k, line, t, cam);
+        if (region === null) {
+          if (els.has(k)) els.get(k).style.opacity = "0";
+          placed.delete(k);
+          return;
+        }
         const el = element(k);
-        put(el, line.place[cam] || "low");
-        el.style.opacity = String(up);
+        if (placed.get(k) !== region) { put(el, region); placed.set(k, region); }
+        el.style.opacity = String(lyricOpacity(t, line));
         line.words.forEach(([, start, end], i) => {
           el.children[i].style.opacity = String(lyricInk(t, start, end, st));
         });
