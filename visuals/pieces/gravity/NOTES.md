@@ -652,3 +652,105 @@ question: they are continuous motion now, by design, and there are no quiet mome
 to compare with. Their timing is held by tests on the baked bodies instead (a hop tops
 out within 30 ms of its note). A position-based detector for the dance is the next
 measuring job. 6.0 ms a frame at 1080p, 10.0 at 1440p (worst 11.9).
+
+
+# M0: any song
+
+The piece was directed for one song and read it from constants. It now takes any audio
+file or `song` workdir (`track.py`), and one command does everything up to the player,
+each step cached under `visuals/cache/<slug>/`:
+
+    python -m visuals make <audio file | song workdir> --theme cosmos
+    python -m visuals.pieces.gravity --track <audio | workdir> --style cosmos measure
+
+A lossy file is decoded once into the cache and every step reads that decode, so an
+mp3's encoder delay cannot put the stems and the mix on different clocks. The player's
+`mix.m4a` is the `song` tool's own recipe. Gravity staged through the new path - the
+piece's command line in all three styles, and `make` from the wav and from the workdir -
+is **byte-identical** to what it was, and the player's audio sits 0.0 ms from the
+analysed samples on all three songs (at 30, 90 and 140 s).
+
+## Two more songs
+
+From what was on disk: *Shattered Voices* (155 s, wav) and *TIDAL CORE* (290 s, mp3).
+Demucs took 1:38 and 3:52 on the CPU; the rest of `make` 104 s and 189 s. Neither raised
+an exception. That is the finding: nothing failed loudly, and one of the two is wrong
+from its first beat.
+
+|                                   | Gravity      | Shattered Voices                  | TIDAL CORE   |
+|-----------------------------------|--------------|-----------------------------------|--------------|
+| tempo the grid found              | 125.0004     | **125.39 - it is 90.00**          | 127.9997     |
+| sharp hits within 4 ms of it      | 723/866 (0.83) | **40/590 (0.07)**               | 620/627 (0.99) |
+| bar-phase votes (kick re-entries) | 8-0-0-0      | 2-2-0-0                           | 8-0-0-0      |
+| Beat This!: tempo; downbeats agree | 125.0; 146/150 | 90.9; 16/60                    | 130.4; 148/157 |
+| kick band's lag, measured         | 24.4 ms      | 3.7 ms (7 against the true grid)  | 22.6 ms      |
+| vocal stem present (2 s windows)  | 0.58         | **0.00 - instrumental**           | 0.83         |
+| "syllables" where the voice is absent | 0.02     | **1.00 (299 of 299)**             | 0.04         |
+| sections / of them "drive"        | 16 / 7       | 6 / **0**                         | 18 / 8       |
+| re-entries, acts, climax at       | 10, 7, 81 %  | 4, 4, 58 %                        | 13, 7, 70 %  |
+| jolt peaks, cinematic (slide, zoom, planet) | 0.24, 0.32, 0.47 | 0.23, 0.20, 0.36    | 0.25, 0.34, 0.33 |
+
+Jolt is inside the test's limits on every camera of every song. TIDAL CORE, the same kind
+of song as Gravity, comes through clean. Shattered Voices is half-time, 90 BPM, with no
+voice, and everything the piece assumed about Gravity is visible in it:
+
+**The grid.** The fit starts from the median gap between strong kicks. This kick doubles
+0.21 s apart, so it started near 125 and settled on a lattice 7 % of the hats and claps
+agree with - and said so, in a number nobody checks. Seeded with 90.00 the same fit puts
+93 % within 4 ms at 1.38 ms rms with no drift: the song is on a machine grid, only the
+start was wrong. The fit locks only from within about 0.1 % (seeded with Beat This!'s
+90.9 it fails again). A scan of lattice coherence over the hats and claps finds 125.000,
+90.000 and 128.000 on the three songs, and seeded from it the fit reproduces Gravity's
+and TIDAL CORE's grids exactly; but the octave scores nearly as well (180: 0.93 against
+90's 0.96), so the octave has to come from elsewhere - Beat This! has it right on all
+three. Event times do not depend on the grid, except through the kick's lag correction,
+which is measured against it: here that cost 3 ms, because this kick is a click (7 ms of
+lag, against 23-24 for the other two). Everything measured in bars does depend on it:
+section ramps, drops, acts, shots arriving on bar lines, flares on the beat, a restless
+planet's bar line.
+
+**An absent instrument is not dead, it is noise at full size.** The vocal stem sits a
+median 51 dB under the mix and peaks at -30 dBFS - Demucs' leakage. The listener found
+299 syllables in it, every one where the stem is silent, and the Sun's voice role moves
+in 88 % of the song. Every stem is normalised to its own percentiles and its onsets are
+picked against its own loudest rises, so there is no such thing as "not playing".
+
+**"Drive" is four on the floor.** A bar drives when it has three or more strong kicks.
+A half-time kick has two: even on the right grid only 17 % of Shattered Voices' bars
+qualify, and on the wrong one it has no drive section at all, although its kick plays in
+86 % of 2 s windows. Drops also use fixed thresholds (a 1.5 dB jump, 0.12 of floor)
+rather than the song's.
+
+**Seen, on the rendered picture.** `measure`, whole song, static camera, recall against
+the 95th percentile of the same detector where nothing of that kind happened. Gravity's
+column is the first whole-song run since version 4.2:
+
+|                      | Gravity | Shattered Voices | TIDAL CORE |
+|----------------------|---------|------------------|------------|
+| kick -> the limb     | 1.00    | 0.98             | 1.00       |
+| clap -> ring in the plane | 0.76 | **0.16**      | **0.25**   |
+| syllable -> heart    | 0.61    | 0.60 (on leakage) | 0.31      |
+| crash -> sky         | 0.23    | 0.26             | 0.15       |
+
+The kick is seen on every song, half-way up 41 ms before it, as designed. Bass notes,
+planets' notes and hats read 0.05-0.31 everywhere, which says nothing: since version
+4.2 they are continuous motion and this measure has no quiet moments to compare with
+(the position-based detector is still the open job). Two rows are findings. The heart
+answers Shattered Voices' leakage visibly (0.60 of the loud "syllables") - the absent
+voice is on screen. And the clap's ring, seen for 0.76 of Gravity's claps, is seen for
+0.16 and 0.25 of the new songs'. Every clap above 0.30 throws a ring, and Shattered
+Voices' rings are *larger* (median size 0.90 against 0.82) and further apart (0.75 s
+against 0.48), yet the detector's triggered response is 0.046 against 0.075. So the
+rings are there and are not reading; whether because of what else moves in the plane
+or how each song's camera frames it is not found yet.
+
+**What is not a finding.** The baked channels were checked against the range Gravity
+drives them through. Nothing that sets a size leaves it; what does is a per-song
+constant (the camera's heading), the planets' spin (a clock, and TIDAL CORE is longer),
+the moons' share of a planet's notes, and TIDAL CORE's camera tilting 0.06 rad further,
+13 % of the time. The corona's charge runs lower on both new songs than on Gravity
+(median 0.53 and 0.64 against 0.85).
+
+What each of these asks of M1 - a checked grid with an honest fallback, presence per
+stem, casting, form that does not need a kick, and a scorecard - is in
+`NEXT-music-video-product.md`.
