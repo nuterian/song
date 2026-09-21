@@ -9,6 +9,8 @@
 // The shaders are the identical source, under `#version 300 es` instead of
 // `#version 410 core`.
 
+import { lyricInk, lyricOpacity } from "./lyrics.js";
+
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("gl");
 const audio = document.getElementById("audio");
@@ -130,6 +132,88 @@ class Grid {
   }
 }
 
+// ---------------------------------------------------------------------------- lyrics
+// Set over the picture, not in it: real type, crisp at any size. What each word looks
+// like at a moment is lyrics.js's to say - a copy of visuals/pieces/gravity/lyrics.py's,
+// held to it by a test; here they are only placed and drawn.
+
+
+function makeLyrics(spec, canvas, bar, camera) {
+  const st = spec.style;
+  // The canvas and the words share one frame, so they cannot come apart: the words are
+  // placed in percentages of it and sized in its height (container units), by CSS alone.
+  const frame = document.createElement("div");
+  frame.id = "frame";
+  canvas.parentElement.insertBefore(frame, canvas);
+  frame.appendChild(canvas);
+  const layer = document.createElement("div");
+  layer.id = "lyrics";
+  layer.style.setProperty("--size", String(st.size));
+  frame.appendChild(layer);
+  const els = new Map();                           // line index -> its element, made when first needed
+  let on = params.get("lyrics") !== "off";
+
+  const toggle = document.createElement("span");
+  toggle.className = "choice";
+  toggle.innerHTML = "<span>lyrics</span>";
+  for (const name of ["on", "off"]) {
+    const b = document.createElement("button");
+    b.textContent = name; b.dataset.name = name;
+    b.addEventListener("click", () => {
+      on = name === "on";
+      for (const x of toggle.querySelectorAll("button")) x.classList.toggle("on", x.dataset.name === name);
+      const url = new URL(location.href); url.searchParams.set("lyrics", name); history.replaceState(null, "", url);
+      layer.hidden = !on;
+    });
+    toggle.appendChild(b);
+  }
+  toggle.querySelector(`button[data-name="${on ? "on" : "off"}"]`).classList.add("on");
+  layer.hidden = !on;
+  bar.appendChild(toggle);
+
+  function element(k) {
+    if (!els.has(k)) {
+      const line = spec.lines[k];
+      const el = document.createElement("div");
+      el.className = "line";
+      for (const [text] of line.words) {
+        const w = document.createElement("span");
+        w.textContent = text;
+        el.appendChild(w);
+        el.appendChild(document.createTextNode(" "));
+      }
+      layer.appendChild(el);
+      els.set(k, el);
+    }
+    return els.get(k);
+  }
+
+  function put(el, region) {
+    const r = spec.regions[region];                  // frame heights from the middle, y up
+    el.style.left = `${50 + (100 * r.x * 9) / 16}%`;
+    el.style.top = `${50 - 100 * r.y}%`;
+    el.style.transform = `translate(${r.align === "center" ? "-50%" : r.align === "right" ? "-100%" : "0"}, -50%)`;
+    el.style.textAlign = r.align;
+  }
+
+  return {
+    show(t) {
+      if (!on) return;
+      const cam = camera() || "static";
+      spec.lines.forEach((line, k) => {
+        const up = lyricOpacity(t, line);
+        if (up <= 0) { if (els.has(k)) els.get(k).style.opacity = "0"; return; }
+        const el = element(k);
+        put(el, line.place[cam] || "low");
+        el.style.opacity = String(up);
+        line.words.forEach(([, start, end], i) => {
+          el.children[i].style.opacity = String(lyricInk(t, start, end, st));
+        });
+      });
+    },
+  };
+}
+
 async function main() {
   const track = await pickTrack();
   const base = `../out/${encodeURIComponent(track)}/`;
@@ -214,11 +298,13 @@ async function main() {
   // say, all baked into the one grid. Choosing one re-points those uniforms and nothing
   // else, so it can be done while the song plays.
   const feeds = new Map();                         // uniform name -> the channel that feeds it, if not its own
+  const chosen = {};                               // variant kind -> the name picked (the camera, say)
   for (const [kind, spec] of Object.entries(plan.variants || {})) {
     const group = document.createElement("span");
     group.className = "choice";
     group.innerHTML = `<span>${kind}</span>`;
     const pick = (name) => {
+      chosen[kind] = name;
       for (const [uniform, channel] of Object.entries(spec.choices[name])) feeds.set(uniform, grid.names.indexOf(channel));
       for (const b of group.querySelectorAll("button")) b.classList.toggle("on", b.dataset.name === name);
       const url = new URL(location.href); url.searchParams.set(kind, name); history.replaceState(null, "", url);
@@ -233,6 +319,8 @@ async function main() {
     choicesBox.appendChild(group);
     pick(spec.choices[params.get(kind)] ? params.get(kind) : spec.default);
   }
+
+  const words = plan.lyrics ? makeLyrics(plan.lyrics, canvas, choicesBox, () => chosen.camera) : null;
 
   function sectionAt(t) {
     for (const s of plan.sections) if (t >= s.start && t < s.end) return s;
@@ -282,6 +370,7 @@ async function main() {
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, dst.fbo);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
     gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    if (words) words.show(t);
 
     const morph = values[grid.names.indexOf("uMorph")];
     const act = (plan.acts || []).find((a) => t >= a.start && t < a.end);

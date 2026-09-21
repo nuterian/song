@@ -282,6 +282,11 @@ def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
     if getattr(ch, "acts", None):
         plan["acts"] = [{"start": a.start, "end": a.end, "function": a.function,
                          "subject": a.subject if a.subject >= 0 else None} for a in ch.acts]
+    if STYLE == "cosmos":
+        from . import lyrics
+        words = lyrics.layout(track, ch)
+        if words:
+            plan["lyrics"] = words
     (out_dir / "frames.bin").write_bytes(ch.data.astype("<f4").tobytes())
     (out_dir / "plan.json").write_text(json.dumps(plan, indent=1) + "\n")
     src, dst = track.mix_m4a, out_dir / "mix.m4a"

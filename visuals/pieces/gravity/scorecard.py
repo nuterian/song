@@ -281,6 +281,22 @@ def frame_times(ch: direct.Channels, frames: int = 120, size: tuple[int, int] = 
 # ---------------------------------------------------------------------- the card
 
 
+def words(track: Track, ch: direct.Channels) -> list[Line]:
+    """The lyrics: where they come from, and whether they keep off the bodies."""
+    from . import lyrics
+    lay = lyrics.layout(track, ch)
+    if lay is None:
+        return [Line("lyrics", "lyrics", "none: no word timings for this song")]
+    n = sum(len(l["words"]) for l in lay["lines"])
+    out = [Line("lyrics", "words", f"{len(lay['lines'])} lines, {n} words, from {lay['source']}; the longest line covers "
+                f"{100 * lay['largest_share_of_frame']:.1f} % of the frame", "<= 3 %",
+                _check(lay["largest_share_of_frame"] <= 0.03, WARN))]
+    for c in lay["cost"]:
+        out.append(Line("lyrics", f"over a body, {c['camera']}", f"{100 * c['crossed']:.1f} % of the frames a line is up; "
+                        f"{c['moves']} changes of place", "0 %", _check(c["crossed"] <= 0.0, WARN), c))
+    return out
+
+
 def build(track: Track, got: dict, ch: direct.Channels, with_render: bool = False) -> dict:
     from . import cast as cast_
     from .make import modelled
@@ -289,7 +305,7 @@ def build(track: Track, got: dict, ch: direct.Channels, with_render: bool = Fals
     cast_got = cast_.apply(got, modelled(track, got, verbose=False))[0]
     lines = listening(got)
     cast = casting(got, ch)
-    lines += cast + structure(got, ch, cast_got) + picture(ch, reference)
+    lines += cast + structure(got, ch, cast_got) + picture(ch, reference) + words(track, ch)
     if with_render:
         # judged by what each part was given: on an instrumental the heart's notes are the lead's
         lines += rendered(cast_got, ch, cast)

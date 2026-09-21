@@ -36,6 +36,19 @@
   .choice button:last-of-type { border-radius: 0 2px 2px 0; }
   .choice button.on { background: #3a3358; border-color: #5b4f8c; color: #f2f0ff; position: relative; }
   #error { padding: 16px; color: #e08a8a; white-space: pre-wrap; }
+  /* the lyrics: warm off-white, light, small, letter-spaced; the ink is each word's own */
+  #frame { position: relative; width: 100%; max-width: 1280px; aspect-ratio: 16 / 9; }
+  #frame canvas { width: 100%; height: 100%; max-width: none; }
+  #lyrics { position: absolute; inset: 0; pointer-events: none; overflow: hidden; container-type: size; }
+  #lyrics .line {
+    position: absolute; white-space: nowrap; opacity: 0;
+    font-size: calc(var(--size) * 100cqh);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 300;
+    letter-spacing: 0.06em; color: rgb(238, 233, 222);
+    text-shadow: 0 0 0.35em rgba(0, 0, 0, 0.55);
+    transition: left 0.6s ease-in-out, top 0.6s ease-in-out;
+  }
+  #lyrics .line span { opacity: 0.42; }
 </style>
 </head>
 <body>
