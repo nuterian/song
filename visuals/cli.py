@@ -1,8 +1,14 @@
 """The command line.
 
+    python -m visuals make   <audio file | song-workdir> [--theme cosmos]
     python -m visuals render <song-workdir> [--preview START] [--seed N]
     python -m visuals score  <song-workdir> [--seed N]
     python -m visuals serve  [--port 8765]
+
+`make` is the product: any song in, the themed world staged for the player. It
+separates stems, listens, runs the small models and bakes the channels, caching
+each step under visuals/cache/<track>/. Lyrics come from the song tool's workdir
+when there is one.
 
 `render` is the one that matters. It reads the workdir, takes the score (the
 hand-written one for the track if there is one, otherwise a legal draw from the
@@ -172,6 +178,14 @@ class _Slice:
         self.fh.close()
 
 
+def cmd_make(args) -> int:
+    from .pieces.gravity import make
+    from .pieces.gravity.track import Track
+
+    make.make(Track.resolve(args.song, args.audio), args.theme, force=args.force)
+    return 0
+
+
 def cmd_serve(args) -> int:
     """A static server rooted at visuals/, so /player/ can fetch /out/<track>/."""
     handler = functools.partial(_RangeHandler, directory=str(HERE))
@@ -195,6 +209,13 @@ def cmd_serve(args) -> int:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m visuals", description=__doc__.split("\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    m = sub.add_parser("make", help="any song, themed and staged for the player")
+    m.add_argument("song", help="an audio file (wav, flac, mp3, m4a...) or a song workdir")
+    m.add_argument("--theme", choices=("cosmos",), default="cosmos")
+    m.add_argument("--audio", default=None, help="the audio, for a song workdir whose project has lost it")
+    m.add_argument("--force", action="store_true", help="listen and run the models again")
+    m.set_defaults(fn=cmd_make)
 
     r = sub.add_parser("render", help="render an mp4 and stage the player")
     r.add_argument("workdir", help="a song workdir, read-only")

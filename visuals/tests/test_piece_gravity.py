@@ -29,6 +29,13 @@ def clicks(times, seconds, decay=0.015, freq=3000.0, seed=0):
     return x
 
 
+def _gravity():
+    """The Gravity piece's own song: the real track the tests below read from its cache."""
+    from visuals.pieces.gravity.track import Track
+
+    return Track.resolve()
+
+
 def test_attacks_are_timed_to_a_couple_of_milliseconds():
     truth = np.array([0.5003, 0.9871, 1.4402, 2.0139, 2.6508, 3.1117])
     env = listen.power_env(clicks(truth, 4.0), SR, 120)
@@ -235,7 +242,7 @@ def test_key_from_a_natural_minor_scale():
 def test_every_uniform_the_shader_declares_is_fed():
     import re
 
-    from visuals.pieces.gravity import CACHE
+    CACHE = _gravity().cache
 
     got = listen.load_cached(CACHE)
     if got is None:
@@ -264,7 +271,8 @@ def test_no_star_is_cut_off_and_every_arm_is_whole():
     pytest.importorskip("moderngl")
     from scipy import ndimage
 
-    from visuals.pieces.gravity import CACHE, render
+    from visuals.pieces.gravity import render
+    CACHE = _gravity().cache
 
     got = listen.load_cached(CACHE)
     if got is None:
@@ -326,7 +334,7 @@ def test_the_sky_frames_put_known_stars_where_they_are():
 
 
 def test_acts_cover_the_song_and_the_planets_align_at_the_climax():
-    from visuals.pieces.gravity import CACHE
+    CACHE = _gravity().cache
 
     got = listen.load_cached(CACHE)
     if got is None:
@@ -359,7 +367,7 @@ def test_acts_cover_the_song_and_the_planets_align_at_the_climax():
 def test_every_uniform_the_3d_shader_declares_is_fed():
     import re
 
-    from visuals.pieces.gravity import CACHE
+    CACHE = _gravity().cache
 
     got = listen.load_cached(CACHE)
     if got is None:
@@ -395,7 +403,8 @@ def test_a_fall_has_landed_on_its_moment_and_a_rise_starts_on_its_own():
 
 
 def test_no_camera_jolts():
-    from visuals.pieces.gravity import CACHE, follow
+    from visuals.pieces.gravity import follow
+    CACHE = _gravity().cache
 
     got = listen.load_cached(CACHE)
     if got is None:
@@ -411,7 +420,7 @@ def test_no_camera_jolts():
 
 
 def _real_cosmos():
-    from visuals.pieces.gravity import CACHE
+    CACHE = _gravity().cache
 
     got = listen.load_cached(CACHE)
     if got is None:

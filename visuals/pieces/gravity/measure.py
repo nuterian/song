@@ -31,7 +31,8 @@ import numpy as np
 import soundfile as sf
 from scipy import ndimage, signal
 
-from . import AUDIO, OUT, direct
+from . import direct
+from .track import Track
 from .listen import RATE
 
 W, H = 480, 270
@@ -327,7 +328,7 @@ def recall(sig: np.ndarray, fps: float, start: float, events: np.ndarray,
 # ---------------------------------------------------------------------- matrix
 
 
-def matrix(got: dict, start: float = 120.0, duration: float = 40.0) -> dict:
+def matrix(got: dict, track: Track, start: float = 120.0, duration: float = 40.0) -> dict:
     """Solo each instrument, and ask every detector about every instrument's hits.
 
     Row: the only instrument allowed to move the picture. Column: a detector.
@@ -346,7 +347,7 @@ def matrix(got: dict, start: float = 120.0, duration: float = 40.0) -> dict:
           f"column = detector")
     print("          " + " ".join(f"{c:>9s}" for c in cols))
     for role in roles:
-        video = render.render(got, OUT / "solo", start=start, duration=duration,
+        video = render.render(got, track, track.out(render.STYLE) / "solo", start=start, duration=duration,
                               size=(960, 540), crf=20, solo=role, quiet=True)
         sig = frame_signals(video)
         row = {}
@@ -362,16 +363,16 @@ def matrix(got: dict, start: float = 120.0, duration: float = 40.0) -> dict:
 # ------------------------------------------------------------------ smoothness
 
 
-def smoothness(got: dict) -> dict:
+def smoothness(got: dict, track: Track) -> dict:
     """Render the whole song with only the section-level decisions moving, and look
     for a step. Reported as the largest frame-to-frame change against the median one,
     overall and at each section boundary: in a ramp the boundary frame is an ordinary
     frame; in a cut it is tens of times the median."""
-    from . import CACHE, models, render
+    from . import models, render
 
-    video = render.render(got, OUT / "solo", start=0.0, duration=got["meta"]["duration"] - 0.01,
+    video = render.render(got, track, track.out(render.STYLE) / "solo", start=0.0, duration=got["meta"]["duration"] - 0.01,
                           size=(640, 360), crf=18, solo="sections", quiet=True)
-    ch = direct.direct(got, models.load_cached(CACHE))
+    ch = direct.direct(got, models.load_cached(track.cache))
     step, prev = [], None
     keep: dict[int, np.ndarray] = {}
     wanted = {int(s_.start * 60) + d for s_ in ch.sections[1:] for d in (-480, 480)}
@@ -413,13 +414,13 @@ def smoothness(got: dict) -> dict:
 # ------------------------------------------------------------------------ main
 
 
-def container_offset(video: Path, start: float) -> float:
+def container_offset(video: Path, audio: Path, start: float) -> float:
     tmp = video.with_suffix(".check.wav")
     subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(video),
                     "-ac", "1", "-ar", "48000", str(tmp)], check=True)
     b, sr = sf.read(str(tmp))
     tmp.unlink()
-    a, _ = sf.read(str(AUDIO))
+    a, _ = sf.read(str(audio))
     a = a.mean(axis=1)
     s0 = int(start * sr)
     off = min(len(b) // 2, 5 * sr)
@@ -429,16 +430,17 @@ def container_offset(video: Path, start: float) -> float:
     return 1000.0 * (int(np.argmax(xc)) - (len(x) - 1)) / sr
 
 
-def main(got: dict, video: str | None, start: float = 0.0, save: bool = True) -> int:
-    video = Path(video) if video else OUT / "piece.mp4"
+def main(got: dict, track: Track, video: str | None, start: float = 0.0, save: bool = True) -> int:
+    from . import render
+    video = Path(video) if video else track.out(render.STYLE) / "piece.mp4"
     if "-clip-" in video.name or "s.mp4" in video.name:
         try:
             start = float(video.stem.rsplit("-", 1)[1].rstrip("s"))
         except ValueError:
             pass
     a, meta = got["arrays"], got["meta"]
-    from . import CACHE, models
-    ch = direct.direct(got, models.load_cached(CACHE))
+    from . import models
+    ch = direct.direct(got, models.load_cached(track.cache))
     fps = probe_fps(video)
     sig = frame_signals(video)
     n = len(sig["lum"])
@@ -548,7 +550,7 @@ def main(got: dict, video: str | None, start: float = 0.0, save: bool = True) ->
 
     report["colour"] = colour_report(video, fps, start, allev)
 
-    off = container_offset(video, start)
+    off = container_offset(video, track.audio, start)
     print(f"container: the mp4's audio sits {off:+.2f} ms from the wav")
     report["container_ms"] = off
 

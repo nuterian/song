@@ -21,7 +21,8 @@ from pathlib import Path
 import moderngl
 import numpy as np
 
-from . import AUDIO, CACHE, ROOT, TRACK, WORKDIR, cosmos, direct, models, shader, shader_cosmos, shader_ink, sky
+from . import ROOT, cosmos, direct, models, shader, shader_cosmos, shader_ink, sky
+from .track import Track
 
 # Which shader draws. Set once by the command line; everything that renders reads it.
 STYLE = "glow"
@@ -31,9 +32,9 @@ def shader_module(style: str | None = None):
     return {"ink": shader_ink, "cosmos": shader_cosmos}.get(style or STYLE, shader)
 
 
-def bake(got: dict) -> direct.Channels:
+def bake(got: dict, track: Track) -> direct.Channels:
     """The channels the current style's shader reads."""
-    mod = models.load_cached(CACHE)
+    mod = models.load_cached(track.cache)
     return cosmos.bake(got, mod) if STYLE == "cosmos" else direct.direct(got, mod)
 
 
@@ -182,12 +183,12 @@ def frame_times(start: float, duration: float, fps: int) -> np.ndarray:
     return start + (np.arange(n, dtype=np.float64) + 1.0) / fps
 
 
-def render(got: dict, out_dir: str | Path, start: float = 0.0, duration: float | None = None,
+def render(got: dict, track: Track, out_dir: str | Path, start: float = 0.0, duration: float | None = None,
            size: tuple[int, int] = (1920, 1080), fps: int = 60, crf: int = 17,
            solo: str | None = None, quiet: bool = False) -> Path:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    ch = bake(got)
+    ch = bake(got, track)
     if solo:
         ch = solo_channels(ch, solo)
     total = ch.duration - start if duration is None else min(duration, ch.duration - start)
@@ -199,7 +200,7 @@ def render(got: dict, out_dir: str | Path, start: float = 0.0, duration: float |
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
            "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{size[0]}x{size[1]}",
            "-r", str(fps), "-i", "-",
-           "-ss", f"{start:.6f}", "-i", str(AUDIO),
+           "-ss", f"{start:.6f}", "-i", str(track.audio),
            "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "256k",
            "-t", f"{total:.6f}",
            "-c:v", "libx264", "-preset", "medium", "-crf", str(crf),
@@ -229,21 +230,21 @@ def render(got: dict, out_dir: str | Path, start: float = 0.0, duration: float |
         print(f"{len(times)} frames in {dt:.1f}s ({len(times) / dt:.0f} fps)")
 
     if whole:
-        export(got, ch, out_dir)
+        export(got, ch, track, out_dir)
     return out_path
 
 
-def stage(got: dict, out_dir: str | Path) -> Path:
+def stage(got: dict, track: Track, out_dir: str | Path) -> Path:
     """Only what the browser player needs - the shader and the baked channels - and
     no mp4. Seconds rather than minutes, which is what trying a look wants."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     Renderer(64, 36).release()              # compile it here first: a GLSL error is better read now
-    export(got, bake(got), out_dir)
+    export(got, bake(got, track), track, out_dir)
     return out_dir
 
 
-def export(got: dict, ch: direct.Channels, out_dir: Path) -> None:
+def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
     """plan.json + frames.bin + audio, in the format visuals/player already reads."""
     meta = got["meta"]
     bar = 4 * meta["period"]
@@ -251,10 +252,10 @@ def export(got: dict, ch: direct.Channels, out_dir: Path) -> None:
     sections = [{"index": i, "name": f"from bar {int(round(a / bar))}", "start": a, "end": b,
                  "scene": "gravity"} for i, (a, b) in enumerate(zip(edges[:-1], edges[1:]))]
     plan = {
-        "version": 1, "track": TRACK, "duration": ch.duration, "tempo": meta["tempo"],
+        "version": 1, "track": track.slug, "duration": ch.duration, "tempo": meta["tempo"],
         "meter": 4, "seed": 0, "grid": ch.header(), "per_frame": ["uTime"],
         "sections": sections,
-        "program": {"key": f"gravity-in-motion-{STYLE}",
+        "program": {"key": f"{track.slug}-{STYLE}",
                     "fragment": shader_module().fragment_source(shader.WEBGL_HEADER)},
         "vertex": shader_module().vertex_source(shader.WEBGL_HEADER),
         "frames_file": "frames.bin", "audio_file": "mix.m4a",
@@ -275,7 +276,7 @@ def export(got: dict, ch: direct.Channels, out_dir: Path) -> None:
                          "subject": a.subject if a.subject >= 0 else None} for a in ch.acts]
     (out_dir / "frames.bin").write_bytes(ch.data.astype("<f4").tobytes())
     (out_dir / "plan.json").write_text(json.dumps(plan, indent=1) + "\n")
-    src, dst = WORKDIR / "mix.m4a", out_dir / "mix.m4a"
+    src, dst = track.mix_m4a, out_dir / "mix.m4a"
     if src.exists():
         if dst.is_symlink() or dst.exists():
             dst.unlink()

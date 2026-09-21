@@ -49,6 +49,9 @@ def print_models(got: dict, arrays: dict, meta: dict) -> None:
     print("  sec  bars        state   " + " ".join(f"{n:>8s}" for n in names))
     for s, row in zip(sections, axes):
         print(f"  {s.index:3d}  {s.bar0:3d}-{s.bar1:3d}  {s.state:7s} " + " ".join(f"{v:+8.2f}" for v in row))
+    if "line_similarity" not in arrays:
+        print("lyrics: none")
+        return
     ls, ws = arrays["line_similarity"], arrays["word_similarity"]
     images = meta["images"]
     print("lyric lines -> image (similarity):")

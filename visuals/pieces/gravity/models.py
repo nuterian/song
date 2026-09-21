@@ -218,8 +218,9 @@ def text_similarity(texts: list[str], anchors: list[str]) -> np.ndarray:
 # ---------------------------------------------------------------------- run all
 
 
-def run(got: dict, audio: Path, stems_dir: Path, workdir: Path, model_dir: Path,
+def run(got: dict, audio: Path, stems_dir: Path, project: Path | None, model_dir: Path,
         verbose: bool = True) -> tuple[dict, dict]:
+    """`project` is the song tool's project.json; without one there are no lyrics to read."""
     import tempfile
     import time
 
@@ -290,8 +291,11 @@ def run(got: dict, audio: Path, stems_dir: Path, workdir: Path, model_dir: Path,
     say(f"CLAP: {len(sections)} sections x {len(prompts)} prompts  ({time.time() - t0:.0f}s)")
 
     # what each lyric line, and each word, is about
+    if project is None:
+        say("MiniLM: no lyrics (the song tool has not aligned this track)")
+        return arrays, meta
     t0 = time.time()
-    project = json.loads((workdir / "project.json").read_text())
+    project = json.loads(project.read_text())
     anchors = [text for text, _ in decide.IMAGES.values()]
     lines = [ln for ln in project["lines"] if ln.get("start") is not None]
     words = [(w_["text"], float(w_["start"]), float(w_["end"]), i)
