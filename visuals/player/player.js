@@ -12,6 +12,7 @@
 import { lyricInk, lyricOpacity, seating } from "./lyrics.js";
 
 const params = new URLSearchParams(location.search);
+if (params.get("embed")) document.body.classList.add("embed");
 const canvas = document.getElementById("gl");
 const audio = document.getElementById("audio");
 const playBtn = document.getElementById("play");
@@ -139,7 +140,7 @@ class Grid {
 
 
 function makeLyrics(spec, canvas, bar, camera) {
-  const st = spec.style;
+  let st = spec.style;
   // The canvas and the words share one frame, so they cannot come apart: the words are
   // placed in percentages of it and sized in its height (container units), by CSS alone.
   const frame = document.createElement("div");
@@ -156,15 +157,16 @@ function makeLyrics(spec, canvas, bar, camera) {
   const toggle = document.createElement("span");
   toggle.className = "choice";
   toggle.innerHTML = "<span>lyrics</span>";
+  const turn = (name) => {
+    on = name === "on";
+    for (const x of toggle.querySelectorAll("button")) x.classList.toggle("on", x.dataset.name === name);
+    const url = new URL(location.href); url.searchParams.set("lyrics", name); history.replaceState(null, "", url);
+    layer.hidden = !on;
+  };
   for (const name of ["on", "off"]) {
     const b = document.createElement("button");
     b.textContent = name; b.dataset.name = name;
-    b.addEventListener("click", () => {
-      on = name === "on";
-      for (const x of toggle.querySelectorAll("button")) x.classList.toggle("on", x.dataset.name === name);
-      const url = new URL(location.href); url.searchParams.set("lyrics", name); history.replaceState(null, "", url);
-      layer.hidden = !on;
-    });
+    b.addEventListener("click", () => turn(name));
     toggle.appendChild(b);
   }
   toggle.querySelector(`button[data-name="${on ? "on" : "off"}"]`).classList.add("on");
@@ -199,9 +201,20 @@ function makeLyrics(spec, canvas, bar, camera) {
   // A line is set where it belongs the moment it appears and stays there until it has gone
   // (lyrics.js, `seating`). It once slid there from the corner every line began in: a
   // transition on its position, meant for camera switches, which is not allowed back.
-  const seat = seating();
+  let seat = seating();
   const placed = new Map();                          // line index -> the region its element is in
   return {
+    get on() { return on; },
+    setOn(v) { turn(v ? "on" : "off"); },
+    // a new bake's words (the studio's edits): set afresh, where the new layout puts them
+    respec(next) {
+      spec = next || { ...spec, lines: [] };
+      st = spec.style;
+      layer.style.setProperty("--size", String(st.size));
+      for (const el of els.values()) el.remove();
+      els.clear(); placed.clear();
+      seat = seating();
+    },
     show(t) {
       if (!on) return;
       const cam = camera() || "static";
@@ -228,8 +241,8 @@ async function main() {
   const base = `../out/${encodeURIComponent(track)}/`;
   const planRes = await fetch(base + "plan.json");
   if (!planRes.ok) fail(`no plan for "${track}". Run:  python -m visuals render <song-workdir>`);
-  const plan = await planRes.json();
-  const grid = new Grid(plan.grid, await (await fetch(base + plan.frames_file)).arrayBuffer());
+  let plan = await planRes.json();
+  let grid = new Grid(plan.grid, await (await fetch(base + plan.frames_file)).arrayBuffer());
 
   const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false });
   if (!gl) fail("this browser has no WebGL2.");
@@ -297,7 +310,7 @@ async function main() {
   audio.src = base + plan.audio_file;
   seek.max = String(plan.duration);
 
-  const values = new Float32Array(grid.stride);
+  let values = new Float32Array(grid.stride);
   const perFrame = new Set(plan.per_frame);
   let lastDrawn = -1;
   fit();
@@ -308,6 +321,7 @@ async function main() {
   // else, so it can be done while the song plays.
   const feeds = new Map();                         // uniform name -> the channel that feeds it, if not its own
   const chosen = {};                               // variant kind -> the name picked (the camera, say)
+  const pickers = {};                              // variant kind -> how to pick one (again, after a new bake)
   for (const [kind, spec] of Object.entries(plan.variants || {})) {
     const group = document.createElement("span");
     group.className = "choice";
@@ -326,10 +340,11 @@ async function main() {
       group.appendChild(b);
     }
     choicesBox.appendChild(group);
+    pickers[kind] = pick;
     pick(spec.choices[params.get(kind)] ? params.get(kind) : spec.default);
   }
 
-  const words = plan.lyrics ? makeLyrics(plan.lyrics, canvas, choicesBox, () => chosen.camera) : null;
+  let words = plan.lyrics ? makeLyrics(plan.lyrics, canvas, choicesBox, () => chosen.camera) : null;
 
   function sectionAt(t) {
     for (const s of plan.sections) if (t >= s.start && t < s.end) return s;
@@ -445,6 +460,33 @@ async function main() {
   });
   const startAt = Number(params.get("t"));
   if (startAt > 0 && startAt < plan.duration) { audio.currentTime = startAt; seek.value = String(startAt); }
+
+  // The studio (visuals/studio/) edits the sheet and bakes it again; it hands the new bake
+  // to this page here, and the song plays on. Only what a bake makes is read again - the
+  // channels, the acts, the words; the shader and the sky are the same.
+  window.player = {
+    audio,
+    get chosen() { return { ...chosen }; },
+    variants(kind) { return Object.keys(((plan.variants || {})[kind] || {}).choices || {}); },
+    choose(kind, name) { if (pickers[kind]) pickers[kind](name); },
+    get lyrics() { return words ? words.on : null; },
+    setLyrics(v) { if (words) words.setOn(v); },
+    async reload() {
+      const next = await (await fetch(base + "plan.json", { cache: "no-store" })).json();
+      const buffer = await (await fetch(base + next.frames_file, { cache: "no-store" })).arrayBuffer();
+      grid = new Grid(next.grid, buffer);
+      if (values.length !== grid.stride) values = new Float32Array(grid.stride);
+      plan = next;
+      for (const [kind, pick] of Object.entries(pickers)) {
+        const spec = (plan.variants || {})[kind];
+        pick(spec && spec.choices[chosen[kind]] ? chosen[kind] : spec ? spec.default : chosen[kind]);
+      }
+      if (words) words.respec(plan.lyrics);
+      else if (plan.lyrics) words = makeLyrics(plan.lyrics, canvas, choicesBox, () => chosen.camera);
+      clearFeedback();
+      lastDrawn = -1;
+    },
+  };
 
   draw(startAt > 0 && startAt < plan.duration ? startAt : 0);
   readout.textContent =

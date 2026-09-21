@@ -117,13 +117,6 @@ class _RangeHandler(http.server.SimpleHTTPRequestHandler):
     this adds the one case that matters: a single `bytes=start-end`.
     """
 
-    def end_headers(self):  # noqa: N802
-        # Everything here is being worked on. "no-cache" still lets the browser keep a
-        # copy, but makes it ask whether the copy is current - so a page and its script
-        # are never from different days.
-        self.send_header("Cache-Control", "no-cache")
-        super().end_headers()
-
     def send_head(self):  # noqa: N802 - the base class spells it this way
         path = self.translate_path(self.path)
         header = self.headers.get("Range", "")
@@ -153,6 +146,11 @@ class _RangeHandler(http.server.SimpleHTTPRequestHandler):
         return _Slice(fh, end - start + 1)
 
     def end_headers(self):  # noqa: N802
+        # Everything here is being worked on. "no-cache" still lets the browser keep a
+        # copy, but makes it ask whether the copy is current - so a page and its script
+        # are never from different days. (This was once a second end_headers, above the
+        # one that is here now, and so never sent: the browser kept yesterday's player.js.)
+        self.send_header("Cache-Control", "no-cache")
         if getattr(self, "send_header_accept_ranges", False):
             self.send_header("Accept-Ranges", "bytes")
             self.send_header_accept_ranges = False
@@ -194,8 +192,9 @@ def cmd_edit(args) -> int:
     track = Track.resolve(args.song, args.audio)
     got = make.listened(track, verbose=False)
     _, sheet, path = make.directed(track, got)
-    print(f"sheet: {path}\nasking {args.model}: {args.request}")
-    got_back = editor.edit(track, got, sheet, args.request, model=args.model)
+    model = args.model or editor.MODEL
+    print(f"sheet: {path}\nasking {model}: {args.request}")
+    got_back = editor.edit(track, got, sheet, args.request, model=model)
     print(f"  said: {got_back['said']}  ({got_back['seconds']:.1f}s, {got_back['attempts']} attempt(s))")
     for d in got_back["did"]:
         print(f"  - {d}")
@@ -210,6 +209,14 @@ def cmd_edit(args) -> int:
         return 0
     print(f"kept: {sheet_.write(got_back['sheet'], sheet_.CURATED / f'{track.slug}.json')}")
     make.make(track, "cosmos")
+    return 0
+
+
+def cmd_studio(args) -> int:
+    from .pieces.gravity import studio
+    from .pieces.gravity.track import Track
+
+    studio.serve([Track.resolve(song) for song in args.songs], port=args.port)
     return 0
 
 
@@ -253,10 +260,15 @@ def main(argv: list[str] | None = None) -> int:
     e = sub.add_parser("edit", help="change a song's direction sheet by asking, with a local model")
     e.add_argument("song", help="an audio file or a song workdir")
     e.add_argument("request", help='what to change, in words: "close on Saturn in the second chorus"')
-    e.add_argument("--model", default="qwen3.5:9b", help="an Ollama model on this machine")
+    e.add_argument("--model", default=None, help="an Ollama model on this machine (default: the one that edits best, measured)")
     e.add_argument("--audio", default=None)
     e.add_argument("--dry", action="store_true", help="show the edited sheet; keep nothing")
     e.set_defaults(fn=cmd_edit)
+
+    st = sub.add_parser("studio", help="edit songs' videos on a timeline, by hand or by asking")
+    st.add_argument("songs", nargs="+", help="audio files or song workdirs")
+    st.add_argument("--port", type=int, default=8777)
+    st.set_defaults(fn=cmd_studio)
 
     r = sub.add_parser("render", help="render an mp4 and stage the player")
     r.add_argument("workdir", help="a song workdir, read-only")

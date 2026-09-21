@@ -48,6 +48,12 @@
     text-shadow: 0 0 0.35em rgba(0, 0, 0, 0.55);
   }
   #lyrics .line span { opacity: 0.42; }
+  /* embedded in the studio: the picture alone, as large as the frame allows; the studio has the controls */
+  body.embed { grid-template-rows: 1fr; background: #000; }
+  body.embed #bar { display: none; }
+  body.embed #stage { padding: 0; height: 100vh; }
+  body.embed canvas, body.embed #frame { width: min(100vw, calc(100vh * 16 / 9)); max-width: none; border-radius: 0; }
+  body.embed #frame canvas { width: 100%; }
 </style>
 </head>
 <body>

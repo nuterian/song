@@ -991,3 +991,38 @@ kind, rarer: an edit nobody asked for ("a two-shot of the Sun and Jupiter" also 
 the planets' rings), or the sheet restated whole. gpt-oss's one miss: asked for the drums
 to play the heart, it silenced the heart. **gpt-oss:20b is the default**; the others stay
 a `--model` away for a machine with less memory. A cold start adds about 20 s, loading it.
+
+# The studio (`studio.py`, `visuals/studio/`)
+
+    python -m visuals studio "examples/Gravity in Motion.wav" ~/Downloads/"Shattered Voices.wav"
+    -> http://127.0.0.1:8777/studio/?track=gravity-in-motion
+
+One screen, laid out as an editing suite is (Jugal: "like DaVinci Resolve ... less text,
+more visuals"): the picture, with its own transport and camera switch; an inspector beside
+it, in icon tabs (selection, feel, cast, words, changes); the song along the bottom on a
+timeline in bars - sections by name, an energy strip (loudness, lit by whether the kick
+is in, floating or empty), the shots as clips, the moments the beat comes back as marks as
+tall as they are strong, the lines of the words. Nothing scrolls but the panels in it.
+
+**A gesture is an edit the model could have made.** Clicking a shot and picking another,
+dragging the line between two shots, dragging a moment, choosing bars across the energy
+strip and giving them a shot, moving a dial: each is turned (timeline.js) into edits in
+the sheet's vocabulary and applied by the same `editor.apply` the model's answers go
+through, so a hand and a model change the video one way, and every change reads back in
+words in the list of changes. A request in the ask box comes back as a proposal, drawn
+dashed on the timeline, and is applied or discarded. Planets are picked by their own
+colours (the shader's tints).
+
+**The loop.** The server keeps each song's listening in memory; an edit is baked and
+written over the bundle the player shows, and the player takes it without stopping -
+the channels, acts and words read again, the shader and the sky kept. Edit to picture:
+1.3-1.4 s on Gravity (2.6-7 s while the model comparison had the machine). The star
+textures, 7.5 s of every export, are built once per server. A request to the model: about
+7 s, 28 s the first time (loading it). The picture plays at 60 fps inside the page.
+
+Each change is kept in `visuals/sheets/<song>.json` and logged, with who made it - a hand,
+or a request and the model's edits - to the song's cache (`edits.jsonl`): what people
+change is what the director gets wrong.
+
+Found on the way: the static server's no-cache header was never sent (a second
+`end_headers` replaced the first), which is why a browser kept yesterday's player.js.
