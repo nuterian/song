@@ -25,6 +25,19 @@ function own(id) {
 }
 const choicesBox = own("choices");
 const fpsBox = own("fps");
+// the clock: made here, first in the bar after the play button, so that it is there
+// whichever index.html the browser has
+const clock = (() => {
+  let el = document.getElementById("clock");
+  if (!el) {
+    el = document.createElement("span"); el.id = "clock";
+    el.style.cssText = "color:#f2f0ff;font-variant-numeric:tabular-nums;white-space:nowrap;min-width:15ch;cursor:pointer";
+    playBtn.after(el);
+  }
+  el.title = "click to copy a link to this moment";
+  return el;
+})();
+const mmss = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
 
 // The mp4 is rendered at 60, and frame feedback decays once per frame, so the
 // player steps at 60 too. Left to the display's own rate a 120 Hz screen would
@@ -271,11 +284,21 @@ async function main() {
     gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
 
     const morph = values[grid.names.indexOf("uMorph")];
+    const act = (plan.acts || []).find((a) => t >= a.start && t < a.end);
+    clock.textContent = `${mmss(t)} / ${mmss(plan.duration)}`;
     readout.textContent =
-      `${plan.track}  ${t.toFixed(2)}s / ${plan.duration.toFixed(0)}s  ` +
+      `${t.toFixed(2)}s  ` + (act ? `act ${(plan.acts.indexOf(act) + 1)} ${act.function}  ` : "") +
       `${section.name}  ${section.scene}` +
       (morph < 0.999 ? `  morphing ${(morph * 100).toFixed(0)}%` : "");
   }
+
+  // The scrubber follows the song except while it is being dragged. (It used to defer to
+  // the scrubber whenever it had *focus* - and it keeps focus after one click, so from
+  // then on it never moved again.)
+  let scrubbing = false;
+  seek.addEventListener("pointerdown", () => (scrubbing = true));
+  for (const ev of ["pointerup", "pointercancel", "change", "blur"]) seek.addEventListener(ev, () => (scrubbing = false));
+  window.addEventListener("pointerup", () => (scrubbing = false));
 
   // frames actually drawn per second, and the slowest gap between two of them
   let shown = 0, slowest = 0, lastTick = performance.now(), windowStart = lastTick;
@@ -291,7 +314,7 @@ async function main() {
       if (lastDrawn >= 0 && (t < lastDrawn || t - lastDrawn > 0.5)) clearFeedback();
       draw(t);
       lastDrawn = t;
-      if (document.activeElement !== seek) seek.value = String(t);
+      if (!scrubbing) seek.value = String(t);
     }
     requestAnimationFrame(tick);
   }
@@ -306,8 +329,26 @@ async function main() {
     audio.currentTime = Number(seek.value);
     clearFeedback();
   });
+  // space plays and pauses; the arrows step five seconds (one with shift); a link carries the moment
+  window.addEventListener("keydown", (e) => {
+    if (e.target instanceof HTMLButtonElement && e.code === "Space") return;
+    if (e.code === "Space") { e.preventDefault(); audio.paused ? audio.play() : audio.pause(); }
+    if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+      e.preventDefault();
+      const step = (e.shiftKey ? 1 : 5) * (e.code === "ArrowLeft" ? -1 : 1);
+      audio.currentTime = Math.min(Math.max(audio.currentTime + step, 0), plan.duration - 0.05);
+      clearFeedback();
+    }
+  });
+  clock.addEventListener("click", () => {
+    const url = new URL(location.href); url.searchParams.set("t", audio.currentTime.toFixed(1));
+    history.replaceState(null, "", url);
+    if (navigator.clipboard) navigator.clipboard.writeText(url.href).catch(() => {});
+  });
+  const startAt = Number(params.get("t"));
+  if (startAt > 0 && startAt < plan.duration) { audio.currentTime = startAt; seek.value = String(startAt); }
 
-  draw(0);
+  draw(startAt > 0 && startAt < plan.duration ? startAt : 0);
   readout.textContent =
     `${plan.track}  ${plan.duration.toFixed(0)}s  ${plan.tempo.toFixed(1)} bpm  ` +
     `${plan.sections.length} sections  one program  - press play`;

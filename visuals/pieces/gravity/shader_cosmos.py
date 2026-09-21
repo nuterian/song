@@ -591,8 +591,11 @@ void main() {{
         else {{ over = mix(over, rk, step(overA, rock)); overA = max(overA, rock); }}
     }}
 
-    // ---- a comet, on a long ellipse: Kepler's equation, five Newton steps. Small; its tail
-    // always away from the Sun, and as long as the pad is bright ------------------------------------
+    // ---- a comet, on a long ellipse: Kepler's equation, five Newton steps. Small and far off.
+    // Its tail streams out *behind* it, as every trail in this picture does, longer the
+    // faster it is going - quick and long round the Sun, short and slow far out. (A real
+    // comet's tail points away from the Sun whichever way it is travelling, and drawn that
+    // way it looked like something drifting sideways with a stick on it.) ------------------------
     {{
         float ce = 0.70, ca = (a0 + 0.30) * tug;
         float M = TAU * (uOrbitSlow * 0.30 + 0.37);
@@ -601,21 +604,17 @@ void main() {{
         vec2 orb = rot2(0.95 + uCamTurn) * vec2(ca * (cos(E) - ce), ca * sqrt(1.0 - ce * ce) * sin(E));
         vec2 cs = vec2(orb.x, orb.y * e);
         float closeness = clamp(ca * (1.0 - ce) / max(length(orb), 1e-3), 0.0, 1.0);
-        vec2 anti = normalize(cs + 1e-6);                                // straight away from the Sun
         vec2 vel = rot2(0.95 + uCamTurn) * vec2(-sin(E), sqrt(1.0 - ce * ce) * cos(E));
-        vec2 away = normalize(anti - 0.55 * normalize(vec2(vel.x, vel.y * e) + 1e-6));   // dust lags: it bends back along the orbit
+        float speed = length(vel) / (1.0 - ce * cos(E));                 // Kepler: 2.4 at perihelion, 0.4 at the far end
+        vec2 anti = normalize(cs + 1e-6);                                // away from the Sun: the tail leans a little that way, as dust does
+        vec2 away = normalize(-normalize(vec2(vel.x, vel.y * e) + 1e-6) + 0.25 * anti);
         vec2 d = q - cs;
         float back = dot(d, away);
-        float len = (0.016 + 0.075 * closeness * closeness) * (0.55 + 0.75 * uField);
+        float len = (0.010 + 0.030 * speed) * (0.7 + 0.5 * uField);
         float u = clamp(back / len, 0.0, 1.0);
-        // a small thing a long way off: a fine wedge of dust that fades to nothing along its length
-        float tailA = step(0.0, back) * step(back, len) * disc(abs(dot(d, vec2(-away.y, away.x))) / pxScene, (0.55 + 1.0 * closeness) * (1.0 - 0.9 * u) + 0.2);
+        // a fine wedge that fades to nothing along its length
+        float tailA = step(0.0, back) * step(back, len) * disc(abs(dot(d, vec2(-away.y, away.x))) / pxScene, (0.55 + 0.8 * closeness) * (1.0 - 0.9 * u) + 0.2);
         vec3 cc = mix(vec3(0.96, 0.92, 0.80), white, 0.30 * (1.0 - u)); float cA = tailA * 0.50 * (1.0 - u) * (1.0 - u) * lum;
-        // ...and the ion tail: gas, blown dead straight down the solar wind - finer, longer, blue
-        float backI = dot(d, anti), lenI = 1.25 * len, alongI = clamp(backI / lenI, 0.0, 1.0);
-        float ion = step(0.0, backI) * step(backI, lenI) * disc(abs(dot(d, vec2(-anti.y, anti.x))) / pxScene, 0.55)
-                    * 0.32 * (1.0 - alongI) * (1.0 - alongI) * lum * smoothstep(0.15, 0.5, closeness);
-        cc = mix(cc, vec3(0.74, 0.85, 1.0), step(cA, ion)); cA = max(cA, ion);
         float head = disc(length(d) / pxScene, 1.3 + 0.6 * closeness);
         cc = mix(cc, white, head); cA = max(cA, head);
         if (orb.y > 0.0) {{ under = mix(under, cc, step(underA, cA)); underA = max(underA, cA); }}
