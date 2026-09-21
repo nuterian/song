@@ -24,6 +24,11 @@ const P = {
   eyeoff: '<path d="M4 4l16 16M9.9 5.8A9.7 9.7 0 0 1 12 5.5C18 5.5 21.5 12 21.5 12a17 17 0 0 1-2.8 3.6M6.3 7.5C3.9 9.3 2.5 12 2.5 12S6 18.5 12 18.5c1.4 0 2.7-.4 3.8-.9"/><path d="M9.9 10a3 3 0 0 0 4.1 4.1"/>',
   zoomin: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4M8 11h6M11 8v6"/>',
   zoomout: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4M8 11h6"/>',
+  metronome: '<path d="M9.5 3.5h5L19 20.5H5z"/><path d="M12 15.5 16.5 7M8 16h8"/>',
+  refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3L19.5 9"/><path d="M19.5 4v5h-5"/>',
+  left: '<path d="m14.5 6-6 6 6 6"/>',
+  right: '<path d="m9.5 6 6 6-6 6"/>',
+  out: '<path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   // the six shots, as pictures of what the camera does
   approach: '<path d="M3 12h11M10.5 8.5 14 12l-3.5 3.5"/><circle cx="19" cy="12" r="2.5"/>',
   wide: '<ellipse cx="12" cy="12" rx="9.5" ry="4.5"/><circle cx="12" cy="12" r="2"/><circle cx="20" cy="10.3" r="1" fill="currentColor"/>',

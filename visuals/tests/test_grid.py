@@ -165,3 +165,15 @@ def test_eighth_notes_taken_for_the_beat_are_halved():
     assert g.get("halved") and abs(g["tempo"] - 90.0) < 1.0 and g["meter"] == 4
     d = np.abs(beats[5:-5][:, None] - g["beats"][None, :]).min(axis=1)
     assert np.median(d) < 0.01
+
+
+def test_a_person_can_correct_the_grid():
+    from visuals.pieces.gravity import grid
+
+    beats = np.arange(0.0, 10.0, 0.5)
+    assert np.allclose(np.diff(grid.double(beats)), 0.25) and len(grid.double(beats)) == 2 * len(beats)
+    bars = beats[::4]
+    moved = grid.shift_bars(beats, bars, 1)
+    assert np.allclose(moved, beats[1::4][:len(moved)])
+    assert grid.normal_fix({"tempo_times": 1, "meter": None, "bar_one": 0}) is None and grid.normal_fix(None) is None
+    assert grid.normal_fix({"tempo_times": 2, "bar_one": -1}) == {"tempo_times": 2.0, "meter": None, "bar_one": -1}

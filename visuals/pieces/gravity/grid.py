@@ -18,6 +18,11 @@ The meter (beats in a bar) is Beat This!'s. The bar's phase comes from where the
 re-enters after a rest, when there are at least four such re-entries and three quarters
 of them agree; otherwise from Beat This!'s downbeats.
 
+A person can correct what was found (`fix`, from the direction sheet's `heard`): the beat
+twice as fast or half as fast, the beats in a bar, and where bar 1 falls, in beats. The
+grid is found as ever, and then corrected - a correction is a fact about the song that
+the listening got wrong, and everything after the grid is worked out again from it.
+
 Why a scan: the fit only locks on from within about 0.1 % of the true tempo, and the
 old starting point - the median gap between kicks - is not a beat when a kick doubles
 (Shattered Voices: 125.39 BPM with 7 % of the hats on it; it is 90.00).
@@ -342,10 +347,35 @@ def halve(beats: np.ndarray, bt_downbeats: np.ndarray) -> np.ndarray:
     return beats[::2]
 
 
+def double(beats: np.ndarray) -> np.ndarray:
+    """A beat between every two: the beat twice as fast."""
+    if len(beats) < 2:
+        return beats
+    mids = 0.5 * (beats[:-1] + beats[1:])
+    return np.sort(np.concatenate([beats, mids, [beats[-1] + 0.5 * (beats[-1] - beats[-2])]]))
+
+
+def shift_bars(beats: np.ndarray, downbeats: np.ndarray, by: int) -> np.ndarray:
+    """Every bar line moved `by` beats (later if positive), as it lands on the beats."""
+    if not by or not len(downbeats):
+        return downbeats
+    idx = _nearest_beat(beats, downbeats) + int(by)
+    return beats[idx[(idx >= 0) & (idx < len(beats))]]
+
+
+def normal_fix(fix: dict | None) -> dict | None:
+    """A correction, or None when it corrects nothing."""
+    if not fix:
+        return None
+    f = {"tempo_times": float(fix.get("tempo_times") or 1.0), "meter": fix.get("meter"), "bar_one": int(fix.get("bar_one") or 0)}
+    return None if f == {"tempo_times": 1.0, "meter": None, "bar_one": 0} else f
+
+
 def find(sharp: np.ndarray, kicks: np.ndarray, onsets: tuple[np.ndarray, np.ndarray],
-         bt: dict, duration: float, force: str | None = None) -> dict:
+         bt: dict, duration: float, force: str | None = None, fix: dict | None = None) -> dict:
     """The grid for a song. `onsets` (times, sizes) are every attack heard, for snapping;
-    `force` ("lattice" or "tracked") is for measuring one source against the other."""
+    `force` ("lattice" or "tracked") is for measuring one source against the other; `fix`
+    is a person's correction (module docstring)."""
     meter, meter_agree = meter_of(bt)
     bt_period = float(np.median(np.diff(bt["beats"]))) if len(bt["beats"]) > 1 else float("nan")
     gaps = np.diff(bt["beats"])
@@ -393,6 +423,15 @@ def find(sharp: np.ndarray, kicks: np.ndarray, onsets: tuple[np.ndarray, np.ndar
         beats = halve(beats, bt["downbeats"])
         meter = meter // 2 if meter // 2 >= 2 else 4
         out["meter"], out["halved"] = meter, True
+    fix = normal_fix(fix)
+    if fix:
+        if fix["tempo_times"] == 2.0:
+            beats = double(beats)
+        elif fix["tempo_times"] == 0.5:
+            beats = halve(beats, bt["downbeats"])
+        if fix["meter"]:
+            meter = int(fix["meter"])
+        out["meter"], out["fix"] = meter, fix
     phase, phase_from, kv, bt_votes = bar_phase(beats, kicks, bt["downbeats"], meter)
     if source == "lattice" or halved:
         downbeats = beats[(np.arange(len(beats)) - phase) % meter == 0]
@@ -401,6 +440,9 @@ def find(sharp: np.ndarray, kicks: np.ndarray, onsets: tuple[np.ndarray, np.ndar
         # bar after it off its line. Its bars follow Beat This!'s downbeats where it has
         # them, and are counted out in whole bars across any stretch where it has none.
         downbeats, phase_from = local_downbeats(beats, bt["downbeats"], meter, phase), "beat this, bar by bar"
+    if fix and fix["bar_one"]:
+        downbeats, phase_from = shift_bars(beats, downbeats, fix["bar_one"]), phase_from + f", moved {fix['bar_one']:+d} beats by hand"
+        phase = (phase + fix["bar_one"]) % meter
     period = float(np.median(np.diff(beats)))
     out.update({"source": source, "beats": beats, "downbeats": downbeats, "period": period,
                 "tempo": 60.0 / period, "bar_phase": phase, "bar_phase_from": phase_from,

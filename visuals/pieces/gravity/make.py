@@ -13,27 +13,47 @@ from . import MODELS
 from .track import Track, prepare
 
 
-def listened(track: Track, force: bool = False, verbose: bool = True) -> dict:
-    from . import listen
+def cache_of(track: Track, fix: dict | None) -> Path:
+    """Where a listening, and the models run on it, are kept: the song's cache as heard, and
+    a folder in it for each correction of the grid - so going back to one is not listening
+    again, and a correction never overwrites what was heard."""
+    from .grid import normal_fix
 
-    got = None if force else listen.load_cached(track.cache)
+    fix = normal_fix(fix)
+    if not fix:
+        return track.cache
+    return track.cache / f"grid-x{fix['tempo_times']:g}-m{fix['meter'] or 0}-b{fix['bar_one']:+d}"
+
+
+def listened(track: Track, force: bool = False, verbose: bool = True, grid_fix="sheet") -> dict:
+    """The song heard - with the grid as the song's kept sheet corrects it, if it does
+    (`grid_fix`: "sheet", or a correction, or None). Beat This! is not run again for a
+    correction: its beats are the audio's, whatever the grid made of them."""
+    from . import listen, sheet as sheet_
+
+    fix = sheet_.grid_fix(track) if grid_fix == "sheet" else grid_fix
+    cache = cache_of(track, fix)
+    got = None if force else listen.load_cached(cache, fix)
     if got is None:
         prepare(track, say=print if verbose else _quiet)
-        got = listen.listen(track.audio, track.stems_dir, track.workdir, verbose=verbose)
-        listen.save(got, track.cache)
+        bt = None if force else listen.cached_beat_this(track.cache) or listen.cached_beat_this(cache)
+        got = listen.listen(track.audio, track.stems_dir, track.workdir, verbose=verbose, grid_fix=fix, bt=bt)
+        listen.save(got, cache)
     return got
 
 
 def modelled(track: Track, got: dict, force: bool = False, verbose: bool = True) -> tuple[dict, dict]:
     from . import models
 
-    mod = None if force else models.load_cached(track.cache)
+    cache = cache_of(track, got["meta"].get("grid_fix"))
+    mod = None if force else models.load_cached(cache)
     if mod is not None and mod[1].get("listened") != models.listened_key(got["meta"]):
         mod = None                      # run on another listening: its sections are stale
     if mod is None:
         arrays, meta = models.run(got, track.audio, track.stems_dir, track.project, MODELS, verbose=verbose)
-        models.save(arrays, meta, track.cache)
-        mod = models.load_cached(track.cache)
+        cache.mkdir(parents=True, exist_ok=True)
+        models.save(arrays, meta, cache)
+        mod = models.load_cached(cache)
     return mod
 
 
@@ -46,6 +66,9 @@ def directed(track: Track, got: dict, fresh: bool = False):
     path = sheet_.path_for(track)
     if not fresh and path.parent == sheet_.CURATED:
         the = sheet_.read(path)
+        if the.get("sheet") == 1:                    # written before `heard`: given one, and kept so
+            the = sheet_.upgrade(the, track, got, render.bake(got, track, the | {"sheet": sheet_.VERSION}))
+            sheet_.write(the, path)
         bad = sheet_.validate(the, got)
         if bad:
             raise SystemExit(f"{path} cannot be baked:\n  " + "\n  ".join(bad))

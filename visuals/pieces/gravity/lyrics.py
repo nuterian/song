@@ -162,6 +162,33 @@ def _ease(x: float) -> float:
     return 4 * x ** 3 if x < 0.5 else 1 - (-2 * x + 2) ** 3 / 2
 
 
+def sung_sections(track: Track, bar_t) -> list[tuple[str, int, int]]:
+    """The song's sections as its lyric sheet names them, in bars: from the bar its first
+    line starts in to the bar after its last line ends. Repeated names are numbered."""
+    src = source(track)
+    if src is None:
+        return []
+    project = json.loads(src.read_text())
+    lines = project.get("lines", [])
+    names = [s.get("name", "") for s in project.get("sections", [])]
+    count = {n: names.count(n) for n in names}
+    seen: dict[str, int] = {}
+    out = []
+    for s in project.get("sections", []):
+        idx = [i for i in s.get("line_indices", []) if i < len(lines) and lines[i].get("start") is not None]
+        if not idx:
+            continue
+        name = s.get("name", "section")
+        seen[name] = seen.get(name, 0) + 1
+        if count[name] > 1:
+            name = f"{name} {seen[name]}"
+        t0, t1 = float(lines[idx[0]]["start"]), float(lines[idx[-1]]["end"])
+        b0 = max(0, int((bar_t <= t0).sum()) - 1)
+        b1 = min(len(bar_t), int((bar_t < t1).sum()))
+        out.append((name, b0, max(b1, b0 + 1)))
+    return out
+
+
 # ------------------------------------------------------------------------ places
 
 

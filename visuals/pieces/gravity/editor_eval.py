@@ -101,7 +101,7 @@ def main(argv=None) -> int:
     for tr, cases in songs:
         got = make.listened(tr, verbose=False)
         _, sh, _ = make.directed(tr, got)
-        prepared.append((tr, got, sh, editor.named_sections(tr, got["arrays"]["bar_t"]), cases))
+        prepared.append((tr, got, sh, [(x["name"], *x["bars"]) for x in sh["heard"]["sections"]], cases))
     report = {}
     for model in args.models:
         _unload(model)                                     # each model starts alone in memory, and cold

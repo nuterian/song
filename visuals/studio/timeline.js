@@ -69,3 +69,18 @@ export function changedMoments(before, after) {
     changed: after.filter((r) => was.has(r.bar) && Math.abs(was.get(r.bar) - r.strength) > 1e-9).map((r) => r.bar),
   };
 }
+
+// A section's edge dragged to bar `to`: grown, it names the bars it takes (cutting back
+// the section there); shrunk, the bars it gives up are left unnamed. At least a bar kept.
+export function sectionEdgeEdits(section, side, to, bars) {
+  const [a, b] = section.bars;
+  const x = Math.round(to);
+  if (side === "end") {
+    const e = Math.min(Math.max(x, a + 1), bars);
+    if (e === b) return [];
+    return e > b ? [{ op: "section", bars: [a, e], name: section.name }] : [{ op: "section", bars: [e, b], name: "" }];
+  }
+  const s = Math.max(Math.min(x, b - 1), 0);
+  if (s === a) return [];
+  return s < a ? [{ op: "section", bars: [s, b], name: section.name }] : [{ op: "section", bars: [a, s], name: "" }];
+}

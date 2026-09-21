@@ -12,13 +12,18 @@ The slug is the `song` tool's, so an audio file and the workdir `song` made from
 resolve to the same track and share one cache.
 
 `prepare` makes what listening needs and does nothing that is already there: a lossless
-copy of a lossy file, the four Demucs stems, the player's mix.m4a.
+copy of a lossy file, the four Demucs stems, the player's mix.m4a. A file from outside
+this repository (~/Downloads, say) is copied into the cache first, and everything reads
+the copy: the song's own files stay the song's even if the original moves, and the
+studio - which may be started where macOS will not let it read ~/Downloads - never needs
+the original again.
 """
 
 from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import time
 import unicodedata
@@ -59,14 +64,19 @@ class Track:
 
     @property
     def audio(self) -> Path:
-        """What every step reads: the source itself if lossless, else its decode."""
-        if self.source.suffix.lower() in LOSSLESS:
-            return self.source
+        """What every step reads: the source itself if lossless and in this repository, a
+        copy of it in the cache if lossless and from elsewhere, else its decode."""
+        suffix = self.source.suffix.lower()
+        if suffix in LOSSLESS:
+            return self.source if self.source.is_relative_to(ROOT) else self.cache / f"source{suffix}"
         return self.cache / "audio.wav"
 
     @property
     def stems_dir(self) -> Path:
-        return self.cache / "demucs_raw" / DEMUCS_MODEL / self.audio.stem
+        # Demucs names its folder for the file it read: the source's own name for a song
+        # separated before its audio was copied in, the copy's for one separated after
+        kept = self.cache / "demucs_raw" / DEMUCS_MODEL / self.source.stem
+        return kept if kept.exists() else self.cache / "demucs_raw" / DEMUCS_MODEL / self.audio.stem
 
     @property
     def project(self) -> Path | None:
@@ -132,7 +142,10 @@ def _find_audio(workdir: Path) -> Path:
 def prepare(track: Track, say=print) -> None:
     """Everything listening needs, made once: decode, stems, the player's audio."""
     track.cache.mkdir(parents=True, exist_ok=True)
-    if not track.audio.exists():
+    if not track.audio.exists() and track.source.suffix.lower() in LOSSLESS:
+        say(f"copying {track.source.name} -> {_shown(track.audio)}")
+        shutil.copy2(track.source, track.audio)
+    elif not track.audio.exists():
         say(f"decoding {track.source.name} -> {track.audio.relative_to(ROOT)}")
         _ffmpeg("-i", str(track.source), "-c:a", "pcm_s16le", str(track.audio))
     if not all((track.stems_dir / f"{s}.wav").exists() for s in STEMS):
@@ -156,6 +169,10 @@ def separate(track: Track, say=print) -> None:
     if got.returncode != 0 or missing:
         raise SystemExit(f"demucs failed (exit {got.returncode}, missing {missing}):\n{got.stderr[-1500:]}")
     say(f"  stems in {track.stems_dir.relative_to(ROOT)}  ({time.time() - t0:.0f}s)")
+
+
+def _shown(p: Path) -> str:
+    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
 
 
 def _ffmpeg(*args: str) -> None:

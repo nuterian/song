@@ -1026,3 +1026,57 @@ change is what the director gets wrong.
 
 Found on the way: the static server's no-cache header was never sent (a second
 `end_headers` replaced the first), which is why a browser kept yesterday's player.js.
+
+## Correcting what was heard (sheet version 2: `heard`)
+
+The sheet now holds the few facts about the song a person may need to correct, and the
+names its parts go by:
+
+- **The grid**: the beat twice or half as fast as found, the beats in a bar, and where
+  bar 1 falls, in beats (`grid.find(fix=...)`). A correction listens to the song again on
+  the corrected grid - Beat This! is not run again - and the director makes its shots and
+  moments anew on the new bars; the cast, the dials and the words' settings are kept, and
+  the sections' names carried across by time. The first time a grid is corrected: 161 s
+  on Gravity (bar 1 moved a beat: 65 s listening, 95 s the models), 103-107 s on
+  Shattered Voices at twice the tempo (180 BPM, 117 bars). Each corrected grid's
+  listening is kept in its own folder in the cache (2.2 MB), so going back is 1-2 s and
+  nothing heard is overwritten. A click on every beat, higher on the bar, is the way to
+  hear whether a grid is right.
+- **Sections by name**: the lyric sheet's, and between them, four bars or more, "Intro",
+  "Instrumental n", "Outro"/"End"; a song with no lyrics gets the director's own sections
+  (cut where the floor comes back), named by how full they are - Drive, Float, Break - and
+  numbered. They change nothing in the picture (a rename is not baked); they are how a
+  person, or the model, says where. Renamed, moved, added, unnamed in the studio, or asked
+  for ("call this the drop").
+
+Sheets written before (version 1) are given `heard` when they are read, and kept so.
+
+A song from outside the repository is now copied into its cache when first prepared,
+and read from there: the studio, started by the desktop app, was not allowed by macOS to
+read ~/Downloads, and a correction that listens again failed on it.
+
+## One history
+
+Every change - a hand's, the model's, a correction of the grid - is a step in one history,
+kept with the song (it is there when the studio is opened again). A step is described by
+comparing the sheets before and after it (`editor.changes`): what kind of thing, where
+(bars, a bar, the whole song), what it was, what it is now - so the model's proposal, a
+hand's edit and an undo all read the same way, as cards: who (you, or the AI with the
+request in quotes), and a line per change. Undo, redo and a click on any step move along
+it; a change after an undo drops what was undone.
+
+**The AI knows where you are.** The song map tells the model what is selected, or, with
+nothing selected, where the playhead is: "a close shot on Jupiter here" with Instrumental 1
+selected gave bars 50-66, all of it (before, told of both selection and playhead, it took
+the playhead's single bar); "make this part wide" with the playhead in Chorus 2 changed
+the shot it is in, 77-98. Edits that restate what the sheet already has are dropped.
+
+**What made the model slow was not the model.** In the studio, gpt-oss:20b took 19-118 s a
+request against ~7 s measured alone. Ollama's log: another workload on the machine (an
+image server, with qwen3.5:9b) shared the same Ollama, and each request evicted the other's
+model - 20-52 s of every request was loading. The studio now keeps its model loaded for
+30 minutes, loads it when it starts, says when it is loading, and has a model picker: a
+smaller model answers in seconds when memory is short, and an answer is only ever a
+proposal, shown on the timeline, applied or discarded. The prompt has changed since the
+comparison (sections, the selection); `editor_eval` is to be run again when the machine
+is otherwise quiet.

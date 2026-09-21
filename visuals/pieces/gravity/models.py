@@ -367,8 +367,9 @@ def playing_at(a: dict, stem: str, t: np.ndarray) -> np.ndarray:
 
 def listened_key(lmeta: dict) -> list:
     """Which listening these models were run on: sections, and so CLAP's rows, follow the grid."""
-    return [lmeta.get("version"), round(float(lmeta["period"]), 9), round(float(lmeta["grid"].get("t0", 0.0)), 9),
-            int(lmeta.get("meter", 4))]
+    key = [lmeta.get("version"), round(float(lmeta["period"]), 9), round(float(lmeta["grid"].get("t0", 0.0)), 9),
+           int(lmeta.get("meter", 4))]
+    return key + [lmeta["grid_fix"]] if lmeta.get("grid_fix") else key     # a corrected grid: bars moved
 
 
 def save(arrays: dict, meta: dict, cache: Path) -> None:

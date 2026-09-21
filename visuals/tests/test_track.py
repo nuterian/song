@@ -46,7 +46,24 @@ def test_a_lossy_file_is_read_through_one_decode_in_the_cache(tmp_path):
     assert t.stems_dir == t.cache / "demucs_raw" / "htdemucs" / "audio"
     wav = tmp_path / "Shattered Voices.wav"
     wav.write_bytes(b"")
-    assert Track.resolve(wav).audio == wav
+    t = Track.resolve(wav)                  # lossless, but from outside the repository: read from a copy
+    assert t.audio == t.cache / "source.wav"
+
+
+def test_audio_from_outside_is_copied_in_and_the_copy_is_read(tmp_path, monkeypatch):
+    from visuals.pieces.gravity import track as track_
+
+    monkeypatch.setattr(Track, "cache", property(lambda self: tmp_path / "cache" / self.slug))
+    wav = tmp_path / "Far Away.wav"
+    wav.write_bytes(b"RIFF....")
+    t = Track.resolve(wav)
+    monkeypatch.setattr(track_, "separate", lambda track, say: None)
+    monkeypatch.setattr(track_, "_ffmpeg", lambda *a: None)
+    track_.prepare(t, say=lambda *a: None)
+    assert t.audio.read_bytes() == b"RIFF...." and t.audio.parent == t.cache
+    # stems made before the copy existed keep their folder, named for the source
+    (t.cache / "demucs_raw" / "htdemucs" / "Far Away").mkdir(parents=True)
+    assert t.stems_dir.name == "Far Away"
 
 
 def test_a_track_with_no_song_workdir_has_no_lyrics_and_its_own_mix(tmp_path):
@@ -68,7 +85,7 @@ def test_a_workdir_finds_its_audio_or_says_how_to_name_it(tmp_path):
     assert t.slug == "my-song" and t.workdir == wd and t.project == wd / "project.json"
     other = tmp_path / "elsewhere.flac"
     other.write_bytes(b"")
-    assert Track.resolve(wd, audio=other).audio == other
+    assert Track.resolve(wd, audio=other).source == other
 
 
 def test_what_is_not_audio_is_refused(tmp_path):

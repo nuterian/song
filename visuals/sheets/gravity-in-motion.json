@@ -1,11 +1,33 @@
 {
-  "sheet": 1,
+  "sheet": 2,
   "song": {
     "slug": "gravity-in-motion",
     "tempo": 125.0004,
     "meter": 4,
     "bars": 149,
     "seconds": 285.8
+  },
+  "heard": {
+    "tempo_times": 1.0,
+    "meter": null,
+    "bar_one": 0,
+    "sections": [
+      {"name": "Intro", "bars": [0, 17]},
+      {"name": "Verse 1", "bars": [17, 26]},
+      {"name": "Pre-Chorus 1", "bars": [26, 33]},
+      {"name": "Chorus 1", "bars": [33, 50]},
+      {"name": "Instrumental 1", "bars": [50, 66]},
+      {"name": "Verse 2", "bars": [66, 74]},
+      {"name": "Pre-Chorus 2", "bars": [74, 81]},
+      {"name": "Chorus 2", "bars": [81, 90]},
+      {"name": "Instrumental 2", "bars": [90, 97]},
+      {"name": "Bridge", "bars": [97, 106]},
+      {"name": "Instrumental 3", "bars": [106, 113]},
+      {"name": "Final Chorus", "bars": [113, 132]},
+      {"name": "Instrumental 4", "bars": [132, 137]},
+      {"name": "Outro", "bars": [137, 145]},
+      {"name": "End", "bars": [145, 149]}
+    ]
   },
   "cast": {
     "pulse": "kick",

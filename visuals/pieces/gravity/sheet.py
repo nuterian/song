@@ -2,8 +2,14 @@
 or a small local model, prompted - can read and change.
 
 What was heard is not in it - where the beats fall, what each instrument played, how
-loud; that is the song. The sheet is what was made of it:
+loud; that is the song - except where a person has corrected it, and the names the song's
+parts go by. The sheet is what was made of it:
 
+    heard       corrections to the grid (the beat twice or half as fast, the beats in a
+                bar, where bar 1 falls) and the song's sections by name - from its lyric
+                sheet, or, with none, from how full it is - which a person may rename,
+                move and add to. Sections change nothing in the picture; they are how a
+                person, or the model, says where.
     cast        who plays each part of the theme
     reentries   the bars where the floor comes back, and how hard
     acts        the song cut into acts: bars, a shot, and for some shots a planet. The act
@@ -35,8 +41,12 @@ from . import ROOT
 from .cast import CHOICES
 from .track import Track
 
-VERSION = 1
+VERSION = 2                  # 2: `heard`, the grid's corrections and the sections by name
 CURATED = ROOT / "visuals" / "sheets"
+GRID = {"tempo_times": 1.0, "meter": None, "bar_one": 0}      # as heard: nothing corrected
+TEMPO_TIMES = (0.5, 1.0, 2.0)
+METERS = (2, 3, 4, 5, 6, 7)
+STATE_NAME = {"drive": "Drive", "float": "Float", "void": "Break", "silent": "Silence"}
 
 SHOTS = {
     "approach": "from far out and low, coming in to the home view",
@@ -94,12 +104,79 @@ def default(track: Track, got: dict, ch) -> dict:
         "sheet": VERSION,
         "song": {"slug": track.slug, "tempo": round(float(m["tempo"]), 4), "meter": int(m.get("meter", 4)),
                  "bars": int(len(bar_t)), "seconds": round(float(m["duration"]), 2)},
+        "heard": dict(GRID, **(m.get("grid_fix") or {}), sections=default_sections(track, got, ch)),
         "cast": {part: cast[part]["choice"] for part in CHOICES},
         "reentries": [{"bar": bar_of(bar_t, d["t"]), "strength": float(d["strength"])} for d in ch.drops],
         "acts": acts,
         "feel": {k: v[0] for k, v in FEEL.items()},
         "lyrics": {k: v[0] for k, v in LYRICS.items()},
     }
+
+
+def default_sections(track: Track, got: dict, ch) -> list[dict]:
+    """The song's parts by name. With a lyric sheet, its sections, and the stretches
+    between them of four bars or more: the first "Intro", the last "Outro" (or "End",
+    after a sung "Outro"), those between "Instrumental". With none, the director's own
+    sections (cut where the floor comes back), a section shorter than four bars joined to
+    the next, each named by how full it is - Drive (the kick in), Float (no kick), Break
+    (nothing below) - and numbered; the first "Intro" unless it drives."""
+    from . import lyrics
+
+    bar_t = got["arrays"]["bar_t"]
+    n = len(bar_t)
+    sung = lyrics.sung_sections(track, bar_t)
+    if sung:
+        named = [(b0, b1, name) for name, b0, b1 in sung]
+        edges = [0] + [x for b0, b1, _ in named for x in (b0, b1)] + [n]
+        gaps = [(a, b) for a, b in zip(edges[0::2], edges[1::2]) if b - a >= 4]
+        middle = [g for g in gaps if g[0] > 0 and g[1] < n]
+        for a, b in gaps:
+            if a == 0:
+                name = "Intro"
+            elif b == n:
+                name = "End" if "outro" in sung[-1][0].lower() else "Outro"
+            else:
+                name = "Instrumental" + (f" {middle.index((a, b)) + 1}" if len(middle) > 1 else "")
+            named.append((a, b, name))
+    else:
+        runs = []
+        for sec in ch.sections or []:
+            if runs and runs[-1][1] - runs[-1][0] < 4:           # too short to be a part: joined to this one
+                runs[-1] = [runs[-1][0], sec.bar1, sec.state]
+            else:
+                runs.append([sec.bar0, sec.bar1, sec.state])
+        if len(runs) > 1 and runs[-1][1] - runs[-1][0] < 4:
+            runs[-2][1] = runs.pop()[1]
+        if runs and runs[0][2] != "drive":
+            runs[0][2] = "intro"
+        count = {st: sum(r[2] == st for r in runs) for st in {r[2] for r in runs}}
+        seen: dict[str, int] = {}
+        named = []
+        for b0, b1, st in runs:
+            seen[st] = seen.get(st, 0) + 1
+            name = "Intro" if st == "intro" else STATE_NAME.get(st, st.title()) + (f" {seen[st]}" if count[st] > 1 else "")
+            named.append((b0, b1, name))
+    return [{"name": name, "bars": [int(b0), int(b1)]} for b0, b1, name in sorted(named)]
+
+
+def upgrade(sheet: dict, track: Track, got: dict, ch) -> dict:
+    """A sheet written before `heard` (version 1), with its sections worked out now."""
+    if sheet.get("sheet") != 1:
+        return sheet
+    out = {"sheet": VERSION, "song": sheet["song"],
+           "heard": dict(GRID, sections=default_sections(track, got, ch))}
+    return out | {k: v for k, v in sheet.items() if k not in ("sheet", "song")}
+
+
+def grid_fix(track: Track) -> dict | None:
+    """The correction of the grid a kept sheet asks for, if any."""
+    from .grid import normal_fix
+
+    path = CURATED / f"{track.slug}.json"
+    if not path.exists():
+        return None
+    heard = read(path).get("heard") or {}
+    return normal_fix({k: heard.get(k) for k in GRID})
 
 
 def bar_of(bar_t: np.ndarray, t: float) -> int:
@@ -128,6 +205,24 @@ def validate(sheet: dict, got: dict | None = None) -> list[str]:
         if sheet.get("song", {}).get("bars") != n_bars:
             bad.append(f"song: the sheet has {sheet.get('song', {}).get('bars')} bars and the song {n_bars} - "
                        f"made for another listening; write a fresh one")
+    heard = sheet.get("heard", {})
+    if heard.get("tempo_times") not in TEMPO_TIMES:
+        bad.append(f"heard.tempo_times: {heard.get('tempo_times')!r} - the beat can be as heard (1), twice as fast (2) or half (0.5)")
+    if heard.get("meter") is not None and heard.get("meter") not in METERS:
+        bad.append(f"heard.meter: {heard.get('meter')!r} beats to a bar - it can be {', '.join(map(str, METERS))}, or null for as heard")
+    if not isinstance(heard.get("bar_one"), int) or abs(heard.get("bar_one", 0)) > 7:
+        bad.append(f"heard.bar_one: {heard.get('bar_one')!r} - bar 1 moves by a whole number of beats, at most 7")
+    at = 0
+    for i, sec in enumerate(heard.get("sections", [])):
+        b, name = sec.get("bars"), sec.get("name")
+        if not isinstance(name, str) or not name.strip() or len(name) > 40:
+            bad.append(f"heard.sections[{i}]: a section needs a name of 1-40 characters")
+        if not (isinstance(b, list) and len(b) == 2 and all(isinstance(x, int) for x in b) and 0 <= b[0] < b[1] <= n_bars):
+            bad.append(f"heard.sections[{i}]: bars {b!r} are not bars of this song (0-{n_bars})")
+            continue
+        if b[0] < at:
+            bad.append(f"heard.sections[{i}] ({name}): starts at bar {b[0]}, inside the section before - sections may leave gaps but not overlap")
+        at = b[1]
     for part, choice in sheet.get("cast", {}).items():
         if part not in CHOICES:
             bad.append(f"cast: no part called {part!r} (there are {', '.join(CHOICES)})")
@@ -192,6 +287,12 @@ def normal(sheet: dict) -> dict:
     decimal, a bar a whole number. A sheet that has been through a browser comes back with
     2 for 2.0; written as it came, the file would change where nothing had."""
     s = json.loads(json.dumps(sheet))
+    for k in ("tempo", "seconds"):
+        if isinstance(s.get("song", {}).get(k), (int, float)):
+            s["song"][k] = float(s["song"][k])
+    heard = s.get("heard") or {}
+    if isinstance(heard.get("tempo_times"), (int, float)) and not isinstance(heard["tempo_times"], bool):
+        heard["tempo_times"] = float(heard["tempo_times"])
     for r in s.get("reentries", []):
         if isinstance(r.get("strength"), (int, float)) and not isinstance(r["strength"], bool):
             r["strength"] = float(r["strength"])
@@ -212,7 +313,12 @@ def dumps(sheet: dict) -> str:
             body = ",\n".join("    " + json.dumps(x) for x in v)
             parts.append(f"  {json.dumps(k)}: [\n{body}\n  ]")
         elif isinstance(v, dict):
-            body = ",\n".join(f"    {json.dumps(kk)}: {json.dumps(vv)}" for kk, vv in v.items())
+            def entry(kk, vv):
+                if isinstance(vv, list) and vv:
+                    rows = ",\n".join("      " + json.dumps(x) for x in vv)
+                    return f"    {json.dumps(kk)}: [\n{rows}\n    ]"
+                return f"    {json.dumps(kk)}: {json.dumps(vv)}"
+            body = ",\n".join(entry(kk, vv) for kk, vv in v.items())
             parts.append(f"  {json.dumps(k)}: {{\n{body}\n  }}")
         else:
             parts.append(f"  {json.dumps(k)}: {json.dumps(v)}")

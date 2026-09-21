@@ -225,8 +225,11 @@ def beat_clock(t: np.ndarray, beats: np.ndarray) -> np.ndarray:
 # ------------------------------------------------------------------ the listen
 
 
-def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) -> dict:
-    """Everything, as a dict of numpy arrays plus a small `meta` dict."""
+def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True,
+           grid_fix: dict | None = None, bt: dict | None = None) -> dict:
+    """Everything, as a dict of numpy arrays plus a small `meta` dict. `grid_fix` is a
+    person's correction of the grid (grid.py); `bt`, Beat This!'s beats from an earlier
+    listening of the same audio, to save running it again."""
     import librosa  # slow import, and only this function needs it
 
     def say(*a):
@@ -292,7 +295,7 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
 
     # --- the grid (grid.py) --------------------------------------------------------
     t_bt = time.time()
-    bt = grid_.tracked_beats(mix, sr)
+    bt = bt or grid_.tracked_beats(mix, sr)
     say(f"Beat This!: {len(bt['beats'])} beats, {len(bt['downbeats'])} downbeats  ({time.time() - t_bt:.0f}s)")
     # Only what is really playing may say where the grid is. There are no bars yet, so
     # presence is judged on 2 s windows: Demucs' leakage of absent drums has "hats" too,
@@ -316,7 +319,7 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
         # the synths' attacks: a bass line is often off the beat, and its cluster was taken
         # for Beat This!'s lateness (-78 ms on Gravity without drums; it is late by 14-38)
         onsets = (note.t[note_r], note.amp[note_r])
-    grid = grid_.find(sharp, strong_kicks, onsets, bt, duration)
+    grid = grid_.find(sharp, strong_kicks, onsets, bt, duration, fix=grid_fix)
     grid["lattice_from"] = lattice_from
     beats, downbeats = grid["beats"], grid["downbeats"]
     period, meter = grid["period"], grid["meter"]
@@ -534,7 +537,7 @@ def listen(audio: Path, stems_dir: Path, workdir: Path, verbose: bool = True) ->
     out["bt_beats"], out["bt_downbeats"] = bt["beats"], bt["downbeats"]
 
     meta = {"version": VERSION, "duration": duration, "rate": RATE, "n": n,
-            "tempo": grid["tempo"], "period": period, "meter": meter,
+            "tempo": grid["tempo"], "period": period, "meter": meter, "grid_fix": grid_.normal_fix(grid_fix),
             "grid": {k: v for k, v in grid.items() if k not in ("beats", "downbeats")},
             "lag_ms": {"kick": 1000 * kick_lag, "bass_note": 1000 * bass_lag, "mixlow": 1000 * low_lag,
                        "note": 1000 * note_lag},
@@ -557,12 +560,25 @@ def save(result: dict, cache: Path) -> None:
     js.write_text(json.dumps(result["meta"], indent=1) + "\n")
 
 
-def load_cached(cache: Path) -> dict | None:
+def cached_beat_this(cache: Path) -> dict | None:
+    """Beat This!'s beats from the listening kept, whatever grid was made of them."""
+    npz, _ = cache_paths(cache)
+    if not npz.exists():
+        return None
+    with np.load(npz) as z:
+        if "bt_beats" not in z.files:
+            return None
+        return {"beats": z["bt_beats"], "downbeats": z["bt_downbeats"]}
+
+
+def load_cached(cache: Path, grid_fix: dict | None = None) -> dict | None:
+    """The listening kept, if it is this version's and was made with this correction of
+    the grid (none, unless one is given)."""
     npz, js = cache_paths(cache)
     if not (npz.exists() and js.exists()):
         return None
     meta = json.loads(js.read_text())
-    if meta.get("version") != VERSION:
+    if meta.get("version") != VERSION or meta.get("grid_fix") != grid_.normal_fix(grid_fix):
         return None
     with np.load(npz) as z:
         arrays = {k: z[k] for k in z.files}

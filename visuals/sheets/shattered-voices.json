@@ -1,11 +1,23 @@
 {
-  "sheet": 1,
+  "sheet": 2,
   "song": {
     "slug": "shattered-voices",
     "tempo": 90.0,
     "meter": 4,
     "bars": 59,
     "seconds": 155.36
+  },
+  "heard": {
+    "tempo_times": 1.0,
+    "meter": null,
+    "bar_one": 0,
+    "sections": [
+      {"name": "Intro", "bars": [0, 4]},
+      {"name": "Drive 1", "bars": [4, 14]},
+      {"name": "Drive 2", "bars": [14, 33]},
+      {"name": "Drive 3", "bars": [33, 42]},
+      {"name": "Drive 4", "bars": [42, 59]}
+    ]
   },
   "cast": {
     "pulse": "kick",

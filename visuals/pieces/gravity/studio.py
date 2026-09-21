@@ -14,6 +14,18 @@ Gravity), writes the bundle over the one the player is showing, and keeps the sh
 visuals/sheets/, where a person's sheets are kept. The player takes the new bake without
 stopping. Each change is logged, with who made it (a hand, or a request and the model's
 answer), to the song's cache: what people change is what the director gets wrong.
+
+Every change, a hand's or the model's, goes into one history, described the same way
+(`editor.changes`: what kind of thing, where, what it was and what it is now); undo, redo
+and going back to any point in it move along that history, and it is kept with the song,
+so it is there when the studio is opened again.
+
+A correction of the grid (the beat twice or half as fast, the beats in a bar, where bar 1
+falls) is not an edit like the others: the song is listened to again on the corrected
+grid (about a minute and a half, and the models after it, the first time; a correction
+made before is kept), and the director makes its shots and moments again on the new
+bars. What is the person's and does not depend on bars - the cast, the dials, the words -
+is kept, and the sections' names are carried over by time.
 """
 
 from __future__ import annotations
@@ -29,6 +41,7 @@ import numpy as np
 
 from . import ROOT, decide, editor, lyrics, make, render, sheet as sheet_
 from .cast import CHOICES
+from .grid import normal_fix
 from .track import Track
 
 ENVELOPE = 1600              # points in the loudness strip under the timeline
@@ -46,7 +59,7 @@ class Session:
     """One song, open for editing."""
 
     def __init__(self, track: Track, out_dir: Path | None = None, sheet_path: Path | None = None,
-                 log_path: Path | None = None) -> None:
+                 log_path: Path | None = None, history_path: Path | None = None) -> None:
         self.track = track
         self.got = make.listened(track, verbose=False)
         make.modelled(track, self.got, verbose=False)
@@ -54,9 +67,16 @@ class Session:
         ch, self.sheet, self.came_from = make.directed(track, self.got)
         self.out = Path(out_dir or track.out("cosmos"))
         self.sheet_path = Path(sheet_path or sheet_.CURATED / f"{track.slug}.json")
+        if self.sheet_path.exists() and self.sheet_path != self.came_from:     # a sheet kept somewhere of its own
+            kept = sheet_.read(self.sheet_path)
+            if not sheet_.validate(kept, self.got):
+                self.sheet, self.came_from = kept, self.sheet_path
+                ch = render.bake(self.got, track, kept)
         self.log_path = Path(log_path or track.cache / "edits.jsonl")
+        self.history_path = Path(history_path or track.cache / "history.json")
         self.lock = threading.Lock()
         self.version = 0
+        self._open_history()
         self.out.mkdir(parents=True, exist_ok=True)
         render.export(self.got, ch, track, self.out)          # the bundle shown is this sheet's
 
@@ -71,61 +91,164 @@ class Session:
         env = [float(loud[i:max(j, i + 1)].max()) for i, j in zip(edges[:-1], edges[1:])]
         src = lyrics.source(self.track)
         lines = lyrics.read(src) if src else []
+        grid = m.get("grid", {})
         return {
             "slug": self.track.slug, "bundle": self.out.name, "duration": duration,
             "tempo": float(m["tempo"]), "meter": int(m.get("meter", 4)),
             "bar_t": [round(float(t), 4) for t in bar_t],
-            "sections": [{"name": n, "bars": [b0, b1]} for n, b0, b1 in editor.named_sections(self.track, bar_t)],
+            "beats": [round(float(t), 4) for t in a["beats"]],
+            "grid": {"source": grid.get("source"), "fixed": m.get("grid_fix"),
+                     "sure": grid.get("lattice", {}).get("on_lattice") if grid.get("source") == "lattice" else None},
             "energy": [decide.STATE_NAMES[int(s)] for s in table["state"]],
             "loud": [round(x, 3) for x in env],
             "lines": [{"in": round(ln.in0, 3), "out": round(ln.out1, 3), "text": ln.text} for ln in lines],
             "lyrics_from": str(src.relative_to(ROOT)) if src and src.is_relative_to(ROOT) else (str(src) if src else None),
             "sheet": self.sheet, "version": self.version, "sheet_path": _shown(self.sheet_path),
+            **self.history_view(),
             "vocabulary": vocabulary(), "model": editor.MODEL,
         }
 
     # ------------------------------------------------------------------ changing it
 
     def edit(self, edits: list[dict], source: str = "hand", request: str | None = None) -> dict:
-        """Edits in the sheet's vocabulary, applied, checked, baked."""
+        """Edits in the sheet's vocabulary, applied, checked, baked - and a step in the history."""
         with self.lock:
+            before = self.sheet
             new, did = editor.apply(self.sheet, edits)
-            return self._take(new, did, {"source": source, "request": request, "edits": edits})
+            r = self._take(new, did, {"source": source, "request": request, "edits": edits})
+            if r.get("ok") and r.get("changed"):
+                del self.history[self.at + 1:]            # a change after an undo: what was undone is gone
+                self.history.append({"sheet": self.sheet, "source": source, "request": request,
+                                     "changes": editor.changes(before, self.sheet), "at": time.strftime("%H:%M")})
+                self.at = len(self.history) - 1
+                self._save_history()
+            return r | self.history_view()
+
+    def goto(self, k: int) -> dict:
+        """The sheet as it was at step `k` of the history (undo, redo, or further)."""
+        with self.lock:
+            if not 0 <= k < len(self.history) or k == self.at:
+                return {"ok": True, "changed": False, "did": [], "sheet": self.sheet, "version": self.version} | self.history_view()
+            r = self._take(self.history[k]["sheet"], ["undo" if k < self.at else "redo"],
+                           {"source": "undo" if k < self.at else "redo", "to": k})
+            if r.get("ok"):
+                self.at = k
+                self._save_history()
+            return r | self.history_view()
+
+    def history_view(self) -> dict:
+        return {"history": [{k: h[k] for k in ("source", "request", "changes", "at")} for h in self.history],
+                "at": self.at}
+
+    def _open_history(self) -> None:
+        """The history kept with the song, if it ends where the sheet is; else a new one."""
+        try:
+            kept = json.loads(self.history_path.read_text())
+            if kept["entries"][kept["at"]]["sheet"] == sheet_.normal(self.sheet):
+                self.history, self.at = kept["entries"], kept["at"]
+                return
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            pass
+        self.history = [{"sheet": sheet_.normal(self.sheet), "source": "open", "request": None, "changes": [],
+                         "at": time.strftime("%H:%M")}]
+        self.at = 0
+
+    def _save_history(self) -> None:
+        self.history_path.parent.mkdir(parents=True, exist_ok=True)
+        self.history_path.write_text(json.dumps({"at": self.at, "entries": self.history}))
 
     def replace(self, sheet: dict, why: str = "undo") -> dict:
         """A whole sheet: going back to one the page had (undo, redo)."""
         with self.lock:
             return self._take(sheet, [why], {"source": why})
 
-    def ask(self, request: str, model: str | None = None) -> dict:
+    def ask(self, request: str, model: str | None = None, focus: dict | None = None) -> dict:
         """What the model would do: a proposal, not applied. Accepting it sends its edits
-        back through `edit`, the same way a hand's do."""
+        back through `edit`, the same way a hand's do. `focus` is what the person has
+        selected and where the playhead is, for "this" and "here"."""
         try:
-            r = editor.edit(self.track, self.got, self.sheet, request, model=model or editor.MODEL)
+            r = editor.edit(self.track, self.got, self.sheet, request, model=model or editor.MODEL, focus=focus)
         except urllib.error.URLError:
             return {"ok": False, "refused": ["the local model is not running: start Ollama (ollama serve)"]}
         return {"ok": not r["refused"], "edits": r["edits"], "did": r["did"], "said": r["said"],
-                "refused": r["refused"], "changes": r["sheet"] is not None, "already": r.get("already", False),
+                "changes": editor.changes(self.sheet, r["sheet"]) if r["sheet"] else [],
+                "refused": r["refused"], "proposes": r["sheet"] is not None, "already": r.get("already", False),
                 "proposal": r["sheet"], "seconds": round(r["seconds"], 1), "model": model or editor.MODEL}
+
+    def refresh(self) -> dict:
+        """The words read again (after they were changed in the song app), and baked in."""
+        with self.lock:
+            ch = render.bake(self.got, self.track, self.sheet)
+            render.export(self.got, ch, self.track, self.out)
+            self.version += 1
+        return {"ok": True, "changed": True, "song": self.song(), "sheet": self.sheet, "version": self.version, "did": ["words read again"]}
 
     def _take(self, new: dict, did: list[str], why: dict) -> dict:
         new = sheet_.normal(new)
+        grid = lambda sh: normal_fix({k: sh.get("heard", {}).get(k) for k in sheet_.GRID})
+        if grid(new) != grid(self.sheet):
+            return self._regrid(new, grid(new), did, why)
         bad = sheet_.validate(new, self.got)
         if bad:
             return {"ok": False, "refused": bad, "did": did}
         if new == self.sheet:
             return {"ok": True, "changed": False, "did": did, "sheet": self.sheet, "version": self.version}
         t0 = time.time()
-        ch = render.bake(self.got, self.track, new)
-        render.export(self.got, ch, self.track, self.out)
+        names_only = lambda sh: {**sh, "heard": {k: v for k, v in sh["heard"].items() if k != "sections"}}
+        if names_only(new) != names_only(self.sheet):       # names change nothing in the picture: no bake
+            ch = render.bake(self.got, self.track, new)
+            render.export(self.got, ch, self.track, self.out)
         self.sheet, self.version = new, self.version + 1
         sheet_.write(new, self.sheet_path)
         seconds = round(time.time() - t0, 2)
+        self._log(did, seconds, why)
+        return {"ok": True, "changed": True, "did": did, "sheet": new, "version": self.version, "seconds": seconds}
+
+
+    def _regrid(self, new: dict, fix: dict | None, did: list[str], why: dict) -> dict:
+        """The song heard again on a corrected grid, and the sheet made again on its bars."""
+        t0 = time.time()
+        got = make.listened(self.track, verbose=False, grid_fix=fix)
+        make.modelled(self.track, got, verbose=False)
+        if sheet_.validate(new, got):                 # bars of the old grid: made again on the new one
+            fresh = sheet_.default(self.track, got, render.bake(got, self.track))
+            for k in ("cast", "feel", "lyrics"):
+                fresh[k] = new[k]
+            fresh["heard"]["sections"] = carry_sections(new["heard"].get("sections", []), self.got, got)
+            new = fresh
+        bad = sheet_.validate(new, got)               # (a whole sheet on the new grid - an undo - is kept as it is)
+        if bad:
+            return {"ok": False, "refused": bad, "did": did}
+        ch = render.bake(got, self.track, new)
+        render.export(got, ch, self.track, self.out)
+        self.got, self.sheet, self.version = got, new, self.version + 1
+        sheet_.write(new, self.sheet_path)
+        seconds = round(time.time() - t0, 2)
+        self._log(did, seconds, why)
+        return {"ok": True, "changed": True, "regrid": True, "did": did, "sheet": new, "song": self.song(),
+                "version": self.version, "seconds": seconds}
+
+    def _log(self, did: list[str], seconds: float, why: dict) -> None:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self.log_path.open("a") as f:
             f.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "version": self.version, "did": did,
                                 "seconds": seconds} | why) + "\n")
-        return {"ok": True, "changed": True, "did": did, "sheet": new, "version": self.version, "seconds": seconds}
+
+
+def carry_sections(sections: list[dict], old: dict, new: dict) -> list[dict]:
+    """Named sections moved from one grid's bars to another's, by the time they start and
+    end: each edge to the new bar line nearest it."""
+    ob, nb = old["arrays"]["bar_t"], new["arrays"]["bar_t"]
+    od, nd = float(old["meta"]["duration"]), float(new["meta"]["duration"])
+    at = lambda b: float(ob[b]) if b < len(ob) else od
+    near = lambda t: len(nb) if t >= nd - 1e-6 else int(np.argmin(np.abs(nb - t)))
+    out, end = [], 0
+    for sec in sections:
+        a, b = max(near(at(sec["bars"][0])), end), near(at(sec["bars"][1]))
+        if b > a:
+            out.append({"name": sec["name"], "bars": [a, b]})
+            end = b
+    return out
 
 
 def _shown(p: Path) -> str:
@@ -140,6 +263,12 @@ def handler(sessions: dict[str, Session]):
     from ...cli import _RangeHandler
 
     class Handler(_RangeHandler):
+        def copyfile(self, source, outputfile):             # a page that stops a download midway is not an error
+            try:
+                super().copyfile(source, outputfile)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
         def log_message(self, fmt, *args):                  # the static files are many and dull
             if "/api/" in self.path:
                 super().log_message(fmt, *args)
@@ -163,6 +292,11 @@ def handler(sessions: dict[str, Session]):
             url = urlparse(self.path)
             if url.path == "/api/songs":
                 return self._reply({"songs": list(sessions)})
+            if url.path == "/api/models":
+                try:
+                    return self._reply(editor.models() | {"default": editor.MODEL})
+                except OSError as e:
+                    return self._reply({"installed": [], "loaded": [], "default": editor.MODEL, "down": str(e)})
             if url.path == "/api/song":
                 s = self._session(url)
                 return s and self._reply(s.song())
@@ -185,7 +319,13 @@ def handler(sessions: dict[str, Session]):
                 elif url.path == "/api/sheet":
                     out = s.replace(body["sheet"], body.get("why", "undo"))
                 elif url.path == "/api/ask":
-                    out = s.ask(body["request"], body.get("model"))
+                    out = s.ask(body["request"], body.get("model"), body.get("focus"))
+                elif url.path in ("/api/undo", "/api/redo"):
+                    out = s.goto(s.at + (-1 if url.path == "/api/undo" else 1))
+                elif url.path == "/api/goto":
+                    out = s.goto(int(body["to"]))
+                elif url.path == "/api/refresh":
+                    out = s.refresh()
                 else:
                     return self._reply({"ok": False, "refused": [f"no such question: {url.path}"]}, 404)
             except Exception as e:                            # said to the page, not swallowed
@@ -203,13 +343,20 @@ def serve(tracks: list[Track], port: int = 8777) -> None:
     for tr in tracks:
         t0 = time.time()
         sessions[tr.slug] = Session(tr)
-        print(f"  {tr.slug}: ready ({time.time() - t0:.0f}s), sheet {_shown(sessions[tr.slug].sheet_path)}")
+        print(f"  {tr.slug}: ready ({time.time() - t0:.0f}s), sheet {_shown(sessions[tr.slug].sheet_path)}", flush=True)
     visuals = ROOT / "visuals"
     Handler = handler(sessions)
+    def warm():                                            # the model loaded before it is first asked
+        try:
+            editor.warm()
+            print(f"  {editor.MODEL}: loaded", flush=True)
+        except Exception as e:                             # Ollama not running: asking will say so
+            print(f"  {editor.MODEL}: not loaded ({e})", flush=True)
+    threading.Thread(target=warm, daemon=True).start()
     http.server.ThreadingHTTPServer.allow_reuse_address = True
     with http.server.ThreadingHTTPServer(("127.0.0.1", port), functools.partial(Handler, directory=str(visuals))) as httpd:
         for slug in sessions:
-            print(f"http://127.0.0.1:{port}/studio/?track={slug}")
+            print(f"http://127.0.0.1:{port}/studio/?track={slug}", flush=True)
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

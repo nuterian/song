@@ -55,6 +55,24 @@ console.log(JSON.stringify([
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="no node to run the page's arithmetic")
+def test_dragging_a_sections_edge(tmp_path):
+    out = _node(tmp_path, """
+const v1 = d.sections[0];
+console.log(JSON.stringify([
+  tl.sectionEdgeEdits(v1, "end", 36, 149),     // Verse 1 grows into Chorus 1, which is cut back
+  tl.sectionEdgeEdits(v1, "end", 20.2, 149),   // ...or gives up its last six bars
+  tl.sectionEdgeEdits(v1, "start", 12, 149),   // ...or starts earlier
+  tl.sectionEdgeEdits(v1, "start", 40, 149),   // an edge cannot pass the other
+]));""", {"sections": SHEET["heard"]["sections"]})
+    grow, shrink, early, most = out
+    named = lambda edits: [(x["name"], *x["bars"]) for x in editor.apply(SHEET, edits)[0]["heard"]["sections"]]
+    assert named(grow) == [("Verse 1", 17, 36), ("Chorus 1", 36, 50)]
+    assert named(shrink) == [("Verse 1", 17, 20), ("Chorus 1", 33, 50)]
+    assert named(early) == [("Verse 1", 12, 26), ("Chorus 1", 33, 50)]
+    assert named(most) == [("Verse 1", 25, 26), ("Chorus 1", 33, 50)]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="no node to run the page's arithmetic")
 def test_bars_and_moments_on_the_page(tmp_path):
     bar_t = [-0.1 + 2.0 * i for i in range(10)]
     out = _node(tmp_path, """
@@ -85,13 +103,14 @@ def session(tmp_path_factory):
     if listen.load_cached(tr.cache) is None:
         pytest.skip("no listening cache for the real track")
     d = tmp_path_factory.mktemp("studio")
-    return studio.Session(tr, out_dir=d / "bundle", sheet_path=d / "sheet.json", log_path=d / "edits.jsonl")
+    return studio.Session(tr, out_dir=d / "bundle", sheet_path=d / "sheet.json", log_path=d / "edits.jsonl",
+                          history_path=d / "history.json")
 
 
 def test_the_page_is_told_the_song_and_the_words_to_edit_it_in(session):
     song = session.song()
-    assert len(song["bar_t"]) == song["sheet"]["song"]["bars"] == 149
-    assert {"name": "Chorus 2", "bars": [81, 90]} in song["sections"]
+    assert len(song["bar_t"]) == song["sheet"]["song"]["bars"] == 149 and len(song["beats"]) >= 4 * 148
+    assert {"name": "Chorus 2", "bars": [81, 90]} in song["sheet"]["heard"]["sections"]
     assert len(song["energy"]) == 149 and set(song["energy"]) <= {"drive", "float", "void", "silent"}
     assert len(song["lines"]) == 34 and song["lines"][0]["text"].startswith("Light breaks")
     assert set(song["vocabulary"]["shots"]) == set(sheet_.SHOTS) and set(song["vocabulary"]["parts"]) == set(sheet_.PARTS)
@@ -139,3 +158,26 @@ def test_the_server_answers_the_page(session):
         assert e.value.code == 422 and "needs a subject" in json.loads(e.value.read())["refused"][0]
     finally:
         httpd.shutdown()
+
+
+def test_every_change_is_one_history_to_move_along(session):
+    from visuals.pieces.gravity import studio
+
+    start = session.at
+    r = session.edit([{"op": "feel", "dial": "orbits_breathe", "value": 1.0}])
+    assert r["at"] == start + 1 and r["history"][-1]["source"] == "hand"
+    assert r["history"][-1]["changes"] == [{"kind": "feel", "title": "Orbits breathe", "before": "0.55", "after": "1"}]
+    r = session.edit([{"op": "section", "bars": [50, 66], "name": "Drop"}], source="ask", request="call the drop the drop")
+    assert r["history"][-1]["request"] == "call the drop the drop" and r["history"][-1]["changes"][0]["after"] == "Drop"
+    r = session.goto(start)                                       # back to where it began, two steps
+    assert r["ok"] and session.sheet["feel"]["orbits_breathe"] == 0.55 and len(r["history"]) == start + 3
+    r = session.goto(start + 2)                                   # and forward again
+    assert session.sheet["feel"]["orbits_breathe"] == 1.0 and any(x["name"] == "Drop" for x in session.sheet["heard"]["sections"])
+    # the history is kept with the song: opened again, it is all there, and where it was
+    again = studio.Session(session.track, out_dir=session.out, sheet_path=session.sheet_path,
+                           log_path=session.log_path, history_path=session.history_path)
+    assert again.at == session.at and [h["changes"] for h in again.history] == [h["changes"] for h in session.history]
+    session.goto(start + 1)
+    r = session.edit([{"op": "feel", "dial": "flares_every_bars", "value": 4.0}])   # a change after an undo
+    assert len(r["history"]) == start + 3 and r["history"][-1]["changes"][0]["title"] == "Flares"
+    session.goto(start)

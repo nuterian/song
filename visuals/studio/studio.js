@@ -4,7 +4,7 @@
 // the local model makes them from words). The server checks, bakes and keeps; the player
 // takes the new bake without stopping.
 
-import { barOf, timeOf, edgeEdits, spanEdit, momentEdits, changedActs, changedMoments } from "./timeline.js";
+import { barOf, timeOf, edgeEdits, spanEdit, momentEdits, changedActs, changedMoments, sectionEdgeEdits } from "./timeline.js";
 import { icon, PLANET_INK } from "./icons.js";
 
 const $ = (id) => document.getElementById(id);
@@ -19,10 +19,12 @@ const DIAL = {
   camera_move_bars: ["Camera moves", "bars"], hybrid_turn_bars: ["Hybrid turn", "bars"], orbits_breathe: ["Orbits breathe", ""],
   size: ["Size", ""], unsung: ["Before", ""], peak: ["Sung", ""], sung: ["After", ""],
 };
-const TABS = [["sel", "cursor", "Selection"], ["feel", "sliders", "Feel"], ["cast", "mic", "Cast"], ["words", "text", "Words"], ["log", "clock", "Changes"]];
+const TABS = [["sel", "cursor", "Selection"], ["feel", "sliders", "Feel"], ["cast", "mic", "Cast"], ["words", "text", "Words"],
+  ["grid", "metronome", "Grid"], ["log", "clock", "History"]];
+const NAMES = ["Intro", "Verse", "Pre-chorus", "Chorus", "Bridge", "Drop", "Break", "Outro"];
 
 let song = null, sheet = null, N = 0;
-let history = [], at = 0;
+let history = [], at = 0;          // the server's history of changes (every one, a hand's or the AI's), and where we are in it
 let busy = false, selected = null, proposal = null;
 let tab = "sel", zoom = 1, spanPlanet = "earth";
 
@@ -61,40 +63,47 @@ function toast(lines, kind = "bad") {
 }
 
 // Every change goes through here: edits in, a new bake out, the player told.
-async function change(path, body) {
+async function change(path, body, relisten = false) {
   if (busy) { status("baking…", "busy"); return null; }
   busy = true;
-  status("baking…", "busy");
+  status(relisten ? "listening again… (a few minutes the first time)" : "baking…", "busy");
   let r;
   try { r = await call(path, body); } catch (e) { r = { ok: false, refused: [String(e)] }; }
   busy = false;
+  if (r.history) { history = r.history; at = r.at; }
   if (!r.ok) { status("not changed", "bad"); toast(r.refused); return null; }
   if (!r.changed) { status("no change"); return r; }
+  const picture = JSON.stringify({ ...r.sheet, heard: { ...r.sheet.heard, sections: 0 } }) !==
+    JSON.stringify({ ...sheet, heard: { ...sheet.heard, sections: 0 } });
   sheet = r.sheet;
+  if (r.song) { song = r.song; N = song.bar_t.length; showFacts(); }       // a new grid: new bars
   status(`${r.seconds.toFixed(1)} s`);
-  if (player()) await player().reload();
+  if (player() && (picture || r.song)) await player().reload();
   return r;
 }
 
 async function edit(edits, source = "hand", request = null) {
   if (!edits.length) { draw(); return null; }
-  const r = await change("/api/edit", { edits, source, request });
-  if (r && r.changed) remember(r.sheet, r.did.join(" · "), source);
+  const r = await change("/api/edit", { edits, source, request }, edits.some((e) => e.op === "grid"));
   draw();
+  if (r && r.changed) flashHistory();
   return r;
 }
 
-function remember(s, label, source) {
-  history = history.slice(0, at + 1);
-  history.push({ sheet: s, label, source });
-  at = history.length - 1;
-}
-
+// Undo, redo, and going back to any step: moving along the one history. A step that
+// changed the grid is listened to again (at once if that grid was heard before).
 async function goTo(k) {
   if (k < 0 || k >= history.length || k === at) return;
-  const r = await change("/api/sheet", { sheet: history[k].sheet, why: k < at ? "undo" : "redo" });
-  if (r) at = k;
+  const [lo, hi] = k < at ? [k + 1, at] : [at + 1, k];
+  const relisten = history.slice(lo, hi + 1).some((h) => h.changes.some((c) => c.kind === "grid"));
+  await change("/api/goto", { to: k }, relisten);
   draw();
+}
+
+function flashHistory() {
+  const b = document.querySelector(`#tabs .ib[title="History"]`);
+  if (!b || tab === "log") return;
+  b.animate([{ color: "var(--accent)" }, { color: "" }], { duration: 900 });
 }
 
 // ---------------------------------------------------------------------------- the player
@@ -159,6 +168,14 @@ function drawRuler() {
     d.textContent = `${b}  ${mmss(tOf(b))}`;
     el.appendChild(d);
   }
+  if ((width / N) / song.meter >= 7) {                   // close enough to see the beats: a mark on each
+    for (const t of song.beats) {
+      const d = document.createElement("div");
+      d.className = "bt";
+      d.style.left = P(bOf(t));
+      el.appendChild(d);
+    }
+  }
 }
 
 function block(parent, cls, a, b, html, title) {
@@ -172,16 +189,27 @@ function block(parent, cls, a, b, html, title) {
   return d;
 }
 
+const secAt = (bar) => sheet.heard.sections.findIndex((x) => x.bars[0] <= bar && bar < x.bars[1]);
+
 function drawSections() {
   const el = $("lane-song");
   el.innerHTML = "";
-  for (const s of song.sections) {
+  const shown = proposal && proposal.proposal ? proposal.proposal : sheet;
+  shown.heard.sections.forEach((s, i) => {
     const [a, b] = s.bars;
-    const on = selected && selected.kind === "span" && selected.a === a && selected.b === b;
+    const on = !proposal && selected && selected.kind === "section" && secAt(selected.bar) === i;
     const d = block(el, "sec" + (on ? " sel" : ""), a, b, esc(s.name), `${s.name} · bars ${a}–${b} · ${mmss(tOf(a))}`);
     d.addEventListener("pointerdown", (e) => e.stopPropagation());
-    d.addEventListener("click", () => { select({ kind: "span", a, b, name: s.name }); seek(tOf(a)); });
-  }
+    d.addEventListener("click", () => { select({ kind: "section", bar: a }); seek(tOf(a)); });
+    if (proposal) return;
+    for (const side of ["start", "end"]) {
+      const e = document.createElement("div");
+      e.className = "sedge";
+      e.style.left = P(side === "start" ? a : b);
+      e.addEventListener("pointerdown", (ev) => dragSectionEdge(ev, e, s, side));
+      el.appendChild(e);
+    }
+  });
 }
 
 function drawEnergy() {
@@ -305,7 +333,7 @@ function drawPane() {
   drawTabs();
   const pane = $("pane");
   pane.innerHTML = "";
-  ({ sel: paneSelection, feel: paneFeel, cast: paneCast, words: paneWords, log: paneLog })[tab](pane);
+  ({ sel: paneSelection, feel: paneFeel, cast: paneCast, words: paneWords, grid: paneGrid, log: paneLog })[tab](pane);
 }
 
 function shotTiles(current, onPick) {
@@ -346,9 +374,25 @@ function paneSelection(pane) {
     pane.appendChild(planetDots(a.subject, (p) => give(a.shot, p), needs(a.shot)));
     return;
   }
+  if (selected.kind === "section") {
+    const sec = sheet.heard.sections[secAt(selected.bar)];
+    if (!sec) { selected = null; return paneSelection(pane); }
+    const [a, b] = sec.bars;
+    pane.appendChild(el(`<div class="h">${icon("song", 18)}${esc(sec.name)}<span class="sub">${a}–${b} · ${mmss(tOf(a))}</span></div>`));
+    pane.appendChild(nameField(sec.name, (name) => edit([{ op: "section", bars: [a, b], name }])));
+    pane.appendChild(el(`<div class="label">Shot for these bars</div>`));
+    pane.appendChild(shotTiles(null, (shot) => edit([spanEdit(a, b, shot, needs(shot) ? spanPlanet : null)])));
+    pane.appendChild(planetDots(spanPlanet, (p) => { spanPlanet = p; drawPane(); }));
+    const del = el(`<button class="pill" style="margin-top:14px">${icon("trash", 14)}Unname</button>`);
+    del.addEventListener("click", () => edit([{ op: "section", bars: [a, b], name: "" }]).then((r) => { if (r && r.changed) { selected = null; draw(); } }));
+    pane.appendChild(del);
+    return;
+  }
   if (selected.kind === "span") {
     const { a, b } = selected;
-    pane.appendChild(el(`<div class="h">${icon("song", 18)}${esc(selected.name || "Bars")}<span class="sub">${a}–${b} · ${mmss(tOf(a))}</span></div>`));
+    pane.appendChild(el(`<div class="h">${icon("song", 18)}Bars<span class="sub">${a}–${b} · ${mmss(tOf(a))}</span></div>`));
+    pane.appendChild(nameField("", (name) => edit([{ op: "section", bars: [a, b], name }]).then((r) => { if (r && r.changed) select({ kind: "section", bar: a }); })));
+    pane.appendChild(el(`<div class="label">Shot</div>`));
     pane.appendChild(shotTiles(null, (shot) => edit([spanEdit(a, b, shot, needs(shot) ? spanPlanet : null)]).then((r) => { if (r && r.changed) { selected = null; draw(); } })));
     pane.appendChild(planetDots(spanPlanet, (p) => { spanPlanet = p; drawPane(); }));
     return;
@@ -374,6 +418,59 @@ function paneSelection(pane) {
     pane.appendChild(el(`<div class="quote">${esc(ln.text)}</div>`));
     pane.appendChild(el(`<div class="muted" title="${esc(song.lyrics_from || "")}">Timing: song app</div>`));
   }
+}
+
+function nameField(current, commit) {
+  const box = el(`<div><div class="field"><input type="text" placeholder="Name these bars" maxlength="40" aria-label="Name"></div><div class="chips"></div></div>`);
+  const input = box.querySelector("input");
+  input.value = current;
+  const go = (name) => { if (name.trim() && name.trim() !== current) commit(name.trim()); };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(input.value); if (e.key === "Escape") input.blur(); });
+  input.addEventListener("change", () => go(input.value));
+  for (const n of NAMES) {
+    const c = el(`<button class="chip">${n}</button>`);
+    c.addEventListener("click", () => {
+      const same = sheet.heard.sections.filter((x) => x.name.replace(/ \d+$/, "") === n).length;
+      go(same ? `${n} ${same + 1}` : n);
+    });
+    box.querySelector(".chips").appendChild(c);
+  }
+  return box;
+}
+
+function paneGrid(pane) {
+  const h = sheet.heard, fixed = h.tempo_times !== 1 || h.meter !== null || h.bar_one !== 0;
+  const how = song.grid.source === "lattice" ? `found on the beat to ${Math.round((song.grid.sure || 0) * 100)}%` : "followed by ear";
+  pane.appendChild(el(`<div class="h">${icon("metronome", 18)}Grid<span class="sub" title="how the beat was found">${fixed ? "corrected" : how}</span></div>`));
+  const grid = (e) => edit([{ op: "grid", ...e }]);
+  const row = (label, left, value, right) => {
+    const r = el(`<div><div class="label">${label}</div><div class="stepper"><button class="ib"></button><span class="v"></span><button class="ib"></button></div></div>`);
+    const [l, rt] = r.querySelectorAll("button");
+    l.innerHTML = icon("left", 16); rt.innerHTML = icon("right", 16);
+    r.querySelector(".v").textContent = value;
+    if (left) l.addEventListener("click", left); else l.disabled = true;
+    if (right) rt.addEventListener("click", right); else rt.disabled = true;
+    return r;
+  };
+  const t = h.tempo_times;
+  pane.appendChild(row("Tempo", t > 0.5 ? () => grid({ tempo_times: t / 2 }) : null, `${Math.round(song.tempo)} BPM`,
+    t < 2 ? () => grid({ tempo_times: t * 2 }) : null));
+  const m = el(`<div><div class="label">Beats in a bar</div><div class="chips"></div></div>`);
+  for (const k of [2, 3, 4, 5, 6, 7]) {
+    const c = el(`<button class="chip${k === song.meter ? " on" : ""}">${k}</button>`);
+    c.addEventListener("click", () => { if (k !== song.meter) grid({ meter: k }); });
+    m.querySelector(".chips").appendChild(c);
+  }
+  pane.appendChild(m);
+  pane.appendChild(row("Bar 1", h.bar_one > -7 ? () => grid({ bar_one: h.bar_one - 1 }) : null,
+    h.bar_one ? `${h.bar_one > 0 ? "+" : ""}${h.bar_one} beat${Math.abs(h.bar_one) === 1 ? "" : "s"}` : "as heard",
+    h.bar_one < 7 ? () => grid({ bar_one: h.bar_one + 1 }) : null));
+  if (fixed) {
+    const reset = el(`<button class="pill" style="margin-top:14px">${icon("undo", 14)}As heard</button>`);
+    reset.addEventListener("click", () => grid({ tempo_times: 1, meter: null, bar_one: 0 }));
+    pane.appendChild(reset);
+  }
+  pane.appendChild(el(`<div class="muted small">Turn on the click (${icon("metronome", 12).replace('class="ic"', 'class="ic" style="display:inline;vertical-align:-2px"')}) to hear the grid. A change listens again and makes the shots anew.</div>`));
 }
 
 function dial(k, spec, value, commit) {
@@ -415,6 +512,13 @@ function paneWords(pane) {
   const h = el(`<div class="h">${icon("text", 18)}Words<button class="ib" style="margin-left:auto" title="${lx.show ? "Hide" : "Show"} the words">${icon(lx.show ? "eye" : "eyeoff", 18)}</button></div>`);
   h.querySelector("button").addEventListener("click", () => edit([{ op: "lyrics", key: "show", value: !lx.show }]));
   pane.appendChild(h);
+  const tools = el(`<div class="row" style="margin-bottom:12px"><a class="pill" href="http://127.0.0.1:8420/" target="_blank" rel="noopener" title="Word timing is edited in the song app (python -m song)">${icon("out", 14)}Timing</a>
+    <button class="pill" title="Read the words again, after changing them in the song app">${icon("refresh", 14)}Reload</button></div>`);
+  tools.querySelector("button").addEventListener("click", async () => {
+    const r = await change("/api/refresh", {});
+    if (r) { song = r.song; draw(); }
+  });
+  pane.appendChild(tools);
   const px = Math.round(Math.min(Math.max(lx.size * 560, 11), 30));
   pane.appendChild(el(`<div class="preview" style="font-size:${px}px">
     <span style="opacity:${lx.sung}">light</span> <span style="opacity:${lx.peak}">breaks</span> <span style="opacity:${lx.unsung}">through</span></div>`));
@@ -424,16 +528,41 @@ function paneWords(pane) {
   }
 }
 
+// One change, as a person reads it: what kind of thing (its icon), where, what it was and
+// what it is now. The same for a hand's edit, the AI's, and a proposal not yet applied.
+const KIND_ICON = { shot: "camera", section: "song", moment: "bolt", cast: "mic", feel: "sliders", words: "text", grid: "metronome" };
+function changeRow(c) {
+  const where = c.bars ? `${c.bars[0]}–${c.bars[1]}` : c.bar !== undefined ? `bar ${c.bar}` : "";
+  const row = el(`<div class="chg">${icon(KIND_ICON[c.kind] || "cursor", 14)}<span class="t">${esc(c.title)}</span>
+    <span class="was">${esc(c.before)}</span>${icon("right", 12)}<span class="now">${esc(c.after)}</span>
+    ${where ? `<span class="where">${where}</span>` : ""}</div>`);
+  if (c.bars || c.bar !== undefined) {
+    const [a, b] = c.bars || [c.bar, c.bar + 1];
+    row.addEventListener("mouseenter", () => hoverBars(a, b));
+    row.addEventListener("mouseleave", () => hoverBars(null));
+  }
+  return row;
+}
+
+function hoverBars(a, b) {
+  const band = $("hoverband");
+  band.hidden = a === null;
+  if (a !== null) { band.style.left = P(a); band.style.width = `${((b - a) / N) * 100}%`; }
+}
+
 function paneLog(pane) {
-  pane.appendChild(el(`<div class="h">${icon("clock", 18)}Changes</div>`));
-  const ol = el(`<ol class="log"></ol>`);
+  pane.appendChild(el(`<div class="h">${icon("clock", 18)}History<span class="sub">${at} of ${history.length - 1}</span></div>`));
+  const list = el(`<div class="hist"></div>`);
   history.map((h, k) => [h, k]).reverse().forEach(([h, k]) => {
-    const ic = h.source === "ask" ? "spark" : k === 0 ? "check" : "cursor";
-    const li = el(`<li class="${k === at ? "now" : k > at ? "ahead" : ""}">${icon(ic, 14)}<span>${esc(h.label)}</span></li>`);
-    li.addEventListener("click", () => goTo(k));
-    ol.appendChild(li);
+    const who = h.source === "ask" ? ["spark", "AI"] : h.source === "open" ? ["check", "Opened"] : ["cursor", "You"];
+    const card = el(`<div class="card${k === at ? " now" : k > at ? " ahead" : ""}" title="${k === at ? "Where you are" : "Go back to here"}">
+      <div class="who">${icon(who[0], 14)}<span>${who[1]}</span>${h.request ? `<q>${esc(h.request)}</q>` : ""}<span class="when">${h.at || ""}</span></div></div>`);
+    for (const c of h.changes) card.appendChild(changeRow(c));
+    if (h.source === "open") card.appendChild(el(`<div class="chg muted">The video as the director made it</div>`));
+    card.addEventListener("click", () => goTo(k));
+    list.appendChild(card);
   });
-  pane.appendChild(ol);
+  pane.appendChild(list);
 }
 
 // ---------------------------------------------------------------------------- gestures
@@ -461,6 +590,30 @@ function dragEdge(ev, e, i) {
     e.removeEventListener("pointermove", move);
     e.removeEventListener("pointerup", up);
     edit(edgeEdits(sheet.acts, i, to));
+  };
+  e.addEventListener("pointermove", move);
+  e.addEventListener("pointerup", up);
+}
+
+function dragSectionEdge(ev, e, sec, side) {
+  if (busy) return;
+  ev.preventDefault(); ev.stopPropagation();
+  e.setPointerCapture(ev.pointerId);
+  e.classList.add("drag");
+  const tip = document.createElement("span");
+  tip.className = "tip";
+  e.appendChild(tip);
+  let to = side === "start" ? sec.bars[0] : sec.bars[1];
+  const move = (m) => {
+    to = Math.round(barAtPointer(m));
+    to = side === "start" ? Math.min(Math.max(to, 0), sec.bars[1] - 1) : Math.max(Math.min(to, N), sec.bars[0] + 1);
+    e.style.left = P(to);
+    tip.textContent = `${to} · ${mmss(tOf(to))}`;
+  };
+  const up = () => {
+    e.removeEventListener("pointermove", move);
+    e.removeEventListener("pointerup", up);
+    edit(sectionEdgeEdits(sec, side, to, N));
   };
   e.addEventListener("pointermove", move);
   e.addEventListener("pointerup", up);
@@ -522,6 +675,17 @@ function closeProposal() {
   draw();
 }
 
+// Where the person is, for the AI's "this" and "here": the selection, and the playhead.
+function focus() {
+  const f = { playhead: Math.min(Math.floor(bOf(now())), N - 1) };
+  if (!selected) return f;
+  if (selected.kind === "span") f.bars = [selected.a, selected.b];
+  else if (selected.kind === "section") { const s = sheet.heard.sections[secAt(selected.bar)]; if (s) f.bars = s.bars; }
+  else if (selected.kind === "act") { const a = sheet.acts[actAt(sheet.acts, selected.bar)]; if (a) f.bars = a.bars; }
+  else if (selected.kind === "moment") f.bar = selected.bar;
+  return f;
+}
+
 async function ask() {
   const request = $("ask").value.trim();
   if (!request) { $("ask").focus(); return; }
@@ -529,14 +693,23 @@ async function ask() {
   busy = true;
   $("askbox").classList.add("thinking");
   status(song.model, "busy");
+  const model = $("model").value || song.model;
+  let loading = false;
+  try { loading = !(await (await fetch("/api/models")).json()).loaded.includes(model); } catch (e) { /* asked anyway */ }
+  const t0 = performance.now();
+  const tick = setInterval(() => {
+    const s = Math.round((performance.now() - t0) / 1000);
+    status(loading && s < 25 ? `loading ${model}… ${s} s` : `${model} thinking… ${s} s`, "busy");
+  }, 500);
   let r;
-  try { r = await call("/api/ask", { request }); } catch (e) { r = { ok: false, refused: [String(e)] }; }
+  try { r = await call("/api/ask", { request, focus: focus(), model }); } catch (e) { r = { ok: false, refused: [String(e)] }; }
+  clearInterval(tick);
   busy = false;
   $("askbox").classList.remove("thinking");
   status(r.ok ? `${r.seconds} s` : "no answer", r.ok ? "" : "bad");
   const pop = $("proposal");
   if (!r.ok) { toast(r.refused); return; }
-  if (!r.changes) {
+  if (!r.proposes) {
     pop.className = "pop";
     pop.innerHTML = `<div class="said">${esc(r.already ? "Already so." : r.said || "Nothing to change.")}</div>
       <div class="acts"><button class="pill" id="discard">${icon("check", 14)}OK</button></div>`;
@@ -546,8 +719,9 @@ async function ask() {
   }
   proposal = { ...r, request };
   pop.className = "pop";
-  pop.innerHTML = `<div class="said">${esc(r.said)}</div><ul>${r.did.map((x) => `<li>${icon("spark", 14)}<span>${esc(x)}</span></li>`).join("")}</ul>
+  pop.innerHTML = `<div class="said">${icon("spark", 14)}<span>${esc(r.said)}</span></div><div class="rows"></div>
     <div class="acts"><button class="pill" id="discard">${icon("x", 14)}Discard</button><button class="pill go" id="accept">${icon("check", 14)}Apply</button></div>`;
+  for (const c of r.changes) pop.querySelector(".rows").appendChild(changeRow(c));
   pop.hidden = false;
   $("accept").addEventListener("click", async () => {
     const p = proposal;
@@ -557,6 +731,34 @@ async function ask() {
   });
   $("discard").addEventListener("click", closeProposal);
   draw();
+}
+
+function showFacts() {
+  $("facts").textContent = `${Math.round(song.tempo)} BPM · ${song.meter}/${song.meter > 4 ? 8 : 4} · ${N} bars · ${mmss(song.duration)}`;
+  $("facts").title = `sheet: ${song.sheet_path}`;
+}
+
+// A click on every beat, higher on the first of each bar: the way to hear whether the grid
+// is the song's. Played from here, as the playhead crosses each beat.
+let clickOn = false, audioCtx = null, clickedTo = 0;
+function click(first) {
+  const t = audioCtx.currentTime, o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.frequency.value = first ? 1760 : 1175;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(first ? 0.5 : 0.3, t + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(t); o.stop(t + 0.06);
+}
+function clicks(t, playing) {
+  if (!clickOn || !playing || t < clickedTo || t - clickedTo > 0.25) { clickedTo = t; return; }
+  for (const b of song.beats) {
+    if (b > clickedTo && b <= t) {
+      const first = song.bar_t.some((x) => Math.abs(x - b) < 0.02);
+      click(first);
+    }
+  }
+  clickedTo = t;
 }
 
 // ---------------------------------------------------------------------------- start
@@ -574,6 +776,14 @@ async function main() {
   $("zoom").innerHTML = `<button class="ib" id="zout" aria-label="Zoom out" title="Zoom out">${icon("zoomout", 16)}</button>` +
     `<button class="ib" id="zin" aria-label="Zoom in" title="Zoom in">${icon("zoomin", 16)}</button>`;
 
+  // the models on this machine; the one last used is kept
+  fetch("/api/models").then((r) => r.json()).then((m) => {
+    let keep = null;
+    try { keep = localStorage.getItem("studio.model"); } catch (e) { /* private window */ }
+    const pick = m.installed.includes(keep) ? keep : m.default;
+    for (const name of m.installed.length ? m.installed : [m.default]) $("model").add(new Option(name.replace(/:latest$/, ""), name, false, name === pick));
+    $("model").addEventListener("change", () => { try { localStorage.setItem("studio.model", $("model").value); } catch (e) { /* fine */ } });
+  });
   const list = await (await fetch("/api/songs")).json();
   const want = params.get("track") || list.songs[0];
   for (const s of list.songs) $("songs").add(new Option(s.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase()), s, false, s === want));
@@ -583,13 +793,14 @@ async function main() {
   if (!res.ok) { status(song.refused ? song.refused[0] : "no song", "bad"); return; }
   sheet = song.sheet;
   N = song.bar_t.length;
-  history = [{ sheet, label: "As made", source: "made" }];
-  at = 0;
+  history = song.history;
+  at = song.at;
   document.title = `${$("songs").selectedOptions[0].text} · Studio`;
-  $("facts").textContent = `${Math.round(song.tempo)} BPM · ${song.meter}/4 · ${N} bars · ${mmss(song.duration)}`;
-  $("facts").title = `sheet: ${song.sheet_path}`;
+  showFacts();
   // an example in the placeholder, in this song's own terms
-  const last = song.sections.find((s) => /chorus/i.test(s.name)) || song.sections[0];
+  const named = sheet.heard.sections;
+  const choruses = named.filter((s) => /^(final )?chorus/i.test(s.name));
+  const last = choruses[1] || choruses[0] || named[1] || named[0];
   $("ask").placeholder = last ? `Close on Saturn in ${last.name.toLowerCase()}` : `Close on Jupiter from bar ${Math.round(N / 3)} to ${Math.round(N / 2)}`;
 
   frame.src = `/player/?track=${encodeURIComponent(song.bundle)}&embed=1${params.get("t") ? `&t=${params.get("t")}` : ""}`;
@@ -603,6 +814,12 @@ async function main() {
   $("redo").addEventListener("click", () => goTo(at + 1));
   $("play").addEventListener("click", playPause);
   $("lyr").addEventListener("click", () => { const p = player(); if (p) { p.setLyrics(!p.lyrics); syncTransport(); } });
+  $("click").innerHTML = icon("metronome", 18);
+  $("click").addEventListener("click", () => {
+    audioCtx = audioCtx || new AudioContext();
+    clickOn = !clickOn;
+    $("click").classList.toggle("on", clickOn);
+  });
   $("addmoment").addEventListener("click", () => {
     const bar = Math.min(Math.max(Math.round(bOf(now())), 1), N - 1);
     edit([{ op: "reentry", bar, strength: 0.7 }]).then((r) => { if (r && r.changed) select({ kind: "moment", bar }); });
@@ -647,6 +864,7 @@ async function main() {
     $("clock").innerHTML = `${clockOf(t)} <span class="of">/ ${mmss(song.duration)}</span>`;
     const playing = !!(p && !p.audio.paused);
     if (playing !== wasPlaying) { $("play").innerHTML = icon(playing ? "pause" : "play", 18); wasPlaying = playing; }
+    clicks(t, playing);
     if (playing && zoom > 1) {
       const sc = $("scroll"), x = head.offsetLeft;
       if (x < sc.scrollLeft || x > sc.scrollLeft + sc.clientWidth - 40) sc.scrollLeft = x - sc.clientWidth * 0.2;
