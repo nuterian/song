@@ -2,6 +2,7 @@
 
     python -m visuals make   <audio file | song-workdir> [--theme cosmos]
     python -m visuals render <song-workdir> [--preview START] [--seed N]
+    python -m visuals render <song> --theme cosmos [--camera static|hybrid|cinematic] [--no-lyrics]
     python -m visuals score  <song-workdir> [--seed N]
     python -m visuals serve  [--port 8765]
 
@@ -65,6 +66,10 @@ def _score_for(track: Track, seed: int | None, quiet: bool = False) -> schema.Sc
 
 
 def cmd_render(args) -> int:
+    if args.theme == "cosmos":
+        return _render_cosmos(args)
+    if args.camera or args.no_lyrics:
+        raise SystemExit("--camera and --no-lyrics are for --theme cosmos")
     track = _track(args.workdir)
     score = _score_for(track, args.seed)
     if not score.is_complete():
@@ -82,7 +87,7 @@ def cmd_render(args) -> int:
         stem += f"-seed{args.seed}"
     mp4 = Path(args.out) if args.out else out_dir / f"{stem}.mp4"
 
-    width, height = (int(v) for v in args.size.split("x"))
+    width, height = (int(v) for v in (args.size or "1280x720").split("x"))
     print(f"track:  {track.name}  {track.duration:.1f}s  {track.tempo:.1f} bpm  "
           f"{len(track.sections)} sections  {track.n_bars} bars")
     stats = render_mp4(score, track, mp4, start=start, duration=duration,
@@ -93,6 +98,31 @@ def cmd_render(args) -> int:
     staged = export.export(score, track, out_dir)
     (out_dir / "score.json").write_text(json.dumps(score.to_dict(), indent=1) + "\n")
     print(f"player: {staged}  ->  python -m visuals serve")
+    return 0
+
+
+def _render_cosmos(args) -> int:
+    """Any song, as the player shows it, to an mp4: its direction sheet, one camera, the
+    words burned in. The player's link first, so the video can be seen before it is rendered."""
+    import shutil
+
+    from .pieces.gravity import make, render
+    from .pieces.gravity.track import Track
+
+    track = Track.resolve(args.workdir)
+    got = make.listened(track)
+    render.STYLE = "cosmos"
+    start = 0.0 if args.preview is None else max(0.0, float(args.preview))
+    duration = args.duration if args.duration is not None else (PREVIEW_SECONDS if args.preview is not None else None)
+    width, height = (int(v) for v in (args.size or "1920x1080").split("x"))
+    camera = args.camera or "static"
+    out_dir = track.out("cosmos")
+    print(f"player: http://127.0.0.1:8765/player/?track={out_dir.name}&camera={camera}  (python -m visuals serve)")
+    mp4 = render.render(got, track, out_dir, start=start, duration=duration, size=(width, height),
+                        fps=args.fps, camera=camera, words=not args.no_lyrics)
+    if args.out:
+        mp4 = Path(shutil.move(mp4, args.out))
+    print(f"mp4:    {mp4}")
     return 0
 
 
@@ -271,14 +301,19 @@ def main(argv: list[str] | None = None) -> int:
     st.set_defaults(fn=cmd_studio)
 
     r = sub.add_parser("render", help="render an mp4 and stage the player")
-    r.add_argument("workdir", help="a song workdir, read-only")
+    r.add_argument("workdir", help="a song workdir, read-only (with --theme cosmos, an audio file too)")
+    r.add_argument("--theme", choices=("cosmos",), default=None,
+                   help="the solar system, from the song's direction sheet, as the player and the studio show it")
+    r.add_argument("--camera", choices=("static", "hybrid", "cinematic"), default=None,
+                   help="cosmos: which of the three cameras (default static)")
+    r.add_argument("--no-lyrics", action="store_true", help="cosmos: leave the words out")
     r.add_argument("--preview", type=float, metavar="START", default=None,
                    help=f"render {PREVIEW_SECONDS:.0f}s from START seconds instead of the whole song")
     r.add_argument("--duration", type=float, default=None, help="override the length in seconds")
     r.add_argument("--seed", type=int, default=None,
                    help="sample a legal score from this seed instead of using the written one")
     r.add_argument("--fps", type=int, default=60)
-    r.add_argument("--size", default="1280x720")
+    r.add_argument("--size", default=None, help="WIDTHxHEIGHT (default 1280x720; 1920x1080 for cosmos)")
     r.add_argument("--out", default=None, help="mp4 path")
     r.set_defaults(fn=cmd_render)
 

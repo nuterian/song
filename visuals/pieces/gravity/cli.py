@@ -27,6 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default=None)
     p.add_argument("--solo", default=None,
                    help="draw only this stream's response (for the separation matrix)")
+    p.add_argument("--no-lyrics", action="store_true", help="cosmos only: leave the words out of the mp4")
 
     p = sub.add_parser("measure", help="decode the mp4 and check it against the audio")
     p.add_argument("--video", default=None)
@@ -74,7 +75,8 @@ def main(argv: list[str] | None = None) -> int:
         w, h = (int(v) for v in args.size.lower().split("x"))
         made = render.render(_listen(), track, out if args.out is None else args.out,
                             start=args.start, duration=args.duration,
-                            size=(w, h), fps=args.fps, crf=args.crf, solo=args.solo)
+                            size=(w, h), fps=args.fps, crf=args.crf, solo=args.solo,
+                            camera=args.camera, words=not args.no_lyrics)
         print(made)
         return 0
 

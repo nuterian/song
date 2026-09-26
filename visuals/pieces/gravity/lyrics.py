@@ -145,17 +145,18 @@ def opacity(line: Line, t: float) -> float:
     return float(min(up, down))
 
 
-def ink(t: float, start: float, end: float) -> float:
-    """How much ink a word has at `t`: UNSUNG until LEAD before it, eased up to PEAK on it,
-    eased down to SUNG over its length (at least a quarter second) after."""
+def ink(t: float, start: float, end: float, unsung: float = UNSUNG, peak: float = PEAK, sung: float = SUNG) -> float:
+    """How much ink a word has at `t`: `unsung` until LEAD before it, eased up to `peak` on
+    it, eased down to `sung` over its length (at least a quarter second) after. The three
+    inks are the sheet's to change (`layout` gives them in its style); these are the defaults."""
     if t < start - LEAD:
-        return UNSUNG
+        return unsung
     if t < start:
-        return UNSUNG + (PEAK - UNSUNG) * _ease((t - (start - LEAD)) / LEAD)
+        return unsung + (peak - unsung) * _ease((t - (start - LEAD)) / LEAD)
     settle = max(end - start, 0.25)
     if t < start + settle:
-        return PEAK + (SUNG - PEAK) * _ease((t - start) / settle)
-    return SUNG
+        return peak + (sung - peak) * _ease((t - start) / settle)
+    return sung
 
 
 def _ease(x: float) -> float:
