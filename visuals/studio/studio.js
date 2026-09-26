@@ -689,7 +689,7 @@ function focus() {
 async function ask() {
   const request = $("ask").value.trim();
   if (!request) { $("ask").focus(); return; }
-  if (busy) return;
+  if (busy || !song) return;
   busy = true;
   $("askbox").classList.add("thinking");
   status(song.model, "busy");
@@ -761,6 +761,145 @@ function clicks(t, playing) {
   clickedTo = t;
 }
 
+// ---------------------------------------------------------------------------- adding a song
+//
+// A song is added from the picker's last choice or by dropping its audio (and its lyrics,
+// a .txt) anywhere on the page. The server makes it in the background, one song at a
+// time; the page asks how it is going every 2 s while something is being made, and when
+// a song this page asked for is ready, offers to open it.
+
+const ADD = "+add";
+const nameOf = (slug) => slug.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
+let audioTypes = [], songList = [];
+const isAudio = (f) => audioTypes.some((x) => f.name.toLowerCase().endsWith(x));
+const isWords = (f) => f.name.toLowerCase().endsWith(".txt");
+
+function fillSongs(want) {
+  const sel = $("songs");
+  sel.innerHTML = "";
+  if (!songList.length) sel.add(new Option("No songs yet", "", true, true));
+  for (const s of songList) sel.add(new Option(nameOf(s), s, false, s === want));
+  sel.add(new Option("Add a song…", ADD));
+  if (sel.options[0].value === "") sel.options[0].disabled = true;
+}
+
+// A small card over the picture that waits for an answer (the toast's place, without its timer).
+function offer(text, acts) {
+  clearTimeout(toastTimer);
+  const t = $("toast");
+  t.innerHTML = `<div class="pop" style="position:static;width:auto"><div class="said">${icon("song", 14)}<span>${esc(text)}</span></div>
+    <div class="acts"></div></div>`;
+  for (const [label, ic, go, fn] of acts) {
+    const b = el(`<button class="pill${go ? " go" : ""}">${icon(ic, 14)}${label}</button>`);
+    b.addEventListener("click", () => { t.hidden = true; fn(); });
+    t.querySelector(".acts").appendChild(b);
+  }
+  t.hidden = false;
+}
+
+// Files picked or dropped: the audio, and its lyrics if they came with it; if they did not,
+// asked for (a second file picker needs a click of its own).
+function addFiles(files) {
+  const audio = files.find(isAudio), words = files.find(isWords);
+  if (!audio) { toast([`Not a song: the studio reads ${audioTypes.join(" ")}`]); return; }
+  if (words) { upload(audio, words); return; }
+  offer(audio.name, [
+    ["Cancel", "x", false, () => {}],
+    ["Lyrics…", "text", false, () => { pickLyrics = (w) => upload(audio, w); $("picklyrics").click(); }],
+    ["Add", "check", true, () => upload(audio, null)],
+  ]);
+}
+let pickLyrics = null;
+
+function pickAudio() {
+  if (navigator.userActivation && !navigator.userActivation.isActive) {      // too long since the click: ask for one
+    offer("Add a song", [["Cancel", "x", false, () => {}], ["Choose a file", "plus", true, () => $("pickaudio").click()]]);
+  } else {
+    $("pickaudio").click();
+  }
+}
+
+const jobState = {}, mine = new Set();
+let jobsTimer = 0, jobsTick = 0;
+
+async function upload(audio, words) {
+  status(`adding ${audio.name}…`, "busy");
+  const form = new FormData();
+  form.append("audio", audio);
+  if (words) form.append("lyrics", words);
+  let r;
+  try { r = await (await fetch("/api/import", { method: "POST", body: form })).json(); } catch (e) { r = { ok: false, refused: [String(e)] }; }
+  if (!r.ok) { status("not added", "bad"); toast(r.refused); return; }
+  mine.add(r.job.id);
+  jobState[r.job.id] = r.job.state;
+  watchJobs();
+}
+
+// Asked every 2 s while a song is being made, and not otherwise.
+async function watchJobs() {
+  clearTimeout(jobsTimer);
+  let jobs;
+  try { jobs = (await (await fetch("/api/jobs")).json()).jobs; } catch (e) { jobsTimer = setTimeout(watchJobs, 2000); return; }
+  for (const j of jobs) {
+    const was = jobState[j.id];
+    jobState[j.id] = j.state;
+    if (was && was !== j.state && (j.state === "done" || j.state === "failed")) finished(j);
+  }
+  const live = jobs.filter((j) => j.state === "queued" || j.state === "running");
+  clearInterval(jobsTick);
+  if (!live.length) return;
+  const run = live.find((j) => j.state === "running") || live[0], t0 = performance.now();
+  const show = () => {
+    if (busy) return;                                   // an edit is saying something: it goes first
+    const s = run.seconds + (run.state === "running" ? (performance.now() - t0) / 1000 : 0);
+    const more = live.length > 1 ? ` (+${live.length - 1})` : "";
+    status(`${nameOf(run.song)} · ${run.step} ${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}${more}`, "busy");
+    $("status").title = run.log.length ? run.log[run.log.length - 1] : "";
+  };
+  show();
+  jobsTick = setInterval(show, 1000);
+  jobsTimer = setTimeout(watchJobs, 2000);
+}
+
+async function finished(j) {
+  const was = $("songs").value;
+  try { songList = (await (await fetch("/api/songs")).json()).songs; } catch (e) { /* the list stays as it was */ }
+  fillSongs(was);
+  $("status").title = "";
+  if (!mine.has(j.id)) return;
+  if (j.state === "failed") { status("not added", "bad"); toast([`${nameOf(j.song)}: ${j.error}`]); return; }
+  status(`added in ${Math.floor(j.seconds / 60)}:${String(Math.round(j.seconds % 60)).padStart(2, "0")}`);
+  const open = () => { location.search = `?track=${encodeURIComponent(j.song)}`; };
+  if (!song) { open(); return; }                        // nothing open here: open it
+  offer(`${nameOf(j.song)} is ready`, [["Later", "x", false, () => {}], ["Open", "out", true, open]]);
+}
+
+function setUpAdding() {
+  $("pickaudio").accept = [...audioTypes, ".txt"].join(",");
+  $("pickaudio").addEventListener("change", (e) => { const f = [...e.target.files]; e.target.value = ""; if (f.length) addFiles(f); });
+  $("picklyrics").addEventListener("change", (e) => {
+    const w = e.target.files[0];
+    e.target.value = "";
+    if (w && pickLyrics) pickLyrics(w);
+    pickLyrics = null;
+  });
+  // a file dragged over the page: the whole page takes it, the picture too
+  const files = (e) => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  const on = (e) => { if (files(e)) { e.preventDefault(); document.body.classList.add("dropping"); } };
+  window.addEventListener("dragenter", on);
+  window.addEventListener("dragover", (e) => { on(e); if (files(e)) e.dataTransfer.dropEffect = "copy"; });
+  window.addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("dropping"); });
+  window.addEventListener("drop", (e) => {
+    document.body.classList.remove("dropping");
+    if (!files(e)) return;
+    e.preventDefault();
+    addFiles([...e.dataTransfer.files]);
+  });
+  frame.addEventListener("load", () => {
+    try { for (const k of ["dragenter", "dragover"]) frame.contentWindow.addEventListener(k, on); } catch (e) { /* not ours */ }
+  });
+}
+
 // ---------------------------------------------------------------------------- start
 
 async function main() {
@@ -785,12 +924,27 @@ async function main() {
     $("model").addEventListener("change", () => { try { localStorage.setItem("studio.model", $("model").value); } catch (e) { /* fine */ } });
   });
   const list = await (await fetch("/api/songs")).json();
-  const want = params.get("track") || list.songs[0];
-  for (const s of list.songs) $("songs").add(new Option(s.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase()), s, false, s === want));
-  $("songs").addEventListener("change", () => { location.search = `?track=${encodeURIComponent($("songs").value)}`; });
+  songList = list.songs;
+  audioTypes = list.audio;
+  const want = params.get("track") || songList[0];
+  fillSongs(want);
+  $("songs").addEventListener("change", () => {
+    if ($("songs").value !== ADD) { location.search = `?track=${encodeURIComponent($("songs").value)}`; return; }
+    $("songs").value = song ? song.slug : "";
+    pickAudio();
+  });
+  setUpAdding();
+  watchJobs();
+  if (!songList.length) {
+    $("undo").disabled = $("redo").disabled = true;
+    $("pane").appendChild(el(`<div class="empty">${icon("song", 28)}<span>No songs yet</span><span>Add one from the list, or drop it here</span></div>`));
+    return;
+  }
+  status("opening…", "busy");
   const res = await fetch(`/api/song?track=${encodeURIComponent(want)}`);
-  song = await res.json();
-  if (!res.ok) { status(song.refused ? song.refused[0] : "no song", "bad"); return; }
+  const got = await res.json();
+  if (!res.ok) { status(got.refused ? got.refused[0] : "no song", "bad"); return; }
+  song = got;
   sheet = song.sheet;
   N = song.bar_t.length;
   history = song.history;
