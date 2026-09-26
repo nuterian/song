@@ -261,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", metavar="command")
 
     st = sub.add_parser("studio", help="edit songs' videos on a timeline, by hand or by asking")
-    st.add_argument("songs", nargs="+", help="audio files or song workdirs")
+    st.add_argument("songs", nargs="*", help="audio files or song workdirs (none: every song already prepared)")
     st.add_argument("--port", type=int, default=8777)
     st.set_defaults(fn=cmd_studio)
 
@@ -285,11 +285,6 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--audio", default=None)
     e.add_argument("--dry", action="store_true", help="show the edited sheet; keep nothing")
     e.set_defaults(fn=cmd_edit)
-
-    st = sub.add_parser("studio", help="edit songs' videos on a timeline, by hand or by asking")
-    st.add_argument("songs", nargs="*", help="audio files or song workdirs (none: every song already prepared)")
-    st.add_argument("--port", type=int, default=8777)
-    st.set_defaults(fn=cmd_studio)
 
     r = sub.add_parser("render", help="the first, abstract piece: render an mp4 of a song workdir")
     r.add_argument("workdir", help="a song workdir, read-only")
