@@ -4,6 +4,7 @@
     python -m visuals render <song-workdir> [--preview START] [--seed N]
     python -m visuals score  <song-workdir> [--seed N]
     python -m visuals serve  [--port 8765]
+    python -m visuals demo                 the video demo, as a static page, into docs/video/
 
 `make` is the product: any song in, the themed world staged for the player. It
 separates stems, listens, runs the small models and bakes the channels, caching
@@ -220,6 +221,15 @@ def cmd_studio(args) -> int:
     return 0
 
 
+def cmd_demo(args) -> int:
+    from .pieces.gravity import demo
+
+    dest = demo.build()
+    print(f"{dest}\n{demo.sizes(dest)}")
+    print("  python3 -m http.server -d docs 8793   ->   http://127.0.0.1:8793/video/")
+    return 0
+
+
 def cmd_serve(args) -> int:
     """A static server rooted at visuals/, so /player/ can fetch /out/<track>/."""
     handler = functools.partial(_RangeHandler, directory=str(HERE))
@@ -287,6 +297,9 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--seed", type=int, default=None)
     s.add_argument("--out", default=None)
     s.set_defaults(fn=cmd_score)
+
+    d = sub.add_parser("demo", help="the video demo, as a static page, into docs/video/")
+    d.set_defaults(fn=cmd_demo)
 
     v = sub.add_parser("serve", help="serve visuals/ so the player page can run")
     v.add_argument("--port", type=int, default=8765)

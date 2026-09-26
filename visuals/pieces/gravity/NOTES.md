@@ -1080,3 +1080,50 @@ smaller model answers in seconds when memory is short, and an answer is only eve
 proposal, shown on the timeline, applied or discarded. The prompt has changed since the
 comparison (sections, the selection); `editor_eval` is to be run again when the machine
 is otherwise quiet.
+
+## The demo (`demo.py`, `render.pack`, `player/bundle.js`)
+
+    python -m visuals make "examples/Gravity in Motion.wav"     (and Shattered Voices)
+    python -m visuals demo                                      -> docs/video/, served by GitHub Pages
+
+The player and both songs as a static page: no server, no keys, nothing fetched from
+anywhere else. The landing page (docs/index.html) shows a poster of it and puts the page
+in a frame only when play is clicked: 0.1 MB for the landing page as it is, against 7.3 MB
+in its first 8 s with the frame in the markup (headless Chrome, 10 Mbps).
+
+**The compact form.** Plain float16 halves the frames and is wrong: the clocks and the
+times of the last hits (`uKickT`, the moment of the last kick) run to the song's length,
+and at 280 s a float16 is 0.25 s coarse, so hits would land up to 0.12 s off, `uBeats` a
+quarter of a beat off, and the orbits and the camera's turn would step. So `pack` keeps
+each channel as float16 only if that holds it to within 2^-11 (half a float16 step between
+1 and 2), and as float32 otherwise; 201 of Gravity's 262 channels are float16. Each channel
+is written as a column of byte planes (every value's first byte, then every second...),
+which is what lets gzip find the shared high bytes, then the whole is gzipped. The plan
+says so: `frames_packing: "planes"`, `frames_dtype` (one per channel), a `.gz` name; the
+textures carry the same per texture (the star catalogue stays float32, the Milky Way is
+float16). `player/bundle.js` reads either form into the same Float32Array, inflating with
+DecompressionStream and converting float16 by hand; the local form is read as it always
+was. A test runs the reader under node against numpy.
+
+| Gravity's frames | size |
+|---|---|
+| float32, as `export` writes them | 35.9 MB |
+| float32, gzipped | 14.7 MB |
+| float16, gzipped (wrong, above) | 5.1 MB |
+| per channel, byte planes, gzipped | **2.9 MB** |
+
+| docs/video/ | frames | sky (2 textures) | plan | audio | all |
+|---|---|---|---|---|---|
+| Gravity in Motion (4:46) | 2.94 MB | 0.85 MB | 0.10 MB | 4.76 MB | 8.65 MB |
+| Shattered Voices (2:35) | 1.59 MB | 0.85 MB | 0.08 MB | 2.61 MB | 5.13 MB |
+| the page and its three scripts | | | | | 0.04 MB |
+| | | | | | **13.82 MB** |
+
+The sky is the same for both songs and is shipped twice (0.85 MB); a shared copy would
+need the plan to point outside its own folder. Opening the demo fetches 4.0 MB before the
+first frame (the plan, the frames, the sky; the audio streams), drawn 0.5 s after the
+request from this machine and 4.2 s after it at 10 Mbps. Inflating and unpacking Gravity's
+frames takes 43 + 64 ms (node).
+
+Audio seeking needs Range requests: GitHub Pages answers them, `python3 -m http.server`
+does not (a seek falls back to 0:00 there), `python -m visuals serve` does.

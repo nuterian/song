@@ -1,0 +1,151 @@
+<!doctype html>
+<!-- The player as a static page: `python -m visuals demo` writes it to docs/video/ with the
+     songs filled in, beside a compact bundle of each (render.pack). Everything it reads is
+     beside it; nothing is fetched from anywhere else. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a0c10">
+<title>song: a music video, drawn from the song</title>
+<meta name="description" content="A music video drawn live in the browser from the song itself: the solar system, moved by the kick, the bass, the notes and the voice.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%23ff7a3d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+{{fonts}}
+  :root {
+    color-scheme: dark;
+    --bg: #0a0c10; --ink: #f4f6fa; --dim: #98a2b3; --faint: #5b6575; --line: #1c212a;
+    --panel: #11151c; --accent: #ff7a3d; --ease: cubic-bezier(.16, .84, .34, 1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--dim); }
+  /* One column as wide as the picture: as wide as the window allows, and short enough at
+     16:9 that the controls under it (about 150px) still fit. Centred when there is room. */
+  body {
+    --w: min(100vw - 32px, (100dvh - 160px) * 16 / 9);
+    min-height: 100dvh; display: flex; flex-direction: column; justify-content: center;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--dim); text-decoration: none; }
+  a:hover { color: var(--ink); }
+
+  #stage, #bar, #picks, #caption { width: var(--w); margin: 0 auto; }
+  #stage { position: relative; margin-top: 16px; }
+  canvas, #frame { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; }
+  canvas { background: #000; border-radius: 6px; cursor: pointer; }
+  #frame { position: relative; }
+  #frame canvas { height: 100%; }
+  #lyrics { position: absolute; inset: 0; pointer-events: none; overflow: hidden; container-type: size; }
+  #lyrics .line {
+    position: absolute; white-space: nowrap; opacity: 0;
+    font-size: calc(var(--size) * 100cqh);
+    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 300;
+    letter-spacing: 0.06em; color: rgb(238, 233, 222);
+    text-shadow: 0 0 0.35em rgba(0, 0, 0, 0.55);
+  }
+  #lyrics .line span { opacity: 0.42; }
+
+  /* a play affordance over the picture until it first plays, and a word while it loads */
+  #big {
+    position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px;
+    border-radius: 50%; border: 1px solid rgba(244, 246, 250, .28); background: rgba(10, 12, 16, .55);
+    color: var(--ink); cursor: pointer; display: grid; place-items: center; padding: 0;
+    transition: transform .18s var(--ease), background .18s var(--ease), opacity .3s var(--ease);
+  }
+  #big:hover { transform: scale(1.06); background: rgba(10, 12, 16, .75); }
+  #big svg { width: 26px; height: 26px; margin-left: 4px; }
+  #big[disabled] { opacity: 0; pointer-events: none; }
+  body.played #big { opacity: 0; pointer-events: none; }
+  #readout { color: var(--faint); font-size: 13px; }
+  body.ready #readout, #fps { display: none; }
+
+  #bar { display: flex; gap: 14px; align-items: center; padding: 14px 0 0; }
+  #seek { flex: 1 1 auto; min-width: 0; accent-color: var(--accent); }
+  #clock { color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 13ch; cursor: pointer; }
+  button {
+    font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 16px; cursor: pointer;
+    transition: border-color .18s var(--ease), background .18s var(--ease), color .18s var(--ease);
+  }
+  button:hover { border-color: #38445a; }
+  #play { min-width: 76px; }
+
+  #picks { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; padding: 12px 0 0; }
+  #choices { display: contents; }
+  .choice { display: flex; align-items: center; }
+  .choice > span { color: var(--faint); margin-right: 10px; }
+  .choice button { border-radius: 0; margin-left: -1px; padding: 4px 13px; color: var(--dim); }
+  .choice button:first-of-type { border-radius: 999px 0 0 999px; margin-left: 0; }
+  .choice button:last-of-type { border-radius: 0 999px 999px 0; }
+  .choice button.on { color: var(--ink); background: rgba(255, 122, 61, .16); border-color: rgba(255, 122, 61, .55); position: relative; }
+
+  #caption { padding: 14px 0 18px; color: var(--faint); font-size: 13px; }
+  #caption b { color: var(--dim); font-weight: 560; }
+  #error { padding: 16px; color: #e08a8a; white-space: pre-wrap; }
+  /* ?embed=1: in the landing page, which has its own caption and links */
+  body.embed #caption { display: none; }
+  body.embed #picks { padding-bottom: 16px; }
+
+  /* narrow: the picture across the width at the top, the controls under it */
+  @media (max-width: 640px) {
+    body { --w: calc(100vw - 24px); justify-content: flex-start; }
+    #stage { margin-top: 12px; }
+  }
+</style>
+</head>
+<body data-bundles="./" data-track="{{track}}" data-songs="{{songs}}">
+  <div id="stage">
+    <canvas id="gl" width="1280" height="720" aria-label="The music video"></canvas>
+    <button id="big" aria-label="play" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg></button>
+  </div>
+  <div id="bar">
+    <button id="play">play</button>
+    <span id="clock" title="click to copy a link to this moment">0:00.0</span>
+    <input id="seek" type="range" min="0" max="1" step="0.001" value="0" aria-label="position in the song">
+    <span id="readout">loading</span>
+    <span id="fps"></span>
+  </div>
+  <div id="picks">
+    <span class="choice" id="songs"><span>song</span></span>
+    <span id="choices"></span>
+  </div>
+  <p id="caption"><b id="title">{{title}}</b> by Jugal Manjeshwar, drawn in your browser from the song as it plays.
+    <a href="../">About</a> · <a href="https://github.com/nuterian/song">GitHub</a></p>
+  <div id="error" hidden></div>
+  <audio id="audio" preload="auto"></audio>
+  <script type="module">
+    // The songs: one page each (?track=), so a switch is a fresh page; the camera and the
+    // words go along in the address, and it plays on if the browser allows it.
+    const songs = JSON.parse(document.body.dataset.songs);
+    const here = new URLSearchParams(location.search).get("track") || document.body.dataset.track;
+    const box = document.getElementById("songs");
+    for (const song of songs) {
+      const b = document.createElement("button");
+      b.textContent = song.title;
+      b.classList.toggle("on", song.slug === here);
+      b.addEventListener("click", () => {
+        if (song.slug === here) return;
+        const url = new URL(location.href);
+        url.searchParams.set("track", song.slug);
+        url.searchParams.delete("t");
+        url.searchParams.set("play", "1");
+        location.assign(url);
+      });
+      box.appendChild(b);
+    }
+    const now = songs.find((s) => s.slug === here);
+    if (now) document.getElementById("title").textContent = now.title;
+    const audio = document.getElementById("audio"), big = document.getElementById("big");
+    const toggle = () => document.getElementById("play").click();
+    big.addEventListener("click", toggle);
+    document.getElementById("gl").addEventListener("click", toggle);
+    audio.addEventListener("play", () => document.body.classList.add("played"));
+    // the big button is only offered once the picture can play
+    new MutationObserver(() => { big.disabled = !document.body.classList.contains("ready"); })
+      .observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  </script>
+  <script type="module" src="player.js"></script>
+</body>
+</html>
