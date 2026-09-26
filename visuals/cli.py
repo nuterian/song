@@ -1,16 +1,19 @@
 """The command line.
 
+    python -m visuals                  the same as `python -m visuals studio`
+    python -m visuals studio <songs>   the editor: the video on a timeline, changed by hand or by asking
     python -m visuals make   <audio file | song-workdir> [--theme cosmos]
+    python -m visuals edit   <audio file | song-workdir> "what to change"
     python -m visuals render <song-workdir> [--preview START] [--seed N]
     python -m visuals score  <song-workdir> [--seed N]
     python -m visuals serve  [--port 8765]
 
-`make` is the product: any song in, the themed world staged for the player. It
-separates stems, listens, runs the small models and bakes the channels, caching
-each step under visuals/cache/<track>/. Lyrics come from the song tool's workdir
-when there is one.
+`studio` is where a person works. `make` is the product: any song in, the themed
+world staged for the player. It separates stems, listens, runs the small models and
+bakes the channels, caching each step under visuals/cache/<track>/. Lyrics come from
+the song tool's workdir when there is one.
 
-`render` is the one that matters. It reads the workdir, takes the score (the
+`render` is the first piece's. It reads the workdir, takes the score (the
 hand-written one for the track if there is one, otherwise a legal draw from the
 seed), writes an mp4 with the track's audio under it, and stages the same score
 and the same baked uniforms for the browser.
@@ -241,10 +244,18 @@ def cmd_serve(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="python -m visuals", description=__doc__.split("\n")[0])
-    sub = p.add_subparsers(dest="cmd", required=True)
+    p = argparse.ArgumentParser(
+        prog="python -m visuals",
+        description="A music video for any song, made and edited on this machine.",
+        epilog="With no command, opens the studio.")
+    sub = p.add_subparsers(dest="cmd", metavar="command")
 
-    m = sub.add_parser("make", help="any song, themed and staged for the player")
+    st = sub.add_parser("studio", help="edit songs' videos on a timeline, by hand or by asking")
+    st.add_argument("songs", nargs="+", help="audio files or song workdirs")
+    st.add_argument("--port", type=int, default=8777)
+    st.set_defaults(fn=cmd_studio)
+
+    m = sub.add_parser("make", help="prepare a song for the studio: stems, listening, models")
     m.add_argument("song", help="an audio file (wav, flac, mp3, m4a...) or a song workdir")
     m.add_argument("--theme", choices=("cosmos",), default="cosmos")
     m.add_argument("--audio", default=None, help="the audio, for a song workdir whose project has lost it")
@@ -257,7 +268,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="keep the direction sheet used, in visuals/sheets/, to be edited")
     m.set_defaults(fn=cmd_make)
 
-    e = sub.add_parser("edit", help="change a song's direction sheet by asking, with a local model")
+    e = sub.add_parser("edit", help="change a song's video by asking a local model")
     e.add_argument("song", help="an audio file or a song workdir")
     e.add_argument("request", help='what to change, in words: "close on Saturn in the second chorus"')
     e.add_argument("--model", default=None, help="an Ollama model on this machine (default: the one that edits best, measured)")
@@ -265,12 +276,7 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--dry", action="store_true", help="show the edited sheet; keep nothing")
     e.set_defaults(fn=cmd_edit)
 
-    st = sub.add_parser("studio", help="edit songs' videos on a timeline, by hand or by asking")
-    st.add_argument("songs", nargs="+", help="audio files or song workdirs")
-    st.add_argument("--port", type=int, default=8777)
-    st.set_defaults(fn=cmd_studio)
-
-    r = sub.add_parser("render", help="render an mp4 and stage the player")
+    r = sub.add_parser("render", help="the first, abstract piece: render an mp4 of a song workdir")
     r.add_argument("workdir", help="a song workdir, read-only")
     r.add_argument("--preview", type=float, metavar="START", default=None,
                    help=f"render {PREVIEW_SECONDS:.0f}s from START seconds instead of the whole song")
@@ -282,17 +288,18 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--out", default=None, help="mp4 path")
     r.set_defaults(fn=cmd_render)
 
-    s = sub.add_parser("score", help="write a score to visuals/scores/")
+    s = sub.add_parser("score", help="the first piece: write a song's score to visuals/scores/")
     s.add_argument("workdir")
     s.add_argument("--seed", type=int, default=None)
     s.add_argument("--out", default=None)
     s.set_defaults(fn=cmd_score)
 
-    v = sub.add_parser("serve", help="serve visuals/ so the player page can run")
+    v = sub.add_parser("serve", help="serve the first piece's player page")
     v.add_argument("--port", type=int, default=8765)
     v.set_defaults(fn=cmd_serve)
 
-    args = p.parse_args(argv)
+    argv = sys.argv[1:] if argv is None else argv
+    args = p.parse_args(argv or ["studio"])
     try:
         return args.fn(args)
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
