@@ -9,6 +9,11 @@ open-source models. No API keys, no uploads, no per-track cost.
 Built for AI-generated songs, where the lyrics are known exactly but the timing is
 not. Then it renders the finished track to a karaoke video.
 
+The second half, [the music video](#the-music-video) in `visuals/`, makes a themed
+video from any song: the solar system moving with the music, and the words placed on
+the sky and lit as they are sung. It is edited in a studio, by hand or by asking a
+local model.
+
 **[Try it in your browser →](https://jugalm.com/song/demo/)** · **[How it works, in full →](https://jugalm.com/song/)**
 
 The demo is the real app against a real aligned track. Everything edits — drag a
@@ -19,7 +24,7 @@ needs it running on your machine.
 ![The song app: a waveform with every lyric line bracketed, and the lyrics below with per-line scores](docs/img/app-full.webp)
 
 ```bash
-./setup.sh                       # one-time, ~5 min
+./setup.sh                       # one-time: both halves, then asks about the models
 ./.venv/bin/python -m song  # opens the app at http://127.0.0.1:8420
 ```
 
@@ -199,6 +204,70 @@ supply, no stock footage, no still image.
 
 ![A frame of the karaoke video: three lyric lines at the bottom left with the middle one part-filled in an accent colour, and a thin smooth waveform level with it on the right](docs/img/video-still.webp)
 
+## The music video
+
+`visuals/` makes a video from any song, in one theme so far: the solar system in three
+dimensions, the real planets against the real sky. Each part of the picture is played
+by a part of the song, chosen for that song from what is really in it: the pulse by the
+kick, the rings by the snare or clap, the stars by the hats, the corona by the bass
+line, the planets by the synths' notes, the heart by the voice. The song's form moves
+the camera. The words are placed where nothing in the picture crosses them, and lit as
+they are sung. Everything is heard from the song itself, and the same song makes the
+same video every time.
+
+```bash
+./setup.sh                                            # once, for both halves
+visuals/.venv/bin/python -m visuals studio            # the studio: http://127.0.0.1:8777
+visuals/.venv/bin/python -m visuals studio song.wav   # ...with a song in it
+```
+
+- **Add a song** by dropping it on the studio or naming it on the command line (wav,
+  flac, aiff, mp3, m4a, aac, ogg, opus). The first time, it is prepared: Demucs
+  separates the stems, the song is listened to and the small models run. That takes
+  about one and a half times the song's length, once; after that it opens in seconds.
+- **The words** come from the song tool. Align the song first
+  (`./.venv/bin/python -m song song.wav lyrics.txt`) and the video finds it by name.
+  A song that has not been aligned gets no words.
+- **Edit by hand** on the timeline: pick a shot, drag where one ends, choose bars and
+  give them a shot, move a dial, correct the beat grid, name the sections. An edit is
+  in the picture in about 1.4 s, and every change is a step in one history to undo.
+- **Edit by asking**, in words ("a close shot on Saturn in the second chorus"), with a
+  model running in [Ollama](https://ollama.com) on the same machine. This is optional:
+  without Ollama everything else works and asking says to start it. The answer comes
+  back as a proposal drawn on the timeline, to apply or discard. `gpt-oss:20b` edits
+  best of the models measured, in about 7 s a request; it is its own download, through
+  Ollama.
+- **Export an mp4**: 1080p at 60 fps, with the song's audio under it.
+
+### What it costs
+
+- **Disk**: `.venv` 1.0 GB and `visuals/.venv` 1.1 GB, plus 7.8 GB of models: 1.8 GB
+  for the video and Demucs, 5.9 GB for aligning lyrics (listed below).
+- **Install**: `./setup.sh` took 1 min 46 s from a fresh clone with pip's cache warm,
+  fetching 30 MB of packages. A first install also downloads two builds of torch and
+  the rest, which was not timed. The models are a separate step it asks about.
+- **Time**, on an M4 MacBook Air: aligning lyrics about 5 minutes for a 5-minute song;
+  preparing it for the video about 7 (Demucs is half of that); rendering the mp4 at
+  1080p60 runs at 45 frames a second, so about 7 minutes more.
+- **Tested** on macOS on Apple Silicon only.
+
+### What stays local
+
+Everything. The songs, their stems, the edits and the renders stay on the machine; the
+studio listens on 127.0.0.1; the edit model is Ollama's, on the same machine. There
+are no accounts and no API keys. The network is used to install the packages and to
+download each model once.
+
+### How it works
+
+Listening turns the stems into events timed to the millisecond (attacks, notes, the
+beat grid) and small models say what they are (notes, chords, key, what a passage
+sounds like, what a line is about). A director turns those into decisions - who plays
+what, the acts, the shots, the moments the beat comes back - written as a direction
+sheet a person or a model can edit, and the decisions are baked into channels a shader
+reads frame by frame. `visuals/pieces/gravity/NOTES.md` has the piece, version by
+version, with what was measured; `visuals/DESIGN.md` has the ideas the design rests on.
+
 ## Commands
 
 ```bash
@@ -241,7 +310,8 @@ Bring your own audio. `examples/lyrics.txt` is the full sample file.
 ## Notes
 
 Roughly 5 minutes end-to-end for a 5-minute track on an M4 CPU, and about 12
-more to render the video at 1080p60 (6 at `--height 720`). Models download once (~3 GB) to the usual torch/HF caches.
+more to render the video at 1080p60 (6 at `--height 720`). Its models download once
+(5.9 GB, below) to the usual torch, Hugging Face and Whisper caches.
 Demucs on Apple MPS is broken under torch 2.5 and Whisper hits unimplemented
 sparse ops there, so it is CPU throughout.
 
@@ -259,6 +329,17 @@ plus a guard that those modules stay importable with no third-party package
 present at all, which is what lets CI run them in seconds without installing
 anything. The handful that need numpy skip themselves where it is missing.
 
+The video's tests run in its own venv:
+
+```bash
+PYTHONPATH=. visuals/.venv/bin/python -m pytest visuals/tests                  # all of them
+PYTHONPATH=. visuals/.venv/bin/python -m pytest visuals/tests -m "not local"   # what CI runs
+```
+
+`local` marks the tests that need a GL context, the example song or its listening
+cache. The rest need only numpy, scipy, soundfile, moderngl's import and node, which is
+all CI installs for them, and run in a few seconds.
+
 ## The hosted demo
 
 `docs/demo/` is generated from a real workdir, never hand-copied, so it cannot
@@ -272,6 +353,30 @@ It writes the project, audit included, the analysis payload the server would
 have sent, and the two audio previews re-encoded to 64 kbps mono. The page
 sets `window.SONG_STATIC`, which points the same `app.js` at those files instead
 of the API and turns off every action that would write.
+
+## Models and licences
+
+Each is downloaded by the library that runs it, from its publisher, the first time it
+is needed (or by `./setup.sh` when asked); none is in this repository.
+
+| Model | For | Licence | Size |
+|---|---|---|---|
+| [laion/larger_clap_music](https://huggingface.co/laion/larger_clap_music) | video: what each passage sounds like | Apache-2.0 | 1.6 GB |
+| [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) | video: what each lyric line is about | Apache-2.0 | 92 MB |
+| [Beat This!](https://github.com/CPJKU/beat_this) `final0` | video: beats and downbeats | MIT | 81 MB |
+| [basic-pitch](https://github.com/spotify/basic-pitch) `nmp.onnx` | video: notes | Apache-2.0 | 0.2 MB |
+| [SwiftF0](https://github.com/lars76/swift-f0), [lv-chordia](https://github.com/music-x-lab/ISMIR2019-Large-Vocabulary-Chord-Recognition) | video: the sung melody, chords (in their wheels) | MIT | under 3 MB |
+| [Demucs](https://github.com/facebookresearch/demucs) `htdemucs` | both: the four stems | MIT | 84 MB |
+| [wav2vec2 MMS_FA](https://pytorch.org/audio/stable/generated/torchaudio.pipelines.MMS_FA.html) | lyrics: the alignment's structure | CC-BY-NC-4.0 | 1.3 GB |
+| [Whisper](https://github.com/openai/whisper) `medium`, `large-v3-turbo` | lyrics: aligning within sections, and retries | MIT | 1.5 + 1.6 GB |
+| [faster-whisper-medium](https://huggingface.co/Systran/faster-whisper-medium) | lyrics: the blind transcription | MIT | 1.5 GB |
+| [Silero VAD](https://github.com/snakers4/silero-vad) | lyrics: voice activity (in its wheel) | MIT | 2 MB |
+
+All but one are under permissive licences (MIT, Apache-2.0) that are compatible with
+this repository's MIT licence, and none is redistributed here. The exception is
+MMS_FA: Meta publishes its weights under CC-BY-NC 4.0, so aligning lyrics with the
+song tool as it stands is for non-commercial use. The video does not use it, but its
+words come from that alignment.
 
 ## License
 
