@@ -160,6 +160,29 @@ def test_the_server_answers_the_page(session):
         httpd.shutdown()
 
 
+def test_an_export_names_one_of_the_three_cameras(session):
+    from http.server import ThreadingHTTPServer
+    import functools
+    from visuals.pieces.gravity import studio
+
+    Handler = studio.handler({session.track.slug: session})
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(session.out.parent)))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+    try:
+        req = urllib.request.Request(f"{base}/api/export?track={session.track.slug}", method="POST",
+                                     headers={"Content-Type": "application/json"},
+                                     data=json.dumps({"camera": "drone", "lyrics": True}).encode())
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req)
+        assert e.value.code == 422 and "no camera 'drone'" in json.loads(e.value.read())["refused"][0]
+        assert session.exporting is None and not studio.Export.running.locked()      # nothing was started
+        where = json.loads(urllib.request.urlopen(f"{base}/api/export?track={session.track.slug}&camera=hybrid&lyrics=0").read())
+        assert where["job"] is None and where["path"].endswith(f"{session.track.slug}-hybrid-no-lyrics.mp4")
+    finally:
+        httpd.shutdown()
+
+
 def test_every_change_is_one_history_to_move_along(session):
     from visuals.pieces.gravity import studio
 
