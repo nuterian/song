@@ -33,4 +33,8 @@ swift-f0==0.2.0
 beat-this==1.1.0
 lv-chordia==1.1.0
 
+# The words, burned into an mp4 (pieces/gravity/burn.py): Pillow sets them in the
+# player's own font file, visuals/player/fonts/Inter-Light.woff2.
+Pillow==12.3.0
+
 pytest==8.3.4

@@ -139,6 +139,54 @@ function syncTransport() {
   $("lyr").classList.toggle("on", !!p.lyrics);
 }
 
+// ---------------------------------------------------------------------------- the mp4
+// The whole song as it is shown now: this camera, the words on or off. Where it will be
+// written is said before it starts; the server writes it in the background and says how far
+// it has got, and the finished file is offered in the status.
+
+let exportTimer = 0;
+const exportUrl = (q = "") => `/api/export?track=${encodeURIComponent(song.slug)}${q}`;
+
+async function openExport() {
+  const p = player(), box = $("exportpop");
+  if (!p || !box.hidden) { box.hidden = true; return; }
+  const camera = p.chosen.camera || "static", lyrics = !!p.lyrics;
+  const q = await (await fetch(exportUrl(`&camera=${encodeURIComponent(camera)}&lyrics=${lyrics ? 1 : 0}`))).json();
+  if (q.job && q.job.state === "running") { watchExport(q.job); return; }
+  box.innerHTML = `<div class="said">${icon("download", 14)}<span>The whole song, the ${esc(camera)} camera, ${lyrics ? "with" : "without"} the words, to</span></div>` +
+    `<div class="path">${esc(q.path)}</div>` +
+    `<div class="acts"><button class="pill" id="exno">Cancel</button><button class="pill go" id="exgo">${icon("download", 14)}Export</button></div>`;
+  box.hidden = false;
+  $("exno").addEventListener("click", () => (box.hidden = true));
+  $("exgo").addEventListener("click", async () => {
+    box.hidden = true;
+    const r = await call("/api/export", { camera, lyrics });
+    if (!r.ok) { status("Not exported", "bad"); toast(r.refused); return; }
+    watchExport(r);
+  });
+}
+
+function watchExport(job) {
+  clearTimeout(exportTimer);
+  const name = job.path.split("/").pop();
+  $("status").title = job.path;
+  if (job.state === "running") {
+    const frames = job.total ? `${job.done.toLocaleString()} / ${job.total.toLocaleString()} frames` : "preparing";
+    const left = job.remaining === null ? "" : `, about ${mmss(job.remaining)} left`;
+    status(`Exporting: ${frames}, ${mmss(job.elapsed)}${left}`, "busy");
+    exportTimer = setTimeout(async () => {
+      const q = await (await fetch(exportUrl())).json();
+      if (q.job) watchExport(q.job);
+    }, 1000);
+  } else if (job.state === "done") {
+    $("status").className = "";
+    $("status").innerHTML = `<a href="${esc(job.url)}" download="${esc(name)}">${icon("download", 14)}${esc(name)}</a>`;
+  } else {
+    status("Export failed", "bad");
+    toast([job.error]);
+  }
+}
+
 // ---------------------------------------------------------------------------- the timeline
 
 function draw() {
@@ -968,6 +1016,8 @@ async function main() {
   $("redo").addEventListener("click", () => goTo(at + 1));
   $("play").addEventListener("click", playPause);
   $("lyr").addEventListener("click", () => { const p = player(); if (p) { p.setLyrics(!p.lyrics); syncTransport(); } });
+  $("export").innerHTML = icon("download", 18);
+  $("export").addEventListener("click", openExport);
   $("click").innerHTML = icon("metronome", 18);
   $("click").addEventListener("click", () => {
     audioCtx = audioCtx || new AudioContext();
@@ -992,7 +1042,7 @@ async function main() {
     if (e.target instanceof HTMLInputElement && e.target.type === "text") return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); goTo(e.shiftKey ? at + 1 : at - 1); }
     else if (e.code === "Space") { e.preventDefault(); playPause(); }
-    else if (e.key === "Escape") { if (proposal) closeProposal(); else { selected = null; draw(); } }
+    else if (e.key === "Escape") { $("exportpop").hidden = true; if (proposal) closeProposal(); else { selected = null; draw(); } }
   });
 
   // the split between the picture and the timeline
@@ -1029,6 +1079,8 @@ async function main() {
 
   draw();
   status("");
+  // an mp4 being written, or written, while this server has run (the page opened again): its progress, or the file
+  fetch(exportUrl()).then((r) => r.json()).then((q) => { if (q.job && q.job.state !== "failed") watchExport(q.job); });
 }
 
 main().catch((e) => status(String(e), "bad"));

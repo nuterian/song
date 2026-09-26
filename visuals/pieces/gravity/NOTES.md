@@ -937,7 +937,7 @@ appears, for as long as it is up, whatever the camera does.
 
 Words come from the song tool's timings: Gravity's hand-timed gold (34 lines, 182 words -
 the committed gold file lacks a sung chorus line), else the tool's own alignment. The
-mp4 burn-in waits for Jugal's look at them in the player.
+mp4 has them burned in, as the player sets them (see Export, under the studio).
 
 # The direction sheet (`sheet.py`)
 
@@ -1166,3 +1166,49 @@ scratch workdir): 850 s, all of it the song tool's own passes with its Whisper m
 the CPU; the vocals were linked, not separated again (no `demucs_raw`), and the words
 read back as the studio reads them, 33 lines and 177 words. A song never separated adds
 Demucs's few minutes; that was not measured here.
+
+## Export (`render.render`, `burn.py`)
+
+    python -m visuals render "examples/Gravity in Motion.wav" --theme cosmos [--camera hybrid] [--no-lyrics]
+    -> visuals/out/gravity-in-motion-cosmos/gravity-in-motion-static.mp4
+
+The mp4 is what the player shows: baked from the song's sheet, seen through one of the
+three cameras (the camera's channels fed to the camera's uniforms, as the player's variants
+do), with the words burned in. In the studio, the download button beside the words' eye
+says what will be written and where (the camera and the words as they are on screen, the
+whole song), and writes it in the background, one at a time; the status says frames done,
+time gone and time left, and then offers the file.
+
+**The words are the player's.** Both set them in Inter Light (SIL OFL, one woff2 in
+`player/fonts/` that Pillow reads too), 0.03 of the frame's height, letter-spaced 0.06 em,
+rgb(238, 233, 222), under a 0.35 em shadow at 0.55. How bright a word and its line are is
+`lyrics.ink` and `lyrics.opacity`, the functions the player's copies are held to. Each word
+is drawn once per frame size, four times over and scaled down so it sits to a quarter
+pixel, as two masks (its letters, and its letters over their shadow); a frame blends only
+the words that are up. Measured against headless Chrome's screenshots of the player at
+1920x1080, at 36.4 s, 38.35 s (two lines mid-dissolve) and 128.4 s of the full mp4, and
+at five lines in five places of the frame before it: the same line (or two) up, in the same
+place, the letters within 0.2 px, the words adding the same light to within 2 %, the
+picture under them identical (0.000 levels mean, on all three cameras at 128.4 s). Two things had to be learned from the
+screenshots: Chrome puts the baseline on the whole pixel above where the CSS box model
+would, with the font's ascent and descent rounded (a 1.4 px drop before), and it draws light
+type on a dark ground 0.75 px heavier than its outline (the mp4's words were 26 % dimmer
+before the strokes were thickened by that).
+
+Changing the face changed `lyrics.CHAR_W`: Inter Light letter-spaced measures 0.52 of the
+font size a character on Gravity's lines (0.47-0.59), Helvetica Neue Light 0.49; it was
+0.56, and is now 0.53, a little wide on purpose.
+
+**Measured**, on a machine shared with other work (load average 8 during the full render,
+27-41 during the clips): Gravity in Motion, static camera, words in, 1920x1080 at 60 fps,
+x264 crf 17: 17,148 frames in 488 s (35 fps), 492 s in all, 273 MB (7.4 Mb/s video, 256k
+AAC), moov at the front. A 6 s clip on the quieter machine before it: 46 fps. Thirty
+seconds of each camera (2:00-2:30), at load 27: static 90 s (20 fps), hybrid 87 s (21 fps),
+cinematic 79 s (23 fps); the words are the same line in the same place on all three there
+(the layout puts it bottom left for each). The words cost 0.02 ms a frame with no line up,
+3.2 ms with one and 6.4 ms mid-dissolve (at load 38); the full render above was made before
+each word's patch was cropped to the pixels it can change by half a level, when a line
+cost 10.4 ms, so it would now be a little quicker. From the studio, the whole song on the
+hybrid camera without words took 633 s at load 20-40 (the first 20 s preparing: the bake,
+the sky's textures, the shader); the progress was there again when the page was reopened,
+and the finished file was offered and served (293 MB).

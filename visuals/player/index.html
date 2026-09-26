@@ -4,7 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>visuals</title>
+<link rel="preload" href="fonts/Inter-Light.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+  /* the words' face: one font for the page, the studio and the mp4 (fonts/OFL.txt) */
+  @font-face {
+    font-family: "Inter"; font-style: normal; font-weight: 300; font-display: block;
+    src: url("fonts/Inter-Light.woff2") format("woff2");
+  }
   :root { color-scheme: dark; }
   html, body {
     margin: 0; height: 100%; background: #08080a; color: #b9b9c4;
@@ -43,7 +49,7 @@
   #lyrics .line {
     position: absolute; white-space: nowrap; opacity: 0;
     font-size: calc(var(--size) * 100cqh);
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 300;
+    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 300;
     letter-spacing: 0.06em; color: rgb(238, 233, 222);
     text-shadow: 0 0 0.35em rgba(0, 0, 0, 0.55);
   }

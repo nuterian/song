@@ -170,9 +170,12 @@ class Renderer:
             self.textures.append(tex)
         self.fbo.use()
 
-    def bind(self, names: list[str]) -> None:
-        """Look each uniform up once. One the compiler dropped is simply not set."""
-        self.slots = [(c, self.prog[n]) for c, n in enumerate(names) if n in self.prog]
+    def bind(self, names: list[str], feeds: dict[str, str] | None = None) -> None:
+        """Look each uniform up once. One the compiler dropped is simply not set. `feeds`
+        re-points uniforms to other channels, as the player's variants do: a camera is
+        {"uCamSpan": "uCamSpan.cinematic", ...}."""
+        feeds = feeds or {}
+        self.slots = [(names.index(feeds.get(n, n)), self.prog[n]) for n in names if n in self.prog]
 
     def frame(self, t: float, row: np.ndarray) -> np.ndarray:
         self.prog["uTime"].value = float(t)
@@ -191,19 +194,53 @@ def frame_times(start: float, duration: float, fps: int) -> np.ndarray:
     return start + (np.arange(n, dtype=np.float64) + 1.0) / fps
 
 
+def mp4_name(track: Track, camera: str | None = "static", words: bool = True, clip: float | None = None,
+             solo: str | None = None) -> str:
+    """What an mp4 is called: the song and its camera in the cosmos style (and whether it
+    has the words), "piece" in the others; a clip or a solo says so, and where it starts."""
+    stem = "piece" if camera is None else f"{track.slug}-{camera}" + ("" if words else "-no-lyrics")
+    return f"{stem}.mp4" if clip is None and not solo else f"{stem}-{solo or 'clip'}-{clip or 0:.0f}s.mp4"
+
+
 def render(got: dict, track: Track, out_dir: str | Path, start: float = 0.0, duration: float | None = None,
            size: tuple[int, int] = (1920, 1080), fps: int = 60, crf: int = 17,
-           solo: str | None = None, quiet: bool = False) -> Path:
+           solo: str | None = None, quiet: bool = False, camera: str = "static", words: bool = True,
+           ch: direct.Channels | None = None, progress=None) -> Path:
+    """The mp4: the picture frame by frame, with the song under it.
+
+    In the cosmos style it is what the player shows: baked from the song's direction sheet
+    (`make.directed`), unless the channels are given (`ch`, the studio's own bake), seen
+    through one of the three cameras, with the words burned in (burn.py) unless `words` is
+    False. A solo is for measuring one instrument, so it has no words. `progress(done, total)`
+    is told as the frames go."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    ch = bake(got, track)
+    cosmic = STYLE == "cosmos"
+    baked_here = ch is None
+    if ch is None:
+        if cosmic:
+            from .make import directed
+            ch = directed(track, got)[0]
+        else:
+            ch = bake(got, track)
+    feeds = {}
+    if cosmic:
+        choices = ch.variants["camera"]["choices"]
+        if camera not in choices:
+            raise ValueError(f"no camera {camera!r}: the cameras are {', '.join(choices)}")
+        feeds = choices[camera]
+    lines = None
+    if cosmic and words and not solo:
+        from . import lyrics
+        from .burn import Words
+        spec = lyrics.layout(track, ch, (getattr(ch, "sheet", None) or {}).get("lyrics"))
+        lines = Words(spec, camera, size) if spec else None
     if solo:
         ch = solo_channels(ch, solo)
     total = ch.duration - start if duration is None else min(duration, ch.duration - start)
 
     whole = start == 0.0 and duration is None and not solo
-    name = "piece.mp4" if whole else f"piece-{solo or 'clip'}-{start:.0f}s.mp4"
-    out_path = out_dir / name
+    out_path = out_dir / mp4_name(track, camera if cosmic else None, words or bool(solo), None if whole else start, solo)
 
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
            "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{size[0]}x{size[1]}",
@@ -220,10 +257,15 @@ def render(got: dict, track: Track, out_dir: str | Path, start: float = 0.0, dur
     t0 = time.perf_counter()
     times = frame_times(start, total, fps)
     rows = ch.rows(times)
-    r.bind(ch.names)
+    r.bind(ch.names, feeds)
     try:
-        for t, row in zip(times, rows):
-            proc.stdin.write(np.ascontiguousarray(r.frame(float(t), row)).tobytes())
+        for k, (t, row) in enumerate(zip(times, rows)):
+            frame = np.ascontiguousarray(r.frame(float(t), row))
+            if lines is not None:
+                lines.draw(frame, float(t))              # a frame with no line up is left as it is
+            proc.stdin.write(frame.tobytes())
+            if progress is not None and (k % 30 == 29 or k == len(times) - 1):
+                progress(k + 1, len(times))
     except BrokenPipeError:
         proc.wait()
         raise RuntimeError(f"ffmpeg failed: {proc.stderr.read().decode()[:800]}") from None
@@ -237,7 +279,7 @@ def render(got: dict, track: Track, out_dir: str | Path, start: float = 0.0, dur
     if not quiet:
         print(f"{len(times)} frames in {dt:.1f}s ({len(times) / dt:.0f} fps)")
 
-    if whole:
+    if whole and baked_here:                          # the player's bundle, the same bake (the studio has its own)
         export(got, ch, track, out_dir)
     return out_path
 

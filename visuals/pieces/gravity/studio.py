@@ -32,6 +32,10 @@ are kept where a song given on the command line would be, and a background job (
 one at a time: the machine cannot separate two songs at once) does what `make` does -
 the stems, the words aligned on their vocals, listening, the models, the bundle - and
 opens it. With no songs named, the studio offers every song already listened to.
+
+An mp4 of the song as the studio shows it - this sheet, the camera chosen, the words on or
+off - is written in the background (`Export`, one at a time), and the page is told how far
+it has got and, at the end, where the file is.
 """
 
 from __future__ import annotations
@@ -52,7 +56,7 @@ from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 
-from . import ROOT, decide, editor, lyrics, make, render, sheet as sheet_
+from . import ROOT, cosmos, decide, editor, lyrics, make, render, sheet as sheet_
 from .cast import CHOICES
 from .grid import normal_fix
 from .track import AUDIO_SUFFIXES, DEMUCS_PYTHON, LOSSLESS, Track, prepare, slugify
@@ -89,6 +93,7 @@ class Session:
         self.history_path = Path(history_path or track.cache / "history.json")
         self.lock = threading.Lock()
         self.version = 0
+        self.exporting: Export | None = None
         self._open_history()
         self.out.mkdir(parents=True, exist_ok=True)
         render.export(self.got, ch, track, self.out)          # the bundle shown is this sheet's
@@ -246,6 +251,65 @@ class Session:
         with self.log_path.open("a") as f:
             f.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "version": self.version, "did": did,
                                 "seconds": seconds} | why) + "\n")
+
+
+    # ------------------------------------------------------------------ the mp4
+
+    def export(self, camera: str, words: bool = True) -> dict:
+        """The whole song to an mp4, as the studio shows it now: this sheet, this camera, the
+        words burned in or not. Written in the background; `exporting` says how far it has got."""
+        if camera not in cosmos.MODES:
+            return {"ok": False, "refused": [f"no camera {camera!r}: the cameras are {', '.join(cosmos.MODES)}"]}
+        if not Export.running.acquire(blocking=False):
+            return {"ok": False, "refused": ["an mp4 is already being written: one at a time"]}
+        self.exporting = Export(self, camera, bool(words))
+        return {"ok": True} | self.exporting.view()
+
+    def export_path(self, camera: str, words: bool = True) -> Path:
+        return self.out / render.mp4_name(self.track, camera, words)
+
+
+class Export:
+    """An mp4 being written in a thread of its own. One at a time, whatever the song: two
+    would share the GPU and the encoder, and each take twice as long."""
+
+    running = threading.Lock()
+
+    def __init__(self, session: Session, camera: str, words: bool) -> None:
+        self.session, self.camera, self.words = session, camera, words
+        self.path = session.export_path(camera, words)
+        self.done, self.total, self.error, self.finished = 0, 0, None, False
+        self.t0, self.t1, self.first = time.time(), None, None
+        with session.lock:                                   # the sheet as it is at the click
+            self.got, self.sheet = session.got, session.sheet
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self) -> None:
+        try:
+            ch = render.bake(self.got, self.session.track, self.sheet)
+            render.render(self.got, self.session.track, self.session.out, camera=self.camera, words=self.words,
+                          ch=ch, quiet=True, progress=self._progress)
+        except Exception as e:                               # said to the page
+            self.error = f"{type(e).__name__}: {e}"
+        finally:
+            self.finished, self.t1 = True, time.time()
+            Export.running.release()
+
+    def _progress(self, done: int, total: int) -> None:
+        if self.first is None:
+            self.first = (time.time(), done)
+        self.done, self.total = done, total
+
+    def view(self) -> dict:
+        now = time.time()
+        remaining = None
+        if self.first is not None and self.done > self.first[1]:
+            rate = (self.done - self.first[1]) / max(now - self.first[0], 1e-6)
+            remaining = round((self.total - self.done) / rate, 1)
+        state = "failed" if self.error else "done" if self.finished else "running"
+        return {"state": state, "camera": self.camera, "lyrics": self.words, "done": self.done, "total": self.total,
+                "elapsed": round((self.t1 or now) - self.t0, 1), "remaining": 0.0 if self.finished else remaining, "error": self.error,
+                "path": _shown(self.path), "url": f"/out/{self.path.parent.name}/{self.path.name}"}
 
 
 def carry_sections(sections: list[dict], old: dict, new: dict) -> list[dict]:
@@ -532,8 +596,8 @@ def handler(sessions: dict[str, Session | Track], jobs: Jobs | None = None):
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
-        def log_message(self, fmt, *args):                  # the static files are many and dull
-            if "/api/" in self.path:
+        def log_message(self, fmt, *args):                  # the static files are many and dull, and so is an export's progress
+            if "/api/" in self.path and not (self.command == "GET" and self.path.startswith("/api/export")):
                 super().log_message(fmt, *args)
 
         def _reply(self, body: dict, status: int = 200) -> None:
@@ -576,6 +640,14 @@ def handler(sessions: dict[str, Session | Track], jobs: Jobs | None = None):
             if url.path == "/api/song":
                 s = self._session(url)
                 return s and self._reply(s.song())
+            if url.path == "/api/export":                   # how far the mp4 has got, and where one would go
+                s = self._session(url)
+                if s is None:
+                    return None
+                q = parse_qs(url.query)
+                camera, words = q.get("camera", ["static"])[0], q.get("lyrics", ["1"])[0] != "0"
+                return self._reply({"job": s.exporting.view() if s.exporting else None,
+                                    "path": _shown(s.export_path(camera, words)) if camera in cosmos.MODES else None})
             if url.path in ("/", "/studio"):
                 self.send_response(302)
                 self.send_header("Location", "/studio/")
@@ -609,6 +681,8 @@ def handler(sessions: dict[str, Session | Track], jobs: Jobs | None = None):
                     out = s.goto(int(body["to"]))
                 elif url.path == "/api/refresh":
                     out = s.refresh()
+                elif url.path == "/api/export":
+                    out = s.export(str(body.get("camera", "static")), bool(body.get("lyrics", True)))
                 else:
                     return self._reply({"ok": False, "refused": [f"no such question: {url.path}"]}, 404)
             except Exception as e:                            # said to the page, not swallowed

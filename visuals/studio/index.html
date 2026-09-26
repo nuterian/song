@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Studio</title>
 <style>
+  @font-face {
+    font-family: "Inter"; font-style: normal; font-weight: 300; font-display: block;
+    src: url("/player/fonts/Inter-Light.woff2") format("woff2");
+  }
   :root {
     color-scheme: dark;
     --bg: #0e0e10; --panel: #151518; --raise: #1c1c20; --line: #242429; --line2: #303037;
@@ -105,7 +109,7 @@
   .chip { border: 1px solid var(--line2); background: transparent; color: var(--muted); border-radius: 12px; padding: 3px 9px; cursor: pointer; }
   .chip:hover { color: var(--text); }
   .chip.on { border-color: var(--accent); color: var(--text); }
-  .preview { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 300; letter-spacing: 0.06em; color: rgb(238, 233, 222);
+  .preview { font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 300; letter-spacing: 0.06em; color: rgb(238, 233, 222);
              background: #05060a; border-radius: 8px; padding: 14px; text-align: center; margin-bottom: 14px; white-space: nowrap; overflow: hidden; }
   .log { list-style: none; margin: 0; padding: 0; }
   .log li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-radius: 6px; color: var(--muted); cursor: pointer; }
@@ -194,6 +198,11 @@
   .pop .said .ic { color: var(--accent); margin-top: 1px; }
   .pop .rows { margin-bottom: 10px; }
   #zoom { position: absolute; right: 6px; bottom: 6px; display: flex; gap: 2px; background: var(--raise); border-radius: 8px; z-index: 6; }
+  .anchor { position: relative; }
+  #exportpop { top: auto; bottom: 38px; right: 0; width: 380px; }
+  #exportpop .path { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); word-break: break-all; margin: 2px 0 10px; }
+  #status a { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); text-decoration: none; }
+  #status a:hover { text-decoration: underline; }
   #toast { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); z-index: 30; max-width: 70%; }
 
   /* adding a song: a file dropped anywhere on the page */
@@ -230,6 +239,10 @@
         <span class="seg" id="cams" title="Camera"></span>
         <button class="ib" id="click" aria-label="Click track" title="A click on every beat: hear whether the grid is right"></button>
         <button class="ib" id="lyr" aria-label="Words on or off" title="Words on the picture"></button>
+        <span class="anchor">
+          <button class="ib" id="export" aria-label="Export an mp4" title="Export an mp4 of the whole song, as it is shown"></button>
+          <div id="exportpop" class="pop" hidden></div>
+        </span>
       </div>
       <div id="toast" hidden></div>
     </section>
