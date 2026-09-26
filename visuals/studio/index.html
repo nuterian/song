@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Studio</title>
 <style>
+  @font-face {
+    font-family: "Inter"; font-style: normal; font-weight: 300; font-display: block;
+    src: url("/player/fonts/Inter-Light.woff2") format("woff2");
+  }
   :root {
     color-scheme: dark;
     --bg: #0e0e10; --panel: #151518; --raise: #1c1c20; --line: #242429; --line2: #303037;
@@ -104,7 +108,7 @@
   .chip { border: 1px solid var(--line2); background: transparent; color: var(--muted); border-radius: 12px; padding: 3px 9px; cursor: pointer; }
   .chip:hover { color: var(--text); }
   .chip.on { border-color: var(--accent); color: var(--text); }
-  .preview { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 300; letter-spacing: 0.06em; color: rgb(238, 233, 222);
+  .preview { font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 300; letter-spacing: 0.06em; color: rgb(238, 233, 222);
              background: #05060a; border-radius: 8px; padding: 14px; text-align: center; margin-bottom: 14px; white-space: nowrap; overflow: hidden; }
   .log { list-style: none; margin: 0; padding: 0; }
   .log li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-radius: 6px; color: var(--muted); cursor: pointer; }

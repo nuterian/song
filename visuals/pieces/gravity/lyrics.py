@@ -36,7 +36,9 @@ FADE_OUT = 0.40              # s
 LEAD = 0.09                  # s: a word starts to lift this long before it is sung
 UNSUNG, PEAK, SUNG = 0.42, 1.0, 0.64
 SIZE = 0.030                 # font size, in frame heights (32 px at 1080p)
-CHAR_W = 0.56                # average advance of a character, in font sizes (light face, letter-spaced)
+CHAR_W = 0.53                # average advance of a character, in font sizes: Inter Light letter-spaced
+                             # 0.06 em measures 0.52 on Gravity's lines (0.47-0.59); a little over, so a
+                             # line's box errs wide (it was 0.56; Helvetica Neue Light, the face before, measures 0.49)
 MARGIN = 0.035               # frame heights kept clear round the text
 ASPECT = 16 / 9
 CORONA = 3.0                 # the Sun's clear zone, in its radii: the corona can stand out that far
