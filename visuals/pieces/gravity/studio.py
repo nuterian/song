@@ -255,14 +255,16 @@ class Session:
 
     # ------------------------------------------------------------------ the mp4
 
-    def export(self, camera: str, words: bool = True) -> dict:
+    def export(self, camera: str, words: bool = True, jobs: "Jobs | None" = None) -> dict:
         """The whole song to an mp4, as the studio shows it now: this sheet, this camera, the
-        words burned in or not. Written in the background; `exporting` says how far it has got."""
+        words burned in or not. One job of the studio's runner (`Jobs`: after any song being
+        added, and never beside another export); `exporting` says how far it has got."""
         if camera not in cosmos.MODES:
             return {"ok": False, "refused": [f"no camera {camera!r}: the cameras are {', '.join(cosmos.MODES)}"]}
-        if not Export.running.acquire(blocking=False):
-            return {"ok": False, "refused": ["an mp4 is already being written: one at a time"]}
+        if self.exporting and not self.exporting.finished:
+            return {"ok": False, "refused": ["an mp4 of this song is already being written: one at a time"]}
         self.exporting = Export(self, camera, bool(words))
+        (jobs or Jobs()).start("export", self.track.slug, self.exporting.run)
         return {"ok": True} | self.exporting.view()
 
     def export_path(self, camera: str, words: bool = True) -> Path:
@@ -270,10 +272,9 @@ class Session:
 
 
 class Export:
-    """An mp4 being written in a thread of its own. One at a time, whatever the song: two
-    would share the GPU and the encoder, and each take twice as long."""
-
-    running = threading.Lock()
+    """An mp4 being written, and how far it has got, frame by frame. It runs as a job of
+    the studio's runner, so two never share the GPU and the encoder (each would take twice
+    as long), and it waits behind a song being added."""
 
     def __init__(self, session: Session, camera: str, words: bool) -> None:
         self.session, self.camera, self.words = session, camera, words
@@ -282,18 +283,20 @@ class Export:
         self.t0, self.t1, self.first = time.time(), None, None
         with session.lock:                                   # the sheet as it is at the click
             self.got, self.sheet = session.got, session.sheet
-        threading.Thread(target=self._run, daemon=True).start()
 
-    def _run(self) -> None:
+    def run(self, step) -> None:
+        self.t0 = time.time()                                # the wait in the queue is not the render's
         try:
+            step("baking")
             ch = render.bake(self.got, self.session.track, self.sheet)
+            step("rendering")
             render.render(self.got, self.session.track, self.session.out, camera=self.camera, words=self.words,
                           ch=ch, quiet=True, progress=self._progress)
         except Exception as e:                               # said to the page
             self.error = f"{type(e).__name__}: {e}"
+            raise
         finally:
             self.finished, self.t1 = True, time.time()
-            Export.running.release()
 
     def _progress(self, done: int, total: int) -> None:
         if self.first is None:
@@ -682,7 +685,7 @@ def handler(sessions: dict[str, Session | Track], jobs: Jobs | None = None):
                 elif url.path == "/api/refresh":
                     out = s.refresh()
                 elif url.path == "/api/export":
-                    out = s.export(str(body.get("camera", "static")), bool(body.get("lyrics", True)))
+                    out = s.export(str(body.get("camera", "static")), bool(body.get("lyrics", True)), jobs)
                 else:
                     return self._reply({"ok": False, "refused": [f"no such question: {url.path}"]}, 404)
             except Exception as e:                            # said to the page, not swallowed

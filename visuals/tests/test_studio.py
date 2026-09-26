@@ -181,7 +181,7 @@ def test_an_export_names_one_of_the_three_cameras(session):
         with pytest.raises(urllib.error.HTTPError) as e:
             urllib.request.urlopen(req)
         assert e.value.code == 422 and "no camera 'drone'" in json.loads(e.value.read())["refused"][0]
-        assert session.exporting is None and not studio.Export.running.locked()      # nothing was started
+        assert session.exporting is None                                            # nothing was started
         where = json.loads(urllib.request.urlopen(f"{base}/api/export?track={session.track.slug}&camera=hybrid&lyrics=0").read())
         assert where["job"] is None and where["path"].endswith(f"{session.track.slug}-hybrid-no-lyrics.mp4")
     finally:
@@ -353,3 +353,25 @@ def test_a_song_opened_from_its_copy_finds_the_stems_named_for_the_original(tmp_
     (cache / "demucs_raw" / "htdemucs" / "Rise and Glow").mkdir(parents=True)
     tr = track_.Track("rise-and-glow", cache / "source.wav")
     assert tr.audio == cache / "source.wav" and tr.stems_dir.name == "Rise and Glow"
+
+
+def test_an_export_is_a_job_of_the_runner_behind_whatever_is_being_added(session, monkeypatch):
+    """An import and an export never run together: both are the runner's, in order."""
+    from visuals.pieces.gravity import studio
+
+    jobs = studio.Jobs()
+    gate = threading.Event()
+    started = threading.Event()
+    jobs.start("import", "other-song", lambda step: (started.set(), gate.wait(5)))   # a song being added, still going
+    assert started.wait(5)
+    monkeypatch.setattr(studio.render, "render", lambda *a, **k: k["progress"](3, 3))
+    monkeypatch.setattr(studio.render, "bake", lambda *a, **k: None)
+    r = session.export("hybrid", False, jobs)
+    assert r["ok"] and r["state"] == "running" and session.exporting.done == 0
+    assert [j["state"] for j in jobs.view()] == ["running", "queued"]        # waiting its turn
+    again = session.export("static", True, jobs)
+    assert not again["ok"] and "already" in again["refused"][0]
+    gate.set()
+    jobs.queue.join()
+    assert session.exporting.finished and session.exporting.done == 3 and jobs.view()[-1]["state"] == "done"
+    session.exporting = None
