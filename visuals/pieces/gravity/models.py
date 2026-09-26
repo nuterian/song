@@ -39,6 +39,32 @@ BP_FRAMES = 172                    # frames it gives back for that
 BP_MIDI_LOW = 21                   # its 88 bins are the piano: A0 upward
 
 
+# basic-pitch's pip package stops at Python 3.11, so only its network is fetched: the
+# file its v0.4.0 release ships, checked against the hash of that file.
+BP_URL = ("https://raw.githubusercontent.com/spotify/basic-pitch/v0.4.0/"
+          "basic_pitch/saved_models/icassp_2022/nmp.onnx")
+BP_SHA256 = "2c3c1d144bfa61ad236e92e169c13535c880469a12a047d4e73451f2c059a0ec"
+
+
+def basic_pitch_model(model_dir: Path) -> Path:
+    """nmp.onnx in `model_dir`, fetched the first time (230 KB)."""
+    import hashlib
+    import urllib.request
+
+    path = model_dir / "nmp.onnx"
+    if path.exists():
+        return path
+    model_dir.mkdir(parents=True, exist_ok=True)
+    with urllib.request.urlopen(BP_URL, timeout=60) as r:
+        data = r.read()
+    if hashlib.sha256(data).hexdigest() != BP_SHA256:
+        raise RuntimeError(f"{BP_URL} is not the file basic-pitch v0.4.0 shipped (sha256 differs)")
+    tmp = path.with_suffix(".part")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+    return path
+
+
 def _resample(x: np.ndarray, sr: int, to: int) -> np.ndarray:
     g = np.gcd(sr, to)
     return signal.resample_poly(x, to // g, sr // g).astype(np.float32)
@@ -284,9 +310,10 @@ def run(got: dict, audio: Path, stems_dir: Path, project: Path | None, model_dir
     say(f"Beat This!  {meta['beat_this']}")
 
     # notes: what the model names, when the stems say
+    nmp = basic_pitch_model(model_dir)
     for stem, rng, attacks in (("other", (36, 96), a["ev_note_t"]), ("bass", (24, 60), a["ev_bass_note_t"])):
         t0 = time.time()
-        notes = decode_notes(basic_pitch_activations(stems[stem], ssr, model_dir / "nmp.onnx"),
+        notes = decode_notes(basic_pitch_activations(stems[stem], ssr, nmp),
                              midi_range=rng)
         snapped = snap(notes["t"], attacks)
         keep = playing_at(a, stem, snapped)       # the model hears leakage too
