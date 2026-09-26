@@ -506,7 +506,8 @@ def align(track: Track, words: Path) -> None:
         except OSError:
             shutil.copy2(vocals, wd / "vocals.wav")
     p = subprocess.Popen([str(DEMUCS_PYTHON), "-m", "song", "align", str(track.audio), str(words), "--workdir", str(wd)],
-                         cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                         cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                         env=os.environ | {"PYTHONUNBUFFERED": "1"})   # its progress as it happens, not at the end
     for line in p.stdout:
         print("  " + line.rstrip(), flush=True)
     if p.wait() != 0:
