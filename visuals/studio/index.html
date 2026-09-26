@@ -44,7 +44,8 @@
   #model { font-size: 11px; font-weight: 400; color: var(--faint); max-width: 11ch; }
   #askbox.thinking .ic { animation: pulse 1.1s ease-in-out infinite; color: var(--accent); }
   @keyframes pulse { 50% { opacity: 0.25; } }
-  #status { color: var(--faint); white-space: nowrap; min-width: 9ch; text-align: right; font-variant-numeric: tabular-nums; }
+  #status { color: var(--faint); white-space: nowrap; min-width: 9ch; max-width: 36ch; overflow: hidden; text-overflow: ellipsis;
+            text-align: right; font-variant-numeric: tabular-nums; }
   #status.busy { color: var(--accent); }
   #status.bad { color: var(--bad); }
 
@@ -194,6 +195,12 @@
   .pop .rows { margin-bottom: 10px; }
   #zoom { position: absolute; right: 6px; bottom: 6px; display: flex; gap: 2px; background: var(--raise); border-radius: 8px; z-index: 6; }
   #toast { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); z-index: 30; max-width: 70%; }
+
+  /* adding a song: a file dropped anywhere on the page */
+  body.dropping #player { pointer-events: none; }
+  body.dropping::after { content: "Drop to add the song"; position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
+                         font-size: 14px; color: var(--accent); background: rgba(240, 165, 74, 0.06);
+                         box-shadow: inset 0 0 0 2px var(--accent); pointer-events: none; }
 </style>
 </head>
 <body>
@@ -257,6 +264,8 @@
     </div>
     <div id="zoom"></div>
   </section>
+  <input type="file" id="pickaudio" multiple hidden>
+  <input type="file" id="picklyrics" accept=".txt,text/plain" hidden>
   <script type="module" src="studio.js"></script>
 </body>
 </html>

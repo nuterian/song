@@ -26,13 +26,26 @@ grid (about a minute and a half, and the models after it, the first time; a corr
 made before is kept), and the director makes its shots and moments again on the new
 bars. What is the person's and does not depend on bars - the cast, the dials, the words -
 is kept, and the sections' names are carried over by time.
+
+A song is added from the page (`/api/import`): its audio, and its lyrics if it has them,
+are kept where a song given on the command line would be, and a background job (`Jobs`,
+one at a time: the machine cannot separate two songs at once) does what `make` does -
+the stems, the words aligned on their vocals, listening, the models, the bundle - and
+opens it. With no songs named, the studio offers every song already listened to.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import queue
+import re
+import shutil
+import subprocess
+import sys
 import threading
 import time
+import traceback
 import urllib.error
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -42,7 +55,7 @@ import numpy as np
 from . import ROOT, decide, editor, lyrics, make, render, sheet as sheet_
 from .cast import CHOICES
 from .grid import normal_fix
-from .track import Track
+from .track import AUDIO_SUFFIXES, DEMUCS_PYTHON, LOSSLESS, Track, prepare, slugify
 
 ENVELOPE = 1600              # points in the loudness strip under the timeline
 
@@ -255,12 +268,262 @@ def _shown(p: Path) -> str:
     return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
 
 
+# ---------------------------------------------------------------------------- the songs there are
+
+CACHE = ROOT / "visuals" / "cache"
+
+
+def prepared(cache: Path = CACHE, near: tuple[Path, ...] = (ROOT / "examples", CACHE / "testset"),
+             workdirs: Path = ROOT / "workdir") -> list[Track]:
+    """Every song listened to already (its cache has listen.json), as a track to open: read
+    from its copy in the cache (source.*, or the decode audio.wav), else from a file named
+    for it in examples/ or the test set, else from its song workdir. A song whose audio is
+    nowhere is left out, and said so."""
+    out = []
+    for d in sorted(p for p in cache.glob("*") if (p / "listen.json").exists()):
+        slug = d.name
+        wd = workdirs / slug if (workdirs / slug / "project.json").exists() else None
+        copies = sorted((p for p in d.glob("source.*") if p.suffix.lower() in AUDIO_SUFFIXES),
+                        key=lambda p: p.suffix.lower() not in LOSSLESS) + [d / "audio.wav"]
+        named = [p for folder in near if folder.exists() for p in sorted(folder.iterdir())
+                 if p.suffix.lower() in AUDIO_SUFFIXES and slugify(p.stem) == slug]
+        audio = next((p for p in copies + named if p.is_file()), None)
+        if audio is not None:
+            out.append(Track(slug, audio, wd))
+        elif wd is not None:
+            try:
+                out.append(Track.resolve(wd))
+            except SystemExit as e:
+                print(f"  {slug}: left out ({e})", flush=True)
+        else:
+            print(f"  {slug}: left out (its audio is not in the cache, examples/ or a workdir)", flush=True)
+    return out
+
+
+# ---------------------------------------------------------------------------- long work
+
+
+class Jobs:
+    """Long work in the background, one job at a time and in the order asked: the machine
+    cannot separate two songs at once, and a job that waits is better than two that crawl.
+
+    A job is a function given `step(name)`, to say where it is; whatever it prints (and
+    whatever a subprocess it runs prints, if it prints that) is its log. `start` queues it
+    and returns at once. Adding a song is one kind; exporting a video can be another."""
+
+    LOG = 12                      # the last lines of a job's output the page is shown
+
+    def __init__(self) -> None:
+        self.jobs: list[dict] = []
+        self.lock = threading.Lock()
+        self.queue: queue.Queue = queue.Queue()
+        threading.Thread(target=self._work, daemon=True, name="studio-jobs").start()
+
+    def start(self, kind: str, song: str, fn) -> dict:
+        with self.lock:
+            job = {"id": len(self.jobs) + 1, "kind": kind, "song": song, "state": "queued", "step": "waiting",
+                   "log": [], "steps": [], "started": None, "seconds": 0.0, "error": None}
+            self.jobs.append(job)
+            shown = self.shown(job)
+        self.queue.put((job, fn))
+        return shown
+
+    def pending(self, song: str) -> bool:
+        """Whether a job for this song is waiting or running."""
+        with self.lock:
+            return any(j["song"] == song and j["state"] in ("queued", "running") for j in self.jobs)
+
+    def view(self) -> list[dict]:
+        with self.lock:
+            return [self.shown(j) for j in self.jobs]
+
+    @staticmethod
+    def shown(job: dict) -> dict:
+        out = {k: v for k, v in job.items() if not k.startswith("_")}
+        if job["state"] == "running":
+            out["seconds"] = round(time.time() - job["started"], 1)
+        out["log"] = job["log"][-Jobs.LOG:]
+        out["steps"] = [dict(s) for s in job["steps"]]
+        return out
+
+    def _step(self, job: dict, name: str) -> None:
+        now = time.time()
+        with self.lock:
+            if job["steps"] and job["steps"][-1]["seconds"] is None:
+                job["steps"][-1]["seconds"] = round(now - job["_at"], 1)
+            job["steps"].append({"name": name, "seconds": None})
+            job["step"], job["_at"] = name, now
+        print(f"  [{job['kind']} {job['song']}] {name}", flush=True)
+
+    def _said(self, job: dict, text: str) -> None:
+        with self.lock:
+            lines = (job.get("_part", "") + text).replace("\r", "\n").split("\n")
+            job["_part"] = lines.pop()
+            job["log"] += [ln for ln in lines if ln.strip()]
+            del job["log"][:-200]
+
+    def _work(self) -> None:
+        while True:
+            job, fn = self.queue.get()
+            with self.lock:
+                job["state"], job["started"] = "running", time.time()
+                job["_at"] = job["started"]
+            tee = _Tee(sys.stdout, threading.get_ident(), lambda s: self._said(job, s))
+            sys.stdout = tee
+            try:
+                fn(lambda name: self._step(job, name))
+                state, error = "done", None
+            except (Exception, SystemExit) as e:           # SystemExit: how this package says a song cannot be made
+                state, error = "failed", str(e) or type(e).__name__
+                print(f"  [{job['kind']} {job['song']}] failed: {error}", flush=True)
+                if not isinstance(e, SystemExit):              # a fault, not a refusal: where it was, for the terminal
+                    traceback.print_exc()
+            finally:
+                if sys.stdout is tee:
+                    sys.stdout = tee.out
+            with self.lock:
+                now = time.time()
+                if job["steps"] and job["steps"][-1]["seconds"] is None:
+                    job["steps"][-1]["seconds"] = round(now - job["_at"], 1)
+                job["state"], job["error"] = state, error
+                job["seconds"] = round(now - job["started"], 1)
+                job["step"] = state
+            self.queue.task_done()
+
+
+class _Tee:
+    """What is printed, passed on as it was; and what the job's own thread prints, also
+    given to the job. Other threads (the server's) print as they did."""
+
+    def __init__(self, out, thread: int, to) -> None:
+        self.out, self.thread, self.to = out, thread, to
+
+    def write(self, s: str) -> int:
+        if threading.get_ident() == self.thread:
+            self.to(s)
+        return self.out.write(s)
+
+    def flush(self) -> None:
+        self.out.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.out, name)
+
+
+# ---------------------------------------------------------------------------- adding a song
+
+
+def multipart(body: bytes, content_type: str) -> dict[str, tuple[str | None, bytes]]:
+    """A multipart/form-data body, as {field: (file name, bytes)}: the few lines the page's
+    upload needs (the standard library's parser is gone from Python 3.13)."""
+    m = re.search(r'boundary="?([^";]+)"?', content_type or "")
+    if not m:
+        return {}
+    out = {}
+    for part in body.split(b"--" + m.group(1).encode())[1:-1]:
+        head, _, data = part.removeprefix(b"\r\n").partition(b"\r\n\r\n")
+        head = head.decode("utf-8", "replace")
+        name, file = re.search(r'(?:^|[;\s])name="([^"]*)"', head), re.search(r'filename="([^"]*)"', head)
+        if name:
+            out[name.group(1)] = (file.group(1) if file else None, data.removesuffix(b"\r\n"))
+    return out
+
+
+def importing(sessions: dict, jobs: Jobs, audio: tuple[str | None, bytes] | None,
+              lyrics_file: tuple[str | None, bytes] | None = None) -> tuple[dict, int]:
+    """A song given from the page: checked, kept where `Track.resolve` would keep a song
+    from outside the repository (its lossless audio as cache/<slug>/source.<ext>, which
+    every step then reads, so it is not copied again; lossy audio beside it, decoded once
+    into cache/<slug>/audio.wav), its lyrics as workdir/<slug>/lyrics.txt, and a job queued
+    to make it and open it. Returns the reply and its status."""
+    no = lambda status, why: ({"ok": False, "refused": [why]}, status)
+    if not audio or not audio[0] or not audio[1]:
+        return no(400, "no audio was sent")
+    name = Path(audio[0]).name
+    suffix = Path(name).suffix.lower()
+    if suffix not in AUDIO_SUFFIXES:
+        return no(415, f"{name} is not audio the studio reads ({', '.join(sorted(AUDIO_SUFFIXES))})")
+    if lyrics_file and lyrics_file[1] and Path(lyrics_file[0] or "").suffix.lower() != ".txt":
+        return no(415, f"{Path(lyrics_file[0] or 'the lyrics').name}: lyrics are read from a plain text file (.txt)")
+    slug = slugify(Path(name).stem)
+    if slug in sessions:
+        return no(409, f"{Path(name).stem} is already in the studio")
+    if jobs.pending(slug):
+        return no(409, f"{Path(name).stem} is already being added")
+    cache, data = CACHE / slug, audio[1]
+    src = cache / f"source{suffix}"
+    for kept in (p for p in cache.glob("source.*") if p.suffix.lower() in AUDIO_SUFFIXES):
+        if kept != src or kept.stat().st_size != len(data) or kept.read_bytes() != data:
+            return no(409, f"another recording called {Path(name).stem} is in {_shown(cache)}: "
+                           f"rename the file, or move that folder away")
+    cache.mkdir(parents=True, exist_ok=True)
+    if not src.exists():
+        src.write_bytes(data)
+    words, note = None, None
+    wd = ROOT / "workdir" / slug
+    if lyrics_file and lyrics_file[1]:
+        if (wd / "project.json").exists():            # timed already, perhaps by hand: kept
+            note = f"the words are timed already in {_shown(wd)}: the lyrics sent are not used"
+        else:
+            wd.mkdir(parents=True, exist_ok=True)
+            words = wd / "lyrics.txt"
+            words.write_bytes(lyrics_file[1])
+    track = Track(slug, src, wd if (wd / "project.json").exists() else None)
+    job = jobs.start("import", slug, lambda step: _make_and_open(sessions, track, words, step, note))
+    return {"ok": True, "job": job}, 202
+
+
+def _make_and_open(sessions: dict, track: Track, words: Path | None, step, note: str | None = None) -> None:
+    """What `make` does for a song, step by step so the page can say where it is, then open
+    it. With lyrics, the stems come first and the song tool aligns the words on their
+    vocals: Demucs is run once, not once here and once there."""
+    if note:
+        print(note)
+    step("separating")
+    prepare(track)
+    if words is not None:
+        step("aligning the words")
+        align(track, words)
+        track = Track(track.slug, track.source, words.parent)
+    step("listening")
+    got = make.listened(track)
+    step("the models")
+    make.modelled(track, got)
+    step("staging")
+    make.make(track, "cosmos")
+    step("opening")
+    sessions[track.slug] = Session(track)
+
+
+def align(track: Track, words: Path) -> None:
+    """The song tool's alignment (run in the root venv, where it lives), given this song's
+    vocals stem so it does not separate the song again."""
+    wd = words.parent
+    vocals = track.stems_dir / "vocals.wav"
+    if vocals.exists() and not (wd / "vocals.wav").exists():
+        try:
+            os.link(vocals, wd / "vocals.wav")         # the same file, not a second copy of it
+        except OSError:
+            shutil.copy2(vocals, wd / "vocals.wav")
+    p = subprocess.Popen([str(DEMUCS_PYTHON), "-m", "song", "align", str(track.audio), str(words), "--workdir", str(wd)],
+                         cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                         env=os.environ | {"PYTHONUNBUFFERED": "1"})   # its progress as it happens, not at the end
+    for line in p.stdout:
+        print("  " + line.rstrip(), flush=True)
+    if p.wait() != 0:
+        raise RuntimeError(f"the words could not be aligned (song align exited {p.returncode})")
+
+
 # ---------------------------------------------------------------------------- serving
 
 
-def handler(sessions: dict[str, Session]):
-    """The static handler for visuals/, and the page's few questions."""
+def handler(sessions: dict[str, Session | Track], jobs: Jobs | None = None):
+    """The static handler for visuals/, and the page's few questions. A song given as a
+    track, not yet a session, is opened the first time the page asks for it."""
     from ...cli import _RangeHandler
+
+    jobs = jobs or Jobs()
+    opening = threading.Lock()
 
     class Handler(_RangeHandler):
         def copyfile(self, source, outputfile):             # a page that stops a download midway is not an error
@@ -282,16 +545,29 @@ def handler(sessions: dict[str, Session]):
             self.wfile.write(data)
 
         def _session(self, url) -> Session | None:
-            name = (parse_qs(url.query).get("track") or [next(iter(sessions))])[0]
+            name = (parse_qs(url.query).get("track") or [next(iter(sessions), "")])[0]
             s = sessions.get(name)
             if s is None:
-                self._reply({"ok": False, "refused": [f"no song {name!r} is open: {', '.join(sessions)}"]}, 404)
+                self._reply({"ok": False, "refused": [f"no song {name!r} is open: {', '.join(sessions) or 'none yet'}"]}, 404)
+            elif isinstance(s, Track):
+                with opening:
+                    try:
+                        if isinstance(sessions[name], Track):
+                            t0 = time.time()
+                            sessions[name] = Session(s)
+                            print(f"  {name}: opened ({time.time() - t0:.0f}s)", flush=True)
+                    except (Exception, SystemExit) as e:
+                        self._reply({"ok": False, "refused": [f"{name} could not be opened: {e}"]}, 500)
+                        return None
+                    s = sessions[name]
             return s
 
         def do_GET(self):  # noqa: N802
             url = urlparse(self.path)
             if url.path == "/api/songs":
-                return self._reply({"songs": list(sessions)})
+                return self._reply({"songs": list(sessions), "audio": sorted(AUDIO_SUFFIXES)})
+            if url.path == "/api/jobs":
+                return self._reply({"jobs": jobs.view()})
             if url.path == "/api/models":
                 try:
                     return self._reply(editor.models() | {"default": editor.MODEL})
@@ -309,6 +585,13 @@ def handler(sessions: dict[str, Session]):
 
         def do_POST(self):  # noqa: N802
             url = urlparse(self.path)
+            if url.path == "/api/import":
+                form = multipart(self.rfile.read(int(self.headers.get("Content-Length") or 0)),
+                                 self.headers.get("Content-Type", ""))
+                try:
+                    return self._reply(*importing(sessions, jobs, form.get("audio"), form.get("lyrics")))
+                except OSError as e:                          # the disk full, say
+                    return self._reply({"ok": False, "refused": [f"{type(e).__name__}: {e}"]}, 500)
             s = self._session(url)
             if s is None:
                 return None
@@ -336,14 +619,19 @@ def handler(sessions: dict[str, Session]):
 
 
 def serve(tracks: list[Track], port: int = 8777) -> None:
+    """The songs named, opened now; or, with none named, every song prepared, each opened
+    the first time it is asked for (a song takes seconds to open, and there may be many)."""
     import functools
     import http.server
 
-    sessions = {}
+    sessions: dict[str, Session | Track] = {}
     for tr in tracks:
         t0 = time.time()
         sessions[tr.slug] = Session(tr)
         print(f"  {tr.slug}: ready ({time.time() - t0:.0f}s), sheet {_shown(sessions[tr.slug].sheet_path)}", flush=True)
+    if not tracks:
+        sessions = {tr.slug: tr for tr in prepared()}
+        print(f"  {len(sessions)} songs prepared: {', '.join(sessions) or 'none yet (add one on the page)'}", flush=True)
     visuals = ROOT / "visuals"
     Handler = handler(sessions)
     def warm():                                            # the model loaded before it is first asked
@@ -355,8 +643,10 @@ def serve(tracks: list[Track], port: int = 8777) -> None:
     threading.Thread(target=warm, daemon=True).start()
     http.server.ThreadingHTTPServer.allow_reuse_address = True
     with http.server.ThreadingHTTPServer(("127.0.0.1", port), functools.partial(Handler, directory=str(visuals))) as httpd:
-        for slug in sessions:
+        for slug in sessions if tracks else []:
             print(f"http://127.0.0.1:{port}/studio/?track={slug}", flush=True)
+        if not tracks:
+            print(f"http://127.0.0.1:{port}/studio/", flush=True)
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

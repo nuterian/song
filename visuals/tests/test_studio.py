@@ -8,6 +8,7 @@ import json
 import shutil
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -186,3 +187,146 @@ def test_every_change_is_one_history_to_move_along(session):
     r = session.edit([{"op": "feel", "dial": "flares_every_bars", "value": 4.0}])   # a change after an undo
     assert len(r["history"]) == start + 3 and r["history"][-1]["changes"][0]["title"] == "Flares"
     session.goto(start)
+
+
+# ---------------------------------------------------------------------------- adding songs
+
+
+def _wait(jobs, until, timeout=10.0):
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        view = jobs.view()
+        if until(view):
+            return view
+        time.sleep(0.02)
+    raise AssertionError(f"the jobs never got there: {jobs.view()}")
+
+
+def test_jobs_run_one_at_a_time_in_order_and_say_where_they_are():
+    from visuals.pieces.gravity import studio
+
+    jobs, ran = studio.Jobs(), []
+
+    def slow(name):
+        def fn(step):
+            ran.append((name, "in", time.time()))
+            step("first")
+            print(f"{name} is working")
+            time.sleep(0.15)
+            step("second")
+            time.sleep(0.05)
+            ran.append((name, "out", time.time()))
+        return fn
+
+    def broken(step):
+        step("only")
+        raise SystemExit("no audio at nowhere.wav")
+
+    a = jobs.start("import", "a", slow("a"))
+    b = jobs.start("export", "b", slow("b"))
+    c = jobs.start("import", "c", broken)
+    assert (a["id"], b["id"], c["id"]) == (1, 2, 3) and b["state"] == "queued" and c["step"] == "waiting"
+    view = _wait(jobs, lambda v: v[0]["state"] == "running" and v[0]["step"] == "first")
+    assert view[1]["state"] == "queued" and jobs.pending("b") and not jobs.pending("z")
+    view = _wait(jobs, lambda v: all(j["state"] in ("done", "failed") for j in v))
+    assert [j["state"] for j in view] == ["done", "done", "failed"]
+    at = {(n, w): t for n, w, t in ran}
+    assert at[("b", "in")] >= at[("a", "out")]                       # one at a time: b began after a ended
+    first = view[0]
+    assert "a is working" in first["log"] and [s["name"] for s in first["steps"]] == ["first", "second"]
+    assert first["steps"][0]["seconds"] >= 0.15 and first["seconds"] >= 0.2 and first["started"] > 0
+    assert view[2]["error"] == "no audio at nowhere.wav" and view[2]["steps"][0]["seconds"] is not None
+    assert not jobs.pending("a")
+
+
+def _post(url, fields):
+    """A multipart/form-data POST, as the page's FormData sends one."""
+    boundary = "----studio-test"
+    body = b""
+    for name, (filename, data) in fields.items():
+        body += (f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'
+                 f"Content-Type: application/octet-stream\r\n\r\n").encode() + data + b"\r\n"
+    body += f"--{boundary}--\r\n".encode()
+    req = urllib.request.Request(url, data=body, method="POST",
+                                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+def test_a_song_is_refused_when_it_is_not_audio_or_is_in_the_studio_already(tmp_path):
+    from http.server import ThreadingHTTPServer
+    import functools
+    from visuals.pieces.gravity import studio
+
+    jobs = studio.Jobs()
+    sessions = {"rise-and-glow": object()}             # in the studio: only its name is looked at
+    Handler = studio.handler(sessions, jobs)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(tmp_path)))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+    try:
+        status, r = _post(f"{base}/api/import", {"audio": ("notes.pdf", b"%PDF-1.4")})
+        assert status == 415 and not r["ok"] and "not audio" in r["refused"][0]
+        status, r = _post(f"{base}/api/import", {"audio": ("Some Song.wav", b"RIFF"), "lyrics": ("words.docx", b"PK")})
+        assert status == 415 and ".txt" in r["refused"][0]
+        status, r = _post(f"{base}/api/import", {"audio": ("Rise and Glow.wav", b"RIFF....WAVE")})
+        assert status == 409 and r["refused"] == ["Rise and Glow is already in the studio"]
+        status, r = _post(f"{base}/api/import", {"lyrics": ("words.txt", b"la la")})
+        assert status == 400
+        assert json.loads(urllib.request.urlopen(f"{base}/api/jobs").read()) == {"jobs": []}   # nothing started
+    finally:
+        httpd.shutdown()
+
+
+def test_the_form_the_page_sends_is_read_byte_for_byte():
+    from visuals.pieces.gravity import studio
+
+    audio = bytes(range(256)) * 4 + b"\r\n--not-the-boundary\r\n\r\n"
+    body = (b'--XyZ\r\nContent-Disposition: form-data; name="audio"; filename="R\xc3\xaave.wav"\r\n'
+            b"Content-Type: audio/wav\r\n\r\n" + audio + b"\r\n"
+            b'--XyZ\r\nContent-Disposition: form-data; name="lyrics"; filename="words.txt"\r\n\r\nla la\n\r\n--XyZ--\r\n')
+    got = studio.multipart(body, "multipart/form-data; boundary=XyZ")
+    assert got == {"audio": ("Rêve.wav", audio), "lyrics": ("words.txt", b"la la\n")}
+    assert studio.multipart(body, "application/json") == {}
+
+
+def test_with_no_songs_named_every_song_prepared_is_offered(tmp_path):
+    from visuals.pieces.gravity import studio
+
+    cache, examples, workdirs = tmp_path / "cache", tmp_path / "examples", tmp_path / "workdir"
+    for slug, files in {
+        "copied-in": ["listen.json", "source.wav"],            # a lossless song from outside, copied in
+        "decoded": ["listen.json", "audio.wav", "source.mp3"],   # a lossy one: its decode is what is read
+        "from-examples": ["listen.json"],                       # the repository's own song, not copied
+        "from-workdir": ["listen.json"],                        # known by its song workdir
+        "nowhere": ["listen.json"],                             # listened to, but its audio is gone
+        "half-made": ["source.wav"],                            # not listened to yet
+        "models": ["nmp.onnx"],                                 # not a song
+    }.items():
+        (cache / slug).mkdir(parents=True)
+        for f in files:
+            (cache / slug / f).write_bytes(b"x")
+    examples.mkdir()
+    (examples / "From Examples.wav").write_bytes(b"x")
+    (workdirs / "from-workdir").mkdir(parents=True)
+    (tmp_path / "wd.flac").write_bytes(b"x")
+    (workdirs / "from-workdir" / "project.json").write_text(json.dumps({"audio_path": str(tmp_path / "wd.flac")}))
+    got = {t.slug: t for t in studio.prepared(cache, (examples,), workdirs)}
+    assert sorted(got) == ["copied-in", "decoded", "from-examples", "from-workdir"]
+    assert got["copied-in"].source == cache / "copied-in" / "source.wav" and got["copied-in"].workdir is None
+    assert got["decoded"].source.name == "source.mp3" and got["decoded"].audio.name == "audio.wav"
+    assert got["from-examples"].source == examples / "From Examples.wav"
+    assert got["from-workdir"].source == tmp_path / "wd.flac" and got["from-workdir"].workdir == workdirs / "from-workdir"
+
+
+def test_a_song_opened_from_its_copy_finds_the_stems_named_for_the_original(tmp_path, monkeypatch):
+    from visuals.pieces.gravity import track as track_
+
+    monkeypatch.setattr(track_, "ROOT", tmp_path)
+    cache = tmp_path / "visuals" / "cache" / "rise-and-glow"
+    (cache / "demucs_raw" / "htdemucs" / "Rise and Glow").mkdir(parents=True)
+    tr = track_.Track("rise-and-glow", cache / "source.wav")
+    assert tr.audio == cache / "source.wav" and tr.stems_dir.name == "Rise and Glow"
