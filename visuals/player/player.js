@@ -9,6 +9,7 @@
 // The shaders are the identical source, under `#version 300 es` instead of
 // `#version 410 core`.
 
+import { fetchBytes, gridValues, textureValues } from "./bundle.js";
 import { lyricInk, lyricOpacity, seating } from "./lyrics.js";
 
 const params = new URLSearchParams(location.search);
@@ -54,8 +55,12 @@ function fail(message) {
   throw new Error(message);
 }
 
+// Where the bundles are: beside visuals/player/ in visuals/out/, unless the page says
+// otherwise (the demo keeps them beside itself, and names the song it opens on).
+const bundles = document.body.dataset.bundles || "../out/";
+
 async function pickTrack() {
-  const named = params.get("track");
+  const named = params.get("track") || document.body.dataset.track;
   if (named) return named;
   // No ?track=, so guess from the directory listing the static server hands back.
   const res = await fetch("../out/");
@@ -107,16 +112,16 @@ function makeTarget(gl, width, height) {
 /* The grid, read the way each channel's kind says: a level is interpolated
    between samples, an index is held. This mirrors Timeline.window in listen.py. */
 class Grid {
-  constructor(header, buffer) {
+  constructor(header, data) {
     this.rate = header.rate;
     this.frames = header.frames;
     this.names = header.features.map((f) => f.name);
     this.kinds = header.features.map((f) => f.kind);
     this.stride = this.names.length;
-    this.data = new Float32Array(buffer);
+    this.data = data;
     const want = this.frames * this.stride;
     if (this.data.length !== want) {
-      fail(`frames.bin holds ${this.data.length} floats, plan.json says ${want}`);
+      fail(`the frames hold ${this.data.length} floats, plan.json says ${want}`);
     }
   }
 
@@ -238,11 +243,11 @@ function makeLyrics(spec, canvas, bar, camera) {
 
 async function main() {
   const track = await pickTrack();
-  const base = `../out/${encodeURIComponent(track)}/`;
+  const base = `${bundles}${encodeURIComponent(track)}/`;
   const planRes = await fetch(base + "plan.json");
   if (!planRes.ok) fail(`no plan for "${track}". Run:  python -m visuals render <song-workdir>`);
   let plan = await planRes.json();
-  let grid = new Grid(plan.grid, await (await fetch(base + plan.frames_file)).arrayBuffer());
+  let grid = new Grid(plan.grid, gridValues(await fetchBytes(base + plan.frames_file, plan.frames_file), plan));
 
   const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false });
   if (!gl) fail("this browser has no WebGL2.");
@@ -264,7 +269,7 @@ async function main() {
   // with texelFetch, so what the shader gets is exactly what Python wrote.
   const dataTextures = [];
   for (const [unit, spec] of (plan.textures || []).entries()) {
-    const raw = new Float32Array(await (await fetch(base + spec.file)).arrayBuffer());
+    const raw = textureValues(await fetchBytes(base + spec.file, spec.file), spec);
     const tex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE1 + unit);
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -473,8 +478,8 @@ async function main() {
     setLyrics(v) { if (words) words.setOn(v); },
     async reload() {
       const next = await (await fetch(base + "plan.json", { cache: "no-store" })).json();
-      const buffer = await (await fetch(base + next.frames_file, { cache: "no-store" })).arrayBuffer();
-      grid = new Grid(next.grid, buffer);
+      const buffer = await fetchBytes(base + next.frames_file, next.frames_file, { cache: "no-store" });
+      grid = new Grid(next.grid, gridValues(buffer, next));
       if (values.length !== grid.stride) values = new Float32Array(grid.stride);
       plan = next;
       for (const [kind, pick] of Object.entries(pickers)) {
@@ -492,6 +497,9 @@ async function main() {
   readout.textContent =
     `${plan.track}  ${plan.duration.toFixed(0)}s  ${plan.tempo.toFixed(1)} bpm  ` +
     `${plan.sections.length} sections  one program  - press play`;
+  document.body.classList.add("ready");
+  // ?play=1: start at once, if the browser allows it (it may not without a click here)
+  if (params.get("play")) audio.play().catch(() => {});
   requestAnimationFrame(tick);
 }
 

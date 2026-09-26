@@ -10,7 +10,7 @@ forgives.
 from __future__ import annotations
 
 import functools
-
+import gzip
 import json
 import os
 import shutil
@@ -300,3 +300,66 @@ def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
             os.symlink(src, dst)
         except OSError:
             shutil.copy2(src, dst)
+
+
+# ---------------------------------------------------------------- the compact form
+# A bundle as `export` writes it is float32, frame by frame, uncompressed: 34 MB of frames
+# for a 4:45 song, which is right on this machine and too much to put on a web page. `pack`
+# writes the same bundle compact, for a static host (the demo on GitHub Pages).
+#
+# Plain float16 is not enough. Half the channels are levels between 0 and 1, where it is
+# exact to 0.0005, but the rest are clocks and the times of the last hits (uKickT is the
+# moment of the last kick, up to the song's length): at 280 s a float16 is 0.25 s coarse, so
+# a hit would land an eighth of a second off and the orbits would step. So each channel is
+# stored as float16 only if that holds it to within HALF_ERROR, and as float32 otherwise.
+#
+# Each column is written as byte planes (every value's first byte, then every second
+# byte...), because neighbouring values share their high bytes and gzip then finds them.
+# On Gravity: 2.9 MB, against 5.1 MB for plain float16 and 14.7 MB for float32, gzipped.
+
+# half of float16's step between 1 and 2: whatever it holds this well is as good as exact
+HALF_ERROR = 2.0 ** -11
+
+
+def narrowest(values: np.ndarray) -> str:
+    """"f16" if float16 holds these values to within HALF_ERROR, else "f32"."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        back = values.astype("<f2").astype("<f4")
+    ok = np.isfinite(back).all() and np.abs(back - values).max(initial=0.0) <= HALF_ERROR
+    return "f16" if ok else "f32"
+
+
+def planes(values: np.ndarray, dtype: str) -> bytes:
+    """The values at `dtype`, little-endian, as byte planes."""
+    a = np.ascontiguousarray(values, dtype="<f2" if dtype == "f16" else "<f4")
+    return a.view(np.uint8).reshape(-1, a.itemsize).T.tobytes()
+
+
+def _gzip(path: Path, data: bytes) -> None:
+    # mtime 0: the same bundle packs to the same bytes, so a rebuild is not a change in git
+    path.write_bytes(gzip.compress(data, compresslevel=9, mtime=0))
+
+
+def pack(out_dir: str | Path, dest: str | Path) -> Path:
+    """The bundle in `out_dir`, written compact into `dest`: the frames channel by channel,
+    each at the narrowest precision that holds it, as byte planes, gzipped; the textures the
+    same way; the audio copied (never linked); and a plan that says so. The player reads
+    either form (player/bundle.js)."""
+    out_dir, dest = Path(out_dir), Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    plan = json.loads((out_dir / "plan.json").read_text())
+    stride = len(plan["grid"]["features"])
+    data = np.frombuffer((out_dir / plan["frames_file"]).read_bytes(), dtype="<f4").reshape(-1, stride)
+    dtypes = [narrowest(col) for col in data.T]
+    _gzip(dest / "frames.bin.gz", b"".join(planes(col, dt) for col, dt in zip(data.T, dtypes)))
+    plan.update(frames_file="frames.bin.gz", frames_packing="planes", frames_dtype=dtypes)
+    for spec in plan.get("textures", []):
+        values = np.frombuffer((out_dir / spec["file"]).read_bytes(), dtype="<f4")
+        dtype = narrowest(values)
+        _gzip(dest / f"{spec['name']}.bin.gz", planes(values, dtype))
+        spec.update(file=f"{spec['name']}.bin.gz", packing="planes", dtype=dtype)
+    audio = out_dir / plan["audio_file"]
+    if audio.exists():
+        shutil.copyfile(audio, dest / plan["audio_file"])       # follows the link: a copy
+    (dest / "plan.json").write_text(json.dumps(plan, separators=(",", ":")) + "\n")
+    return dest
