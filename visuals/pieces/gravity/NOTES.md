@@ -1212,3 +1212,27 @@ cost 10.4 ms, so it would now be a little quicker. From the studio, the whole so
 hybrid camera without words took 633 s at load 20-40 (the first 20 s preparing: the bake,
 the sky's textures, the shader); the progress was there again when the page was reopened,
 and the finished file was offered and served (293 MB).
+
+# The MVP (2026-09-26)
+
+What ships, decided with Jugal: one repository, the product called "song", the editor
+"song studio"; a static demo of the player alone; export as 1080p60 16:9 with the words
+burned in, set in Inter Light; the landing page for both tools. Four tracks were built in
+parallel in worktrees and merged: adding a song from the studio (with the job runner),
+the export, the demo and the landing page, the install. What the merge added: an export
+is a job of the same runner as an import, so the two never run together, and the demo was
+built again after the lyric width changed.
+
+Measured on the merged branch, the machine otherwise quiet: 216 tests in 61 s; the CI
+selection (`-m "not local"`) 158 in 9 s; Shattered Voices exported from the studio, static
+camera, no words, 9,322 frames in 248 s (38 fps), 141 MB; the studio with every prepared
+song opened at the start in about 40 s (nine songs); the demo 13.94 MB. Not verified here:
+the demo on a real GPU in a browser (the pane was hidden; the studio's player ran at 60 fps
+earlier), Safari and Firefox, GitHub Pages' headers for `.gz`, a first install with an empty
+pip cache, a fresh import through the merged studio (every prepared song was already open;
+the import track verified one, 78 s with the stems there).
+
+Open, and Jugal's to decide: the song tool's aligner, MMS_FA, is CC-BY-NC 4.0, so lyric
+alignment is non-commercial as it stands; every other model is MIT or Apache. Not in the
+MVP: vertical video, the Canvas loop, per-section feel; `editor_eval` is to be run again on
+a quiet machine, the prompt having changed.
