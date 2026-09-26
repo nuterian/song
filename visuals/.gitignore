@@ -9,7 +9,7 @@ __pycache__/
 
 # Per-song derived features. Everything here is recomputed from a song workdir
 # and runs to megabytes per track. Recreate with:  python -m visuals render <workdir>
-cache/
+cache
 
 # Renders, staged player assets and extracted frames.
 out/
