@@ -5,23 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0a0c10">
-<title>song — lyrics, timed to the word</title>
-<meta name="description" content="Turn an audio track and a plain-text lyrics file into word-accurate synced lyrics and a finished karaoke video, using only free models that run on your own machine.">
+<title>song: a music video drawn from the song, and lyrics timed to the word</title>
+<meta name="description" content="Give it a track and it draws a music video from what it hears, with the lyrics timed to the word, using only free models that run on your own machine.">
 <link rel="canonical" href="https://jugalm.com/song/">
 <!-- The card a shared link unfurls into, and what the page is for a reader that is a
-     machine — the same author id jugalm.com uses, so the two resolve to one person. -->
+     machine: the same author id jugalm.com uses, so the two resolve to one person. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="song">
-<meta property="og:title" content="song — lyrics, timed to the word">
-<meta property="og:description" content="Turn an audio track and a plain-text lyrics file into word-accurate synced lyrics and a finished karaoke video, using only free models that run on your own machine.">
+<meta property="og:title" content="song: a music video drawn from the song">
+<meta property="og:description" content="Give it a track and it draws a music video from what it hears, with the lyrics timed to the word, using only free models that run on your own machine.">
 <meta property="og:url" content="https://jugalm.com/song/">
-<meta property="og:image" content="https://jugalm.com/song/img/video-still.webp">
+<meta property="og:image" content="https://jugalm.com/song/img/cosmos-still.webp">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","@id":"https://jugalm.com/song/#app","name":"song","url":"https://jugalm.com/song/","applicationCategory":"MultimediaApplication","dateCreated":"2026","image":"https://jugalm.com/song/img/video-still.webp","description":"Turn an audio track and a plain-text lyrics file into word-accurate synced lyrics and a finished karaoke video, using only free models that run on your own machine.","codeRepository":"https://github.com/nuterian/song","author":{"@type":"Person","@id":"https://jugalm.com/#me","name":"Jugal Manjeshwar","url":"https://jugalm.com/"},"isPartOf":{"@id":"https://jugalm.com/#site"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","@id":"https://jugalm.com/song/#app","name":"song","url":"https://jugalm.com/song/","applicationCategory":"MultimediaApplication","dateCreated":"2026","image":"https://jugalm.com/song/img/cosmos-still.webp","description":"Give it a track and it draws a music video from what it hears, with the lyrics timed to the word, using only free models that run on your own machine.","codeRepository":"https://github.com/nuterian/song","author":{"@type":"Person","@id":"https://jugalm.com/#me","name":"Jugal Manjeshwar","url":"https://jugalm.com/"},"isPartOf":{"@id":"https://jugalm.com/#site"}}</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%23ff7a3d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
-<!-- The poster is what the page paints first and what it is judged on. It is
-     14 KB and it is discovered inside a <video> attribute, which is late. -->
-<link rel="preload" as="image" href="img/video-still.webp" fetchpriority="high">
+<!-- The poster is what the page paints first and what it is judged on. It is 48 KB, and
+     the player behind it (8 MB with its song) is only fetched when it is asked for. -->
+<link rel="preload" as="image" href="img/cosmos-still.webp" fetchpriority="high">
 
 <style>
 :root{
@@ -269,6 +269,36 @@ pre code{background:none;border:0;padding:0;font-size:14.5px;color:#bcc7d7;line-
 footer{margin-top:clamp(96px,12vw,160px);border-top:1px solid var(--line);
   padding:40px 0 88px;color:var(--faint);font-size:14px;text-align:center}
 footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
+
+/* ---------- the video, in the page ----------
+   A poster and a play button until it is asked for, then the demo itself in a frame. The
+   frame is only made on the click: an iframe in the markup would fetch the player, its
+   sky and a 5 MB song on every visit, for everyone who only came to read (measured: 0.1
+   MB for the page as it is, 7.3 MB in its first 8 s with the frame in the markup). Once
+   playing it is the demo's page, controls and all but its caption (?embed=1), so the box
+   grows to hold them: the demo's picture is (width - 32px) at 16:9, ~120px under it. */
+.player{container-type:inline-size}
+.screen{position:relative;aspect-ratio:16/9;border-radius:16px;overflow:hidden;
+  border:1px solid var(--line);background:#000;box-shadow:0 20px 52px rgba(0,0,0,.55)}
+.screen img{width:100%;height:100%;object-fit:cover}
+.screen .go{position:absolute;inset:0;width:100%;height:100%;border:0;padding:0;margin:0;
+  background:transparent;cursor:pointer;display:grid;place-items:center}
+.go span{width:88px;height:88px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(10,12,16,.55);border:1px solid rgba(244,246,250,.3);color:var(--ink);
+  transition:transform .2s var(--ease),background .2s var(--ease)}
+.go:hover span{transform:scale(1.06);background:rgba(10,12,16,.75)}
+.go:focus-visible span{outline:2px solid var(--accent);outline-offset:4px}
+.go svg{width:30px;height:30px;margin-left:5px}
+.screen.on{aspect-ratio:auto;height:calc((100cqw - 32px) * 9 / 16 + 124px);background:var(--bg)}
+.screen iframe{width:100%;height:100%;border:0;display:block}
+@media (max-width:640px){
+  .screen.on{height:calc((100cqw - 24px) * 9 / 16 + 214px)}
+  .go span{width:68px;height:68px}
+}
+.hero figure .say{max-width:600px;margin:22px auto 0;font-size:14px;color:var(--faint);text-align:center}
+.hero figure .say a{color:var(--dim);border-bottom:1px solid var(--line)}
+.hero figure .say a:hover{color:var(--ink)}
+.strip3 img{border-radius:12px}
 </style>
 </head>
 <body>
@@ -282,7 +312,8 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
       </svg>song</a>
     <nav>
       <a class="ghost" href="https://github.com/nuterian/song">GitHub</a>
-      <a class="cta" href="demo/">Try it</a>
+      <a class="ghost" href="#lyrics">Lyrics</a>
+      <a class="cta" href="video/">Watch</a>
     </nav>
   </div>
   <div class="playhead" aria-hidden="true"></div>
@@ -291,25 +322,90 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
 <!-- ------------------------------------------------------------ hero -->
 <section class="hero" id="top">
   <div class="wrap">
-    <h1 class="rise">Lyrics, timed to the <span class="lit">word</span>.</h1>
-    <p class="lede rise">A track and a text file in. Synced lyrics and a finished
-      video out. Nothing leaves your machine.</p>
+    <h1 class="rise">A music video, drawn from the <span class="lit">song</span>.</h1>
+    <p class="lede rise">Give it a track. The kick, the bass, the notes and the voice
+      each move their own part of a solar system, and the words arrive as they are
+      sung. It runs on your own machine, with free models.</p>
     <div class="btns rise">
-      <a class="btn primary" href="demo/">Try it in your browser</a>
+      <a class="btn primary" href="video/">Open the video</a>
       <a class="btn" href="https://github.com/nuterian/song">GitHub</a>
     </div>
-    <p class="under rise">.lrc · word .lrc · .srt · .vtt · .ass · .mp4</p>
   </div>
 
   <div class="wide">
+    <figure class="rise player">
+      <div class="screen" id="screen">
+        <img src="img/cosmos-still.webp" width="1280" height="720" fetchpriority="high"
+             alt="The Sun in the middle of the frame with its orbits drawn round it, and the eight planets in a line to the right of it, over a dark sky of stars.">
+        <button class="go" type="button" aria-label="Play the video"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg></span></button>
+      </div>
+      <p class="say"><b>Gravity in Motion</b> by Jugal Manjeshwar, drawn by your browser
+        as it plays: there is no video file. Switch the camera, turn the words off, or try
+        the other song. <a href="video/">Full size</a></p>
+    </figure>
+  </div>
+</section>
+
+<!-- ------------------------------------------------------------ video -->
+<section>
+  <div class="copy rise">
+    <p class="kicker">The video</p>
+    <h2>Every part plays a body.</h2>
+    <p class="say">The song is split into its parts and heard one by one. The kick
+      swells the Sun, the snare sends a ring out across the orbits, the hats light the
+      stars, the bass charges the corona until it flares, each synth note lights its own
+      planet, and the voice carries the words. <b>Nothing moves unless the song does.</b></p>
+  </div>
+  <div class="wide">
+    <figure class="rise strip3">
+      <img src="img/cosmos-cameras.webp" loading="lazy" decoding="async" width="2424" height="450"
+           alt="The same moment through three cameras: the whole system from above at an angle, a closer view that leans with the music, and a close shot on Saturn.">
+      <figcaption>One moment, three cameras: <b>static, hybrid and cinematic</b>, all
+        in the same file, switched while it plays.</figcaption>
+    </figure>
+  </div>
+  <div class="copy">
+    <details class="rise">
+      <summary>What is decided, and how to change it</summary>
+      <div class="body">
+        <p>A director turns what was heard into acts, shots and the moments the beat
+        comes back. Every decision is in a <b>direction sheet</b> of about fifty lines,
+        and the default sheet is the video: bake it and you get the same picture.</p>
+        <p>The studio shows the picture, the sheet and the song on a timeline in bars.
+        Drag a shot, pick a planet, move a dial, or ask in words, "close on Saturn in the
+        second chorus", and a model on your machine answers with edits to the sheet. An
+        edit is back on screen in about a second and a half, and every change can be
+        undone.</p>
+        <p>The browser draws the same numbers the mp4 is rendered from, a grid of 262
+        channels at 120 per second, so the two cannot drift apart.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ----------------------------------------------------------- lyrics -->
+<section id="lyrics">
+  <div class="copy rise">
+    <p class="kicker">The lyrics</p>
+    <h2>Lyrics, timed to the word.</h2>
+    <p class="say">A track and a text file in. Synced lyrics and a finished karaoke
+      video out. <b>Nothing leaves your machine.</b></p>
+    <p class="under">.lrc · word .lrc · .srt · .vtt · .ass · .mp4</p>
+  </div>
+  <div class="wide">
     <figure class="rise">
-      <video src="img/video-demo.mp4" poster="img/video-still.webp"
-             controls muted autoplay loop playsinline preload="metadata"
+      <video src="img/video-demo.mp4" poster="img/video-still.webp" data-loop
+             controls muted loop playsinline preload="none"
              width="1920" height="1080"
              aria-label="Eight bars of the karaoke video, looping: three lyric lines at the bottom left, the middle one filling word by word in an accent colour and swelling as each word is held, over a soft lit wash and a light that crosses the ceiling once a bar, with a thin smooth waveform level with it on the right that brightens where each beat falls."></video>
-      <figcaption>One command. 1080p, 60 fps. Every pixel behind the words came
-        out of the audio — <b>no footage, no template, nothing to supply.</b></figcaption>
+      <figcaption>One command. 1080p, 60 fps. Every pixel behind the words came out of
+        the audio: <b>no footage, no template, nothing to supply.</b></figcaption>
     </figure>
+  </div>
+  <div class="copy">
+    <div class="btns rise" style="justify-content:flex-start;margin-top:40px">
+      <a class="btn primary" href="demo/">Try it in your browser</a>
+    </div>
   </div>
 </section>
 
@@ -325,7 +421,7 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
     <figure class="rise strip">
       <img src="img/app-stage.webp" loading="lazy" decoding="async" width="1520" height="300"
            alt="The timeline zoomed to one line, word cells along the bottom with dividers running the full height of the waveform.">
-      <figcaption>Word boundaries are cut against the audio itself — <b>a divider
+      <figcaption>Word boundaries are cut against the audio itself: <b>a divider
         that misses the attack is visible</b> against the thing it is cutting.</figcaption>
     </figure>
   </div>
@@ -339,7 +435,7 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
     <details class="rise">
       <summary>Three models, cross-examining each other</summary>
       <div class="body">
-        <p><b>Demucs</b> isolates the vocal — aligning against the stem rather
+        <p><b>Demucs</b> isolates the vocal: aligning against the stem rather
         than the mix is the single biggest accuracy win on dense productions.
         <b>wav2vec2 CTC</b> anchors the structure in one global pass, so a 4-bar
         instrumental is absorbed as blanks instead of sliding the rest of the
@@ -347,7 +443,7 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
         it is both accurate and precise.</p>
         <p>All three are <i>told</i> the lyrics, so all three can be confidently
         wrong in the same place. A fourth pass is told nothing and reports what
-        it hears. It is the strongest single signal in the merge — and it is
+        it hears. It is the strongest single signal in the merge, and it is
         what finds the chorus repeat somebody forgot to type.</p>
         <p>Run against a deliberately degraded alignment the mean score falls
         from <b>94.5 to 69.9</b> and lines needing review go from 2 to 11. It
@@ -362,14 +458,14 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
   <div class="copy rise">
     <p class="kicker">Where models disagree</p>
     <h2>You settle it by ear.</h2>
-    <p class="say">Two aligners agreed on 137 of 177 words — you never see
+    <p class="say">Two aligners agreed on 137 of 177 words, and you never see
       those. The rest play you both candidates. <b>If neither is right, drag a
       third onto the waveform.</b></p>
   </div>
   <div class="wide">
     <figure class="rise">
       <img src="img/app-review.webp" loading="lazy" decoding="async" width="1260" height="880"
-           alt="The Check timings card: a waveform strip with blue, green and violet markers, and three options — Now, Suggested and Adjusted — each with its own play button.">
+           alt="The Check timings card: a waveform strip with blue, green and violet markers, and three options, Now, Suggested and Adjusted, each with its own play button.">
     </figure>
   </div>
   <div class="copy">
@@ -378,7 +474,7 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
       <div class="body">
         <p>Snapping every word start to its nearest onset. It looks like free
         accuracy, but on this track <b>41% of word starts have more than one
-        onset within ±150 ms</b> — snapping would be a coin flip wearing a lab
+        onset within ±150 ms</b>, so snapping would be a coin flip wearing a lab
         coat. Where two models disagree and both readings are plausible, no
         heuristic settles it honestly, so an ear does.</p>
       </div>
@@ -406,35 +502,37 @@ footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
 <!-- ----------------------------------------------------------- close -->
 <section>
   <div class="wrap rise" style="text-align:center">
-    <h2>Two commands.</h2>
-    <p class="say" style="margin-bottom:34px">Five minutes to align a
-      five-minute track. Twelve more to render it at 1080p60.</p>
+    <h2>On your own machine.</h2>
+    <p class="say" style="margin-bottom:34px">Free models, no accounts, no keys, nothing
+      uploaded. Setup makes two virtual environments and fetches about 3 GB of model
+      weights, once. It is tested on macOS on Apple Silicon.</p>
     <div>
       <pre><code>./setup.sh
-./.venv/bin/python -m song</code></pre>
+python -m visuals studio my-song.wav</code></pre>
     </div>
     <div class="btns">
-      <a class="btn primary" href="demo/">Try it in your browser</a>
+      <a class="btn primary" href="video/">Open the video</a>
       <a class="btn" href="https://github.com/nuterian/song">GitHub</a>
     </div>
 
     <details style="text-align:left">
       <summary>Every command, and what lands on disk</summary>
       <div class="body">
-        <pre><code>python -m song                          # open the app
+        <pre><code>python -m visuals studio my-song.wav     # the video, on a timeline, edited by hand or by asking
+python -m visuals make my-song.wav       # the video, staged for the player, no studio
+python -m song                          # open the lyrics app
 python -m song track.wav lyrics.txt     # align, then open it
 python -m song audit workdir/my-track   # repair + list what needs an ear
-python -m song score workdir/my-track   # re-run the benchmark on edits made elsewhere
 python -m song video workdir/my-track   # render karaoke.mp4</code></pre>
-        <p>Everything lands in <code>workdir/&lt;track&gt;/</code>:
+        <p>The lyrics land in <code>workdir/&lt;track&gt;/</code>:
         <code>lyrics.lrc</code>, <code>lyrics.word.lrc</code>,
         <code>lyrics.srt</code>, <code>.vtt</code>, and
-        <code>project.json</code> — word timings, per-line scores, the
-        scorecard and the audit. <code>song video</code> adds
-        <code>lyrics.ass</code> and <code>karaoke.mp4</code>.</p>
-        <p>Lyrics input is plain text: one line per lyric line, a blank line
-        between sections, a header naming each. Demucs on Apple MPS is broken
-        under torch 2.5, so it is CPU throughout.</p>
+        <code>project.json</code>, which holds the word timings, per-line scores, the
+        scorecard and the audit. A song that has been aligned brings its words to the
+        video.</p>
+        <p>Five minutes to align a five-minute track. Lyrics input is plain text: one
+        line per lyric line, a blank line between sections, a header naming each.
+        Demucs on Apple MPS is broken under torch 2.5, so it is CPU throughout.</p>
       </div>
     </details>
   </div>
@@ -443,22 +541,31 @@ python -m song video workdir/my-track   # render karaoke.mp4</code></pre>
 <footer>
   <div class="wrap">
     <a href="https://github.com/nuterian/song">github.com/nuterian/song</a> ·
-    <a href="demo/">live demo</a><br>
+    <a href="video/">the video</a> ·
+    <a href="demo/">the lyrics demo</a><br>
     <span style="opacity:.65">Free, open-source models. Nothing leaves your machine.</span>
   </div>
 </footer>
 
 <script>
-  /* The reveal is CSS. Both of these are about the video, which CSS cannot
-     reach: the first because an autoplaying loop is motion too and the
-     stylesheet already honours the request not to have any, the second because
-     a 1080p60 loop goes on decoding for the whole page once you have scrolled
-     past it. Every failure here leaves the video playing, which is what it did
-     before either of them existed. */
-  const clips = document.querySelectorAll('video[autoplay]');
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    clips.forEach(v => { v.removeAttribute('autoplay'); v.pause(); });
-  } else if (window.IntersectionObserver) {
+  /* The video is only fetched when it is asked for: the click puts the demo in the page,
+     playing if the browser allows it (a click here usually lets it), else waiting on its
+     own play button. */
+  const screen = document.getElementById('screen');
+  screen.querySelector('.go').addEventListener('click', () => {
+    const frame = document.createElement('iframe');
+    frame.src = 'video/?embed=1&camera=hybrid&play=1';
+    frame.title = 'Gravity in Motion, the music video';
+    frame.allow = 'autoplay; fullscreen';
+    screen.classList.add('on');
+    screen.replaceChildren(frame);
+    frame.focus();
+  });
+
+  /* The karaoke loop is below the fold, so it plays only while it is on screen, and
+     only then is it fetched; with reduced motion asked for, it waits for its controls. */
+  const clips = document.querySelectorAll('video[data-loop]');
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches && window.IntersectionObserver) {
     const watch = new IntersectionObserver(seen => {
       seen.forEach(({target, isIntersecting}) => {
         if (isIntersecting) target.play().catch(() => {}); else target.pause();
