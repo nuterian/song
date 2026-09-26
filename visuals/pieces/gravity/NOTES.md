@@ -1080,3 +1080,42 @@ smaller model answers in seconds when memory is short, and an answer is only eve
 proposal, shown on the timeline, applied or discarded. The prompt has changed since the
 comparison (sections, the selection); `editor_eval` is to be run again when the machine
 is otherwise quiet.
+
+## Adding a song
+
+    python -m visuals studio        -> every song already listened to, and "Add a song…"
+
+With no songs named, the studio offers every song whose cache has `listen.json`, read from
+its copy in the cache (`source.*`, or the decode `audio.wav`), else a file named for it in
+`examples/` or the test set, else its song workdir. Each is opened the first time it is
+asked for, not at the start: the first in 9.1 s (the star textures are built then), the
+next ones in 1.7-3.1 s, so the nine here, all opened at the start, would be about half a
+minute of waiting (reckoned from those, not measured). A song
+made from its copy does not know the name Demucs gave its stems' folder (the original
+file's), so `Track.stems_dir` now also finds that folder by the song's slug.
+
+A song is added from the picker's last choice, or by dropping its audio, and its lyrics
+if it has them (a `.txt`), anywhere on the page, the picture too. The audio is kept where
+a song given on the command line would be: lossless as `cache/<slug>/source.<ext>`, which
+every step reads in place, lossy beside it and decoded once to `audio.wav`; the lyrics as
+`workdir/<slug>/lyrics.txt`. A background job (`studio.Jobs`: one at a time, in order,
+since the machine cannot separate two songs at once; an export can be another kind) then
+does what `make` does, a step at a time so the page can say where it is: separating,
+aligning the words, listening, the models, staging, opening. With lyrics, the stems come
+first and their vocals are linked into the workdir, so the song tool aligns on them and
+does not run Demucs a second time. The page asks `/api/jobs` every 2 s while something is
+being made, and not otherwise; the status shows the song, the step and the time; when the
+song is ready it joins the picker, and the page that asked for it offers to open it (or
+opens it, if nothing is open). Refused, with the reason: a file that is not audio, lyrics
+not in a `.txt`, a song already in the studio or already being added, and a recording
+whose name is taken in the cache by a different one (its stems would be the other's).
+
+Measured, Rise and Glow (3:16, 38 MB wav, its stems already separated), added with `curl`
+to a studio with its cache otherwise empty: the upload 1.1 s; separating 1.6 s (only the
+player's mix.m4a to make); listening 47.2 s; the models 25.2 s; staging 3.4 s; opening
+0.9 s; 78.4 s in all. Added again from the page, everything kept: 8.5 s from "Add" to the
+song open. The alignment step, run as the studio runs it on Gravity's lyrics (into a
+scratch workdir): 850 s, all of it the song tool's own passes with its Whisper models on
+the CPU; the vocals were linked, not separated again (no `demucs_raw`), and the words
+read back as the studio reads them, 33 lines and 177 words. A song never separated adds
+Demucs's few minutes; that was not measured here.
