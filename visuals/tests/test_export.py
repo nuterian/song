@@ -86,6 +86,7 @@ def test_a_saved_score_round_trips_through_the_file(track: Track, tmp_path):
     assert not again.violations()
 
 
+@pytest.mark.local
 def test_the_handwritten_score_repeats_itself_across_repeats(real_track: Track):
     """Both choruses arrive at the same place, which is the agreement the model
     has to learn rather than be told."""

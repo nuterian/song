@@ -76,6 +76,7 @@ def test_the_answer_can_only_name_what_the_sheet_knows():
     assert all(set(k["required"]) == set(k["properties"]) and k["additionalProperties"] is False for k in kinds)
 
 
+@pytest.mark.local
 def test_the_second_chorus_is_where_the_lyric_sheet_puts_it():
     from visuals.pieces.gravity import listen
     from visuals.pieces.gravity.track import Track
@@ -140,6 +141,7 @@ def test_what_changed_reads_the_same_whoever_changed_it():
     assert [c["title"] for c in editor.changes(SHEET, moved)] == ["Tempo", "Shots and moments"]
 
 
+@pytest.mark.local
 def test_the_model_is_told_what_this_means():
     from visuals.pieces.gravity import listen
     from visuals.pieces.gravity.track import Track

@@ -23,3 +23,26 @@ jobs:
       # torch and demucs to run it would cost minutes and test nothing extra.
       - name: Run tests
         run: python -m unittest discover -s tests -v
+
+  visuals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The player's and the studio's arithmetic (lyrics.js, timeline.js) is checked
+      # against the Python it mirrors by running it in node.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Only what the tests marked "not local" import, at the pins visuals/.venv has:
+      # no torch, no transformers, no weights. moderngl is imported, never given a
+      # context; the tests that draw are marked local.
+      - name: Install
+        run: |
+          grep -E '^(numpy|scipy|soundfile|moderngl|pytest)==' visuals/requirements.txt \
+            | xargs python -m pip install
+      - name: Run tests
+        run: PYTHONPATH=. python -m pytest -o addopts="" -p no:warnings --strict-markers -m "not local" visuals/tests

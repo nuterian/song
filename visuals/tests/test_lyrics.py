@@ -72,6 +72,7 @@ console.log(d);
     assert float(got.stdout.strip()) < 1e-12
 
 
+@pytest.mark.local
 def test_on_the_gold_example_no_line_crosses_a_body_on_the_static_camera():
     from visuals.pieces.gravity import cosmos, listen, models
     from visuals.pieces.gravity.track import Track

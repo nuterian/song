@@ -132,6 +132,7 @@ def _gl_or_skip():
         pytest.skip(f"no headless GL: {exc}")
 
 
+@pytest.mark.local
 @pytest.mark.parametrize("style", ["glow", "ink"])
 def test_each_style_compiles_and_draws(style):
     pytest.importorskip("moderngl")
@@ -161,6 +162,7 @@ def _one_kick_channels(t_kick: float) -> direct.Channels:
     return direct.Channels(names, kinds, data, [], n / direct.RATE)
 
 
+@pytest.mark.local
 @pytest.mark.parametrize("t_kick", [0.5000, 0.5041, 0.5100, 0.5166, 0.5167, 0.7333])
 def test_a_hit_is_on_screen_when_it_arrives_and_never_after(t_kick):
     moderngl = pytest.importorskip("moderngl")
@@ -239,6 +241,7 @@ def test_key_from_a_natural_minor_scale():
     assert models.key_from_notes(scale, np.ones(len(scale)))["name"] == "A minor"
 
 
+@pytest.mark.local
 def test_every_uniform_the_shader_declares_is_fed():
     import re
 
@@ -263,6 +266,7 @@ def test_every_uniform_the_shader_declares_is_fed():
             assert np.abs(np.diff(ch.data[:, ch.index(name)])).max() < 0.03, name
 
 
+@pytest.mark.local
 def test_no_star_is_cut_off_and_every_arm_is_whole():
     """Sky only, five moments. Each four-pointed star is found as a blob; its four arms
     must reach about equally far from its core. An arm cut short is a star drawn by a
@@ -333,6 +337,7 @@ def test_the_sky_frames_put_known_stars_where_they_are():
     assert uv.min() >= 0.0 and uv.max() <= 1.0
 
 
+@pytest.mark.local
 def test_acts_cover_the_song_and_the_planets_align_at_the_climax():
     CACHE = _gravity().cache
 
@@ -364,6 +369,7 @@ def test_acts_cover_the_song_and_the_planets_align_at_the_climax():
     assert set(ch.variants["camera"]["choices"]) == set(cosmos.MODES)
 
 
+@pytest.mark.local
 def test_every_uniform_the_3d_shader_declares_is_fed():
     import re
 
@@ -379,6 +385,7 @@ def test_every_uniform_the_3d_shader_declares_is_fed():
     assert declared - fed == set()
 
 
+@pytest.mark.local
 def test_a_trail_is_the_colour_of_the_planet_that_leaves_it():
     # the table the trails are drawn from is the measured mean of each surface, not a guess
     means = shader_cosmos.surface_means()
@@ -402,6 +409,7 @@ def test_a_fall_has_landed_on_its_moment_and_a_rise_starts_on_its_own():
     assert np.abs(np.diff(y, 2)).max() < 1e-4                      # and no corner anywhere
 
 
+@pytest.mark.local
 def test_no_camera_jolts():
     from visuals.pieces.gravity import follow
     CACHE = _gravity().cache
@@ -428,6 +436,7 @@ def _real_cosmos():
     return got, cosmos.bake(got, models.load_cached(CACHE))
 
 
+@pytest.mark.local
 def test_a_reentry_is_braced_for_and_the_bass_line_stands_on_the_limb_by_pitch():
     got, ch = _real_cosmos()
     brace = ch.data[:, ch.index("uBrace")]
@@ -445,6 +454,7 @@ def test_a_reentry_is_braced_for_and_the_bass_line_stands_on_the_limb_by_pitch()
     assert twelfths.mean() > 0.8, twelfths.mean()
 
 
+@pytest.mark.local
 def test_a_kick_moves_the_stars_and_does_not_brighten_them():
     import moderngl
 
@@ -496,6 +506,7 @@ def test_flares_fire_on_played_notes_on_the_beat_at_a_rate_found_from_the_song()
         assert charge.max() <= 1.0 and charge[: int(7 * direct.RATE)].max() == 0.0
 
 
+@pytest.mark.local
 def test_a_planet_is_struck_when_a_ring_from_the_sun_reaches_it():
     from visuals.pieces.gravity import follow, render
 
@@ -555,6 +566,7 @@ def test_the_orrery_keeps_the_solar_systems_pattern_and_its_physics():
     assert orrery.pull_depth(r, r[0])[4] == pytest.approx(orrery.PULL * (r[0] / r[4]) ** 2)
 
 
+@pytest.mark.local
 def test_a_flare_is_thrown_at_the_planet_that_has_the_tune():
     got, ch = _real_cosmos()
     assert len(ch.flare_targets) == len(ch.flares) > 10
@@ -600,6 +612,7 @@ def test_the_planets_are_bodies_nothing_in_them_jumps_and_a_hop_tops_out_on_its_
     assert dance.time_to_peak(dance.FREQ, dance.DAMP)[4] > 2 * dance.time_to_peak(dance.FREQ, dance.DAMP)[0]
 
 
+@pytest.mark.local
 def test_the_real_dance_is_smooth_every_planet_plays_and_rings_are_rare():
     got, ch = _real_cosmos()
     bar = 4 * float(got["meta"]["period"])
@@ -620,6 +633,7 @@ def test_the_real_dance_is_smooth_every_planet_plays_and_rings_are_rare():
         assert np.abs(np.diff(x, 2)).max() < 0.12 * max(np.ptp(x), 1e-9), name     # (an 85 ms ease is curved, but it has no corner: a corner reads 0.2 and up)
 
 
+@pytest.mark.local
 def test_the_deep_sky_is_the_real_one_with_its_distances():
     from pathlib import Path
 
@@ -705,6 +719,7 @@ def test_events_of_a_stem_that_is_not_playing_are_dropped():
 # ------------------------------------------------------------------ scorecard
 
 
+@pytest.mark.local
 def test_the_gold_example_passes_its_own_scorecard():
     from visuals.pieces.gravity import scorecard
 

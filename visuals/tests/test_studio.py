@@ -107,6 +107,7 @@ def session(tmp_path_factory):
                           history_path=d / "history.json")
 
 
+@pytest.mark.local
 def test_the_page_is_told_the_song_and_the_words_to_edit_it_in(session):
     song = session.song()
     assert len(song["bar_t"]) == song["sheet"]["song"]["bars"] == 149 and len(song["beats"]) >= 4 * 148
@@ -117,6 +118,7 @@ def test_the_page_is_told_the_song_and_the_words_to_edit_it_in(session):
     assert (session.out / "plan.json").exists() and (session.out / "frames.bin").exists()
 
 
+@pytest.mark.local
 def test_an_edit_is_baked_kept_and_logged_and_undone(session):
     before = copy.deepcopy(session.sheet)
     frames = (session.out / "frames.bin").read_bytes()
@@ -130,6 +132,7 @@ def test_an_edit_is_baked_kept_and_logged_and_undone(session):
     assert r["ok"] and session.sheet == before and (session.out / "frames.bin").read_bytes() == frames
 
 
+@pytest.mark.local
 def test_an_edit_that_means_nothing_touches_nothing(session):
     version, sheet = session.version, copy.deepcopy(session.sheet)
     r = session.edit([{"op": "feel", "dial": "orbits_breathe", "value": 9.0}])
@@ -139,6 +142,7 @@ def test_an_edit_that_means_nothing_touches_nothing(session):
     assert r["ok"] and not r["changed"] and session.version == version
 
 
+@pytest.mark.local
 def test_the_server_answers_the_page(session):
     from http.server import ThreadingHTTPServer
     import functools
@@ -160,6 +164,7 @@ def test_the_server_answers_the_page(session):
         httpd.shutdown()
 
 
+@pytest.mark.local
 def test_every_change_is_one_history_to_move_along(session):
     from visuals.pieces.gravity import studio
 

@@ -18,6 +18,7 @@ def test_the_slug_is_the_song_tools():
     assert slugify("???") == "track"
 
 
+@pytest.mark.local
 def test_the_default_is_the_gravity_piece_where_it_always_was():
     """Nothing about the gold example moved: same cache, same stems, same bundles."""
     if not GRAVITY_AUDIO.exists():

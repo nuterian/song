@@ -11,6 +11,8 @@ import pytest
 
 from visuals.pieces.gravity import render, sheet as sheet_
 
+pytestmark = pytest.mark.local      # every test here reads the example song's listening
+
 
 @pytest.fixture(scope="module")
 def gravity():

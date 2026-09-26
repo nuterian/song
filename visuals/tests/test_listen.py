@@ -266,6 +266,7 @@ def test_a_score_of_the_wrong_shape_is_refused(track: Track):
         UniformTrack(score, track)
 
 
+@pytest.mark.local
 def test_the_real_track_loads_and_lines_up(real_track: Track):
     assert real_track.n_bars == len(real_track.downbeats)
     assert real_track.sections[0].start == 0.0

@@ -76,6 +76,7 @@ def _axis_cases():
         yield f"block_set:{b}", _score(scene=schema.BLOCK_SET_SCENES[b][0])
 
 
+@pytest.mark.local
 def test_every_song_level_combination_compiles(renderer):
     """The grammar's promise: a legal score is a shader that builds."""
     failures = []
@@ -90,6 +91,7 @@ def test_every_song_level_combination_compiles(renderer):
     assert not failures, "\n".join(failures[:5])
 
 
+@pytest.mark.local
 def test_a_song_has_exactly_one_program(renderer, track: Track):
     """No section-level choice can change the program, so nothing is ever swapped."""
     score = authoring.sampled(track, 0)
@@ -105,6 +107,7 @@ def test_a_song_has_exactly_one_program(renderer, track: Track):
     assert renderer.n_programs == before
 
 
+@pytest.mark.local
 def test_a_random_legal_score_compiles_and_draws(renderer, track: Track):
     for seed in range(6):
         score = authoring.sampled(track, seed)
@@ -169,6 +172,7 @@ def _capture(score, track, **kw):
     return frames, stats
 
 
+@pytest.mark.local
 def test_frames_are_neither_black_nor_blown_out(track: Track):
     pytest.importorskip("moderngl")
     score = authoring.handwritten(track)
@@ -180,6 +184,7 @@ def test_frames_are_neither_black_nor_blown_out(track: Track):
         assert f.max() > 40, f"frame {i} has nothing in it"
 
 
+@pytest.mark.local
 def test_frames_differ_over_time(track: Track):
     pytest.importorskip("moderngl")
     score = authoring.handwritten(track)
@@ -212,6 +217,7 @@ def _beat_ratio(score, track: Track, start: float, duration: float, fps: int = 6
     return float(motion[on].mean() / max(motion[~on].mean(), 1e-9))
 
 
+@pytest.mark.local
 def test_the_picture_moves_on_the_beat(real_track: Track):
     """Synchronisation, measured rather than asserted.
 
@@ -229,6 +235,7 @@ def test_the_picture_moves_on_the_beat(real_track: Track):
     assert _beat_ratio(_unrouted(real_track), real_track, start, 12.0) < 1.2
 
 
+@pytest.mark.local
 def test_the_song_is_not_equally_locked_everywhere(real_track: Track):
     """A chorus should hold the beat harder than an intro. That is the point of
     putting the routing in the score rather than in the shader."""
@@ -240,6 +247,7 @@ def test_the_song_is_not_equally_locked_everywhere(real_track: Track):
         _beat_ratio(score, real_track, 12.0, 12.0) * 1.5
 
 
+@pytest.mark.local
 def test_the_same_score_renders_the_same_frames_twice(track: Track):
     pytest.importorskip("moderngl")
     score = authoring.sampled(track, 3)
@@ -266,6 +274,7 @@ def _unrouted(track: Track) -> schema.Score:
     return score
 
 
+@pytest.mark.local
 def test_a_section_boundary_does_not_show(track: Track):
     """The claim the whole transition design makes, measured on real frames.
 
@@ -294,6 +303,7 @@ def test_a_section_boundary_does_not_show(track: Track):
         )
 
 
+@pytest.mark.local
 def test_nothing_in_a_whole_song_looks_like_a_cut(real_track: Track):
     """The same claim, over every frame of the real track rather than four of them.
 
@@ -323,6 +333,7 @@ def test_nothing_in_a_whole_song_looks_like_a_cut(real_track: Track):
     assert step.max() < cut_size * 0.6, f"a {step.max():.1f} step against a {cut_size:.1f} cut"
 
 
+@pytest.mark.local
 def test_different_seeds_look_different(track: Track):
     pytest.importorskip("moderngl")
     a, _ = _capture(authoring.sampled(track, 1), track, start=6.0, duration=0.2, fps=30)
@@ -330,6 +341,7 @@ def test_different_seeds_look_different(track: Track):
     assert np.abs(a[-1].astype(np.int16) - b[-1].astype(np.int16)).mean() > 1.0
 
 
+@pytest.mark.local
 def test_a_preview_starts_where_it_was_asked_to(track: Track):
     pytest.importorskip("moderngl")
     score = authoring.handwritten(track)
@@ -338,6 +350,7 @@ def test_a_preview_starts_where_it_was_asked_to(track: Track):
     assert not np.array_equal(early[-1], late[-1])
 
 
+@pytest.mark.local
 def test_an_mp4_comes_out_with_the_audio_under_it(track: Track, tmp_path):
     pytest.importorskip("moderngl")
     if shutil.which("ffmpeg") is None:
