@@ -266,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
     e.set_defaults(fn=cmd_edit)
 
     st = sub.add_parser("studio", help="edit songs' videos on a timeline, by hand or by asking")
-    st.add_argument("songs", nargs="+", help="audio files or song workdirs")
+    st.add_argument("songs", nargs="*", help="audio files or song workdirs (none: every song already prepared)")
     st.add_argument("--port", type=int, default=8777)
     st.set_defaults(fn=cmd_studio)
 

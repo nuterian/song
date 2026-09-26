@@ -74,9 +74,15 @@ class Track:
     @property
     def stems_dir(self) -> Path:
         # Demucs names its folder for the file it read: the source's own name for a song
-        # separated before its audio was copied in, the copy's for one separated after
-        kept = self.cache / "demucs_raw" / DEMUCS_MODEL / self.source.stem
-        return kept if kept.exists() else self.cache / "demucs_raw" / DEMUCS_MODEL / self.audio.stem
+        # separated before its audio was copied in, the copy's for one separated after.
+        # A track made from the copy (the studio opens songs from their cache) does not
+        # know the source's name, and finds its folder by the song's slug.
+        raw = self.cache / "demucs_raw" / DEMUCS_MODEL
+        for name in (self.source.stem, self.audio.stem):
+            if (raw / name).exists():
+                return raw / name
+        named = sorted(p for p in raw.glob("*") if slugify(p.name) == self.slug) if raw.exists() else []
+        return named[0] if named else raw / self.audio.stem
 
     @property
     def project(self) -> Path | None:
