@@ -39,7 +39,8 @@ class Word:
     x: int                   # where its patch sits in the frame, top left (it may reach past an edge)
     y: int
     glyph: np.ndarray        # (h, w) float32, 0..1: how much of each pixel the letters cover
-    cover: np.ndarray        # the letters over their shadow: how much of the frame a pixel hides at full ink
+    cover: np.ndarray        # (h, w, 1): the letters over their shadow, how much of the frame a pixel hides at full ink
+    paint: np.ndarray        # (h, w, 3): what the letters lay on it at full ink, the colour times the glyph
     start: float
     end: float
 
@@ -93,7 +94,12 @@ class Words:
             mask = fine.reduce(FINE)                                 # each pixel, the share of it the letters cover
             glyph = np.asarray(mask, dtype=np.float32) / 255.0
             shadow = np.asarray(mask.filter(ImageFilter.GaussianBlur(sigma)), dtype=np.float32) / 255.0 * SHADOW_ALPHA
-            words.append(Word(x0, top, glyph, glyph + shadow * (1.0 - glyph), start, end))
+            cover = glyph + shadow * (1.0 - glyph)
+            # only the pixels the word can change by half a level or more: the shadow's far tail is not drawn
+            rows, cols = np.nonzero(cover.max(axis=1) * 255 >= 0.5)[0], np.nonzero(cover.max(axis=0) * 255 >= 0.5)[0]
+            keep = slice(rows[0], rows[-1] + 1), slice(cols[0], cols[-1] + 1)
+            words.append(Word(x0 + int(cols[0]), top + int(rows[0]), glyph[keep], cover[keep][..., None],
+                              glyph[keep][..., None] * COLOUR, start, end))
             i += len(text_w) + 1                                     # and the space after it
         return words
 
@@ -121,6 +127,7 @@ class Words:
             return
         sy, sx = slice(fy0 - word.y, fy1 - word.y), slice(fx0 - word.x, fx1 - word.x)
         region = frame[fy0:fy1, fx0:fx1].astype(np.float32)
-        region *= 1.0 - a * word.cover[sy, sx, None]
-        region += (a * word.glyph[sy, sx, None]) * COLOUR
-        frame[fy0:fy1, fx0:fx1] = np.clip(region + 0.5, 0, 255).astype(np.uint8)
+        # region (1 - a cover) + a paint: stays within 0..255, since paint is at most 255 cover
+        region += a * (word.paint[sy, sx] - region * word.cover[sy, sx])
+        region += 0.5
+        frame[fy0:fy1, fx0:fx1] = region.astype(np.uint8)
