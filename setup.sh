@@ -122,7 +122,13 @@ paths = [hub / "models--laion--larger_clap_music", hub / "models--sentence-trans
          ckpt / "beat_this-final0.ckpt", Path("visuals/cache/models/nmp.onnx"), ckpt / "955717e8-8726e21a.th",
          ckpt / "model.pt", whisper / "medium.pt", whisper / "large-v3-turbo.pt",
          hub / "models--Systran--faster-whisper-medium"]
-size = lambda p: p.stat().st_size if p.is_file() else sum(f.stat().st_size for f in p.rglob("*") if f.is_file() and not f.is_symlink())
+
+def size(p):     # a Hugging Face snapshot is symlinks into blobs/: count each file once
+    if p.is_file():
+        return p.stat().st_size
+    return sum(f.stat().st_size for f in p.rglob("*") if f.is_file() and not f.is_symlink())
+
+
 have = [size(p) for p in paths if p.exists()]
 print(f"{sum(have) / 1e9:.1f} GB, {len(have)} of {len(paths)} models")
 EOF
