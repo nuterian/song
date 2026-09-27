@@ -303,7 +303,7 @@ async function main() {
     let w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientWidth * dpr * 9 / 16);
     const cap = Number(params.get("maxheight")) || 1440;
     if (h > cap) { w = Math.round(cap * 16 / 9); h = cap; }
-    if (w === W && h === H) return;
+    if (!w || (w === W && h === H)) return;
     for (const old of targets) { gl.deleteFramebuffer(old.fbo); gl.deleteTexture(old.tex); }
     W = canvas.width = w; H = canvas.height = h;
     gl.activeTexture(gl.TEXTURE0);
@@ -364,6 +364,9 @@ async function main() {
   }
 
   function draw(t) {
+    // A page loaded where it has no width yet (a hidden pane, a tab in the background) has
+    // nothing to draw into; the first frame waits for `fit`, which the resize brings.
+    if (!targets.length) { lastDrawn = -1; return; }
     const section = sectionAt(t);
     grid.read(t, values);
 
