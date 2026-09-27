@@ -38,11 +38,11 @@ jobs:
           node-version: "22"
 
       # Only what the tests marked "not local" import, at the pins visuals/.venv has:
-      # no torch, no transformers, no weights. moderngl is imported, never given a
-      # context; the tests that draw are marked local.
+      # no torch, no transformers, no weights. Pillow sets the burned-in words. moderngl is
+      # imported, never given a context; the tests that draw are marked local.
       - name: Install
         run: |
-          grep -E '^(numpy|scipy|soundfile|moderngl|pytest)==' visuals/requirements.txt \
+          grep -E '^(numpy|scipy|soundfile|moderngl|Pillow|pytest)==' visuals/requirements.txt \
             | xargs python -m pip install
       - name: Run tests
         run: PYTHONPATH=. python -m pytest -o addopts="" -p no:warnings --strict-markers -m "not local" visuals/tests

@@ -165,6 +165,7 @@ def test_the_server_answers_the_page(session):
         httpd.shutdown()
 
 
+@pytest.mark.local
 def test_an_export_names_one_of_the_three_cameras(session):
     from http.server import ThreadingHTTPServer
     import functools
@@ -355,6 +356,7 @@ def test_a_song_opened_from_its_copy_finds_the_stems_named_for_the_original(tmp_
     assert tr.audio == cache / "source.wav" and tr.stems_dir.name == "Rise and Glow"
 
 
+@pytest.mark.local
 def test_an_export_is_a_job_of_the_runner_behind_whatever_is_being_added(session, monkeypatch):
     """An import and an export never run together: both are the runner's, in order."""
     from visuals.pieces.gravity import studio

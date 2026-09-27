@@ -73,6 +73,7 @@ def _gl_or_skip():
         pytest.skip(f"no headless GL: {exc}")
 
 
+@pytest.mark.local
 @pytest.mark.skipif(shutil.which("ffprobe") is None, reason="no ffmpeg")
 def test_a_clip_with_the_words_is_an_mp4_with_the_words_where_the_layout_put_them(tmp_path):
     from visuals.pieces.gravity import listen, make, render
