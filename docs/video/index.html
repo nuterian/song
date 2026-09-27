@@ -38,7 +38,7 @@
   canvas { background: #000; border-radius: 6px; cursor: pointer; }
   #frame { position: relative; }
   #frame canvas { height: 100%; }
-  #lyrics { position: absolute; inset: 0; pointer-events: none; overflow: hidden; container-type: size; }
+  #lyrics { position: absolute; inset: 0; pointer-events: none; overflow: hidden; container-type: size; transition: opacity .6s ease; }
   #lyrics .line {
     position: absolute; white-space: nowrap; opacity: 0;
     font-size: calc(var(--size) * 100cqh);

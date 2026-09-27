@@ -45,7 +45,7 @@
   /* the lyrics: warm off-white, light, small, letter-spaced; the ink is each word's own */
   #frame { position: relative; width: 100%; max-width: 1280px; aspect-ratio: 16 / 9; }
   #frame canvas { width: 100%; height: 100%; max-width: none; }
-  #lyrics { position: absolute; inset: 0; pointer-events: none; overflow: hidden; container-type: size; }
+  #lyrics { position: absolute; inset: 0; pointer-events: none; overflow: hidden; container-type: size; transition: opacity .6s ease; }
   #lyrics .line {
     position: absolute; white-space: nowrap; opacity: 0;
     font-size: calc(var(--size) * 100cqh);

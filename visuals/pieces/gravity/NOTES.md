@@ -1236,3 +1236,43 @@ Open, and Jugal's to decide: the song tool's aligner, MMS_FA, is CC-BY-NC 4.0, s
 alignment is non-commercial as it stands; every other model is MIT or Apache. Not in the
 MVP: vertical video, the Canvas loop, per-section feel; `editor_eval` is to be run again on
 a quiet machine, the prompt having changed.
+
+## The landing page, and what it asked of the player
+
+The page (docs/index.html) is the video itself, pinned edge to edge, with what is said
+about it scrolled over it a screen at a time; each statement directs the picture (its
+camera, whether the words show). Jugal: "dramatic, but simple and minimal", then "some
+abrupt moments ... no way to pause ... extremely performant". What was abrupt, and what
+each became:
+
+- **A change of camera was a cut.** It is a move now (`player.choose(kind, name,
+  seconds)`): each camera uniform goes from the camera left to the one taken, eased, by
+  the wall's clock; angles the short way round, the zoom by ratio. Static to the close
+  shot on Saturn, traced by screenshots: one continuous push-in, the Sun out of the top of
+  the frame as Saturn comes to the middle.
+- **The words were switched.** They fade (0.6 s).
+- **The film jumped back mid-song** (a loop of one minute). It plays to the song's own end
+  and begins again from its beginning.
+- **Text and dimming came at a threshold.** Where the browser has scroll-driven animations
+  they follow the scroll itself (`animation-timeline`), on the compositor; elsewhere the
+  classes the script sets do it in eased steps; with no script everything is there.
+- **Sound and pause** are eased too (0.26 s down, 0.42 s up). Pause: a button in the bar, a
+  click on the picture, the space bar.
+- **The player's clock.** `audio.currentTime` moves in steps, and a frame was skipped when
+  two fell close together; the time is carried between them by the wall's clock. The frame
+  count the player shows is of frames drawn now, not of frames asked for.
+
+For speed: no mask and no blur over the live canvas (its edges go to black under two
+strips of its own); only translate, scale and opacity move; the bundle is fetched, inflated
+and unpacked in a worker (`bundle-worker.js`, the same functions), about 110 ms taken off
+the page's thread; `?adapt=1` gives a machine that cannot keep 60 frames a second fewer
+pixels, a step at a time.
+
+Measured in headless Chrome with the machine's GPU (ANGLE Metal, Apple M4; 1440x900 at 2x,
+the canvas 1920x1080), five runs: at rest, scrolling through the film, scrolling on to the
+end and back at the top, 60 frames a second each, the median frame 16.7 ms, the worst
+17.6-17.8 ms, none over 20 ms; the player drawing 60 a second; the picture live 0.40-0.42 s
+after the page asks for it. One run of the five, the first, had one frame of 234 ms
+scrolling from the film into the studio section (a long task of 323 ms); the studio's
+picture is decoded ahead of time since, and it has not come back in the runs after. Not
+measured: Safari, Firefox, a phone, the fanless machine once it is hot.

@@ -32,7 +32,7 @@ def build(dest: Path = DEST, songs=SONGS) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     for slug, _ in songs:
         render.pack(ROOT / "visuals" / "out" / f"{slug}-cosmos", dest / slug)
-    for name in ("player.js", "bundle.js", "lyrics.js"):
+    for name in ("player.js", "bundle.js", "bundle-worker.js", "lyrics.js"):
         shutil.copyfile(PLAYER / name, dest / name)
     # the words' face, if the player has it; without it they are set in Helvetica Neue
     fonts = ""

@@ -9,7 +9,7 @@
 // The shaders are the identical source, under `#version 300 es` instead of
 // `#version 410 core`.
 
-import { fetchBytes, gridValues, textureValues } from "./bundle.js";
+import { decoded } from "./bundle.js";
 import { lyricInk, lyricOpacity, seating } from "./lyrics.js";
 
 const params = new URLSearchParams(location.search);
@@ -163,11 +163,16 @@ function makeLyrics(spec, canvas, bar, camera) {
   const toggle = document.createElement("span");
   toggle.className = "choice";
   toggle.innerHTML = "<span>lyrics</span>";
+  let fading = 0;
   const turn = (name) => {
     on = name === "on";
     for (const x of toggle.querySelectorAll("button")) x.classList.toggle("on", x.dataset.name === name);
     const url = new URL(location.href); url.searchParams.set("lyrics", name); history.replaceState(null, "", url);
-    layer.hidden = !on;
+    // they fade, they are not switched: shown for as long as the fade out takes
+    clearTimeout(fading);
+    layer.hidden = false;
+    layer.style.opacity = on ? "1" : "0";
+    if (!on) fading = setTimeout(() => { if (!on) layer.hidden = true; }, 700);
   };
   for (const name of ["on", "off"]) {
     const b = document.createElement("button");
@@ -177,6 +182,7 @@ function makeLyrics(spec, canvas, bar, camera) {
   }
   toggle.querySelector(`button[data-name="${on ? "on" : "off"}"]`).classList.add("on");
   layer.hidden = !on;
+  layer.style.opacity = on ? "1" : "0";
   bar.appendChild(toggle);
 
   function element(k) {
@@ -222,7 +228,7 @@ function makeLyrics(spec, canvas, bar, camera) {
       seat = seating();
     },
     show(t) {
-      if (!on) return;
+      if (layer.hidden) return;
       const cam = camera() || "static";
       spec.lines.forEach((line, k) => {
         const region = seat(k, line, t, cam);
@@ -248,7 +254,7 @@ async function main() {
   const planRes = await fetch(base + "plan.json");
   if (!planRes.ok) fail(`no plan for "${track}". Run:  python -m visuals render <song-workdir>`);
   let plan = await planRes.json();
-  let grid = new Grid(plan.grid, gridValues(await fetchBytes(base + plan.frames_file, plan.frames_file), plan));
+  let grid = new Grid(plan.grid, await decoded(base + plan.frames_file, plan.frames_file, "grid", plan));
 
   const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false });
   if (!gl) fail("this browser has no WebGL2.");
@@ -270,7 +276,7 @@ async function main() {
   // with texelFetch, so what the shader gets is exactly what Python wrote.
   const dataTextures = [];
   for (const [unit, spec] of (plan.textures || []).entries()) {
-    const raw = textureValues(await fetchBytes(base + spec.file, spec.file), spec);
+    const raw = await decoded(base + spec.file, spec.file, "texture", spec);
     const tex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE1 + unit);
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -298,12 +304,12 @@ async function main() {
   // The canvas is drawn at the display's own resolution, not at a fixed size stretched
   // to fit: on a dense screen a stretched 720p canvas is every pixel made four, and no
   // shader can look sharp through that. Capped, so a 5K window does not ask for 5K.
-  let W = 0, H = 0, targets = [], front = 0;
+  let W = 0, H = 0, targets = [], front = 0, quality = 1;
   function fit() {
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
-    let w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientWidth * dpr * 9 / 16);
+    let w = Math.round(canvas.clientWidth * dpr * quality), h = Math.round(canvas.clientWidth * dpr * quality * 9 / 16);
     const cap = Number(params.get("maxheight")) || 1440;
-    if (h > cap) { w = Math.round(cap * 16 / 9); h = cap; }
+    if (h > cap * quality) { h = Math.round(cap * quality); w = Math.round(h * 16 / 9); }
     if (!w || (w === W && h === H)) return;
     for (const old of targets) { gl.deleteFramebuffer(old.fbo); gl.deleteTexture(old.tex); }
     W = canvas.width = w; H = canvas.height = h;
@@ -326,13 +332,36 @@ async function main() {
   // say, all baked into the one grid. Choosing one re-points those uniforms and nothing
   // else, so it can be done while the song plays.
   const feeds = new Map();                         // uniform name -> the channel that feeds it, if not its own
+  // A change of camera is a move, not a cut: for `seconds` each uniform goes from what the
+  // camera left would have given it to what the one taken gives it, eased, by the clock on
+  // the wall (so it moves while the song is paused too). Angles go the short way round; the
+  // zoom goes by ratio, as a zoom is felt.
+  const leaving = new Map();                       // uniform name -> the channel of the camera being left
+  let move = null;                                 // {t0, seconds} while a move is on
+  const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+  function fed(name, c) {
+    const to = feeds.has(name) && feeds.get(name) >= 0 ? values[feeds.get(name)] : values[c];
+    if (!move || !leaving.has(name) || leaving.get(name) < 0) return to;
+    const w = easeInOut(Math.min((performance.now() - move.t0) / (1000 * move.seconds), 1));
+    const from = values[leaving.get(name)];
+    if (/Turn|Roll/.test(name)) {
+      const d = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+      return from + d * w;
+    }
+    if (/Span/.test(name) && from > 0 && to > 0) return from * (to / from) ** w;
+    return from + (to - from) * w;
+  }
   const chosen = {};                               // variant kind -> the name picked (the camera, say)
   const pickers = {};                              // variant kind -> how to pick one (again, after a new bake)
   for (const [kind, spec] of Object.entries(plan.variants || {})) {
     const group = document.createElement("span");
     group.className = "choice";
     group.innerHTML = `<span>${kind}</span>`;
-    const pick = (name) => {
+    const pick = (name, seconds = 0) => {
+      if (seconds > 0 && chosen[kind] && chosen[kind] !== name && !move) {
+        for (const uniform of Object.keys(spec.choices[name])) leaving.set(uniform, feeds.get(uniform));
+        move = { t0: performance.now(), seconds };
+      }
       chosen[kind] = name;
       for (const [uniform, channel] of Object.entries(spec.choices[name])) feeds.set(uniform, grid.names.indexOf(channel));
       for (const b of group.querySelectorAll("button")) b.classList.toggle("on", b.dataset.name === name);
@@ -342,7 +371,7 @@ async function main() {
     for (const name of Object.keys(spec.choices)) {
       const b = document.createElement("button");
       b.textContent = name; b.dataset.name = name;
-      b.addEventListener("click", () => pick(name));
+      b.addEventListener("click", () => pick(name, 1.2));
       group.appendChild(b);
     }
     choicesBox.appendChild(group);
@@ -385,7 +414,7 @@ async function main() {
     for (let c = 0; c < grid.stride; c++) {
       const name = grid.names[c];
       const loc = uniforms[name];
-      if (loc) gl.uniform1f(loc, feeds.has(name) && feeds.get(name) >= 0 ? values[feeds.get(name)] : values[c]);
+      if (loc) gl.uniform1f(loc, fed(name, c));
     }
     for (const d of dataTextures) {
       gl.activeTexture(gl.TEXTURE0 + d.unit);
@@ -424,17 +453,45 @@ async function main() {
 
   // frames actually drawn per second, and the slowest gap between two of them
   let shown = 0, slowest = 0, lastTick = performance.now(), windowStart = lastTick;
+  // The song's clock, made even. `audio.currentTime` moves in steps of its own (a few
+  // milliseconds in one browser, tens in another), and a picture drawn from it skips a frame
+  // whenever two steps fall close together. Between its steps the time is carried forward
+  // by the clock on the wall, and set by the audio's again only if the two come 50 ms apart.
+  let sync = { wall: performance.now(), t: audio.currentTime };
+  function songTime(now) {
+    const real = audio.currentTime;
+    if (audio.paused || audio.seeking) { sync = { wall: now, t: real }; return real; }
+    const carried = sync.t + ((now - sync.wall) / 1000) * audio.playbackRate;
+    if (Math.abs(carried - real) > 0.05) { sync = { wall: now, t: real }; return real; }
+    return Math.min(carried, plan.duration);
+  }
+
+  // ?adapt=1: a machine that cannot keep 60 frames a second at this size is given fewer
+  // pixels, a step at a time, and never more again (a size that comes and goes is worse).
+  const adapt = Boolean(params.get("adapt"));
+  let slow = 0;
+
   function tick() {
     const now = performance.now();
-    slowest = Math.max(slowest, now - lastTick); lastTick = now; shown++;
+    slowest = Math.max(slowest, now - lastTick); lastTick = now;
     if (now - windowStart >= 1000) {
-      fpsBox.textContent = audio.paused ? `${W}x${H}` : `${Math.round(shown * 1000 / (now - windowStart))} fps  ${slowest.toFixed(0)} ms`;
+      const fps = Math.round(shown * 1000 / (now - windowStart));
+      fpsBox.textContent = audio.paused ? `${W}x${H}` : `${fps} fps  ${slowest.toFixed(0)} ms`;
+      if (adapt && !audio.paused && !document.hidden && lastDrawn >= 0) {
+        slow = fps < 52 ? slow + 1 : 0;
+        if (slow >= 2 && quality > 0.5) { quality = Math.max(0.5, quality * 0.85); slow = 0; fit(); }
+      }
       shown = 0; slowest = 0; windowStart = now;
     }
-    const t = audio.currentTime;
-    if (lastDrawn < 0 || t < lastDrawn || t - lastDrawn >= STEP) {
+    if (move) {
+      if (now - move.t0 >= 1000 * move.seconds) { move = null; leaving.clear(); }
+      lastDrawn = -1;                                // a camera on its way is drawn every frame, song playing or not
+    }
+    const t = songTime(now);
+    if (lastDrawn < 0 || t < lastDrawn || t - lastDrawn >= STEP - 0.002) {
       if (lastDrawn >= 0 && (t < lastDrawn || t - lastDrawn > 0.5)) clearFeedback();
       draw(t);
+      shown++;                                       // frames drawn, not frames asked for
       lastDrawn = t;
       if (!scrubbing) seek.value = String(t);
     }
@@ -477,13 +534,12 @@ async function main() {
     audio,
     get chosen() { return { ...chosen }; },
     variants(kind) { return Object.keys(((plan.variants || {})[kind] || {}).choices || {}); },
-    choose(kind, name) { if (pickers[kind]) pickers[kind](name); },
+    choose(kind, name, seconds = 0) { if (pickers[kind]) pickers[kind](name, seconds); },
     get lyrics() { return words ? words.on : null; },
     setLyrics(v) { if (words) words.setOn(v); },
     async reload() {
       const next = await (await fetch(base + "plan.json", { cache: "no-store" })).json();
-      const buffer = await fetchBytes(base + next.frames_file, next.frames_file, { cache: "no-store" });
-      grid = new Grid(next.grid, gridValues(buffer, next));
+      grid = new Grid(next.grid, await decoded(base + next.frames_file, next.frames_file, "grid", next, { cache: "no-store" }));
       if (values.length !== grid.stride) values = new Float32Array(grid.stride);
       plan = next;
       for (const [kind, pick] of Object.entries(pickers)) {

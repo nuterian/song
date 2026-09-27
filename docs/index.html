@@ -54,30 +54,42 @@ header a:hover{color:var(--ink)}
 .film{position:relative}
 .screen{position:sticky;top:0;height:100svh;overflow:hidden;background:#000;z-index:0}
 /* as wide as the window and never cut at its sides, where a lyric line may be; in the hero
-   it sits low, the Sun under the words, and comes up to the middle as the page is read */
+   it sits low, the Sun under the words, and comes up to the middle as the page is read.
+   Its top and bottom go to black under two strips of its own, so it has no edge wherever it
+   sits. (A mask did that first, and a mask over a canvas that is drawn sixty times a second
+   is composited sixty times a second.) */
 .pic{position:absolute;left:50%;top:50%;width:min(100vw,calc(100svh * 16 / 9 * 1.12));aspect-ratio:16/9;
-  --zoom:1.12;--shift:0svh;
-  transform:translate(-50%,calc(-50% + var(--shift))) scale(var(--zoom));transition:transform 2.6s var(--ease);
-  background:#000 url(img/cosmos-still.webp) center/cover no-repeat;
-  /* its top and bottom go to black by themselves, so it has no edge wherever it sits */
-  -webkit-mask-image:linear-gradient(to bottom,transparent,#000 20%,#000 84%,transparent);
-          mask-image:linear-gradient(to bottom,transparent,#000 20%,#000 84%,transparent)}
-.film.live .pic{--zoom:1}
-.film[data-beat="0"] .pic{--shift:15svh}
+  --low:15svh;--mid:0svh;
+  translate:-50% calc(-50% + var(--mid));scale:1.12;will-change:translate,scale;
+  transition:scale 2.8s var(--ease),translate 1.6s var(--ease);
+  background:#000 url(img/cosmos-still.webp) center/cover no-repeat}
+.pic::before,.pic::after{content:"";position:absolute;left:0;right:0;z-index:1;pointer-events:none}
+.pic::before{top:-1px;height:22%;background:linear-gradient(to bottom,#000,rgba(0,0,0,0))}
+.pic::after{bottom:-1px;height:18%;background:linear-gradient(to top,#000,rgba(0,0,0,0))}
+.film.live .pic{scale:1}
+.film[data-beat="0"] .pic{translate:-50% calc(-50% + var(--low))}
 .pic iframe{position:absolute;inset:0;width:100%;height:100%;border:0;opacity:0;transition:opacity 1.4s var(--ease)}
 .film.live .pic iframe{opacity:1}
 /* what is over the picture has the dark it needs: more of it while something is being said */
-.veil{position:absolute;inset:0;background:#000;opacity:.12;transition:opacity 1s var(--ease)}
+.veil{position:absolute;inset:0;background:#000;opacity:.12;transition:opacity 1.2s var(--ease);will-change:opacity}
 .film[data-beat="1"] .veil,.film[data-beat="2"] .veil,.film[data-beat="3"] .veil{opacity:.64}
 .fade{position:absolute;inset:0;background:
   linear-gradient(to bottom,rgba(0,0,0,.82),rgba(0,0,0,0) 34%),
   linear-gradient(to top,#000,rgba(0,0,0,0) 14%)}
-#sound{display:inline-flex;align-items:center;gap:7px;visibility:hidden;opacity:0;transition:opacity .6s var(--ease)}
-#sound.ready{visibility:visible;opacity:1}
-#sound:hover{color:var(--ink)}
-#sound svg{width:16px;height:16px}
+.ctl{display:inline-flex;align-items:center;gap:7px;visibility:hidden;opacity:0;transition:opacity .6s var(--ease),color .2s}
+.ctl.ready{visibility:visible;opacity:1}
+.ctl:hover{color:var(--ink)}
+.ctl svg{width:16px;height:16px}
+header.solid .ctl{visibility:hidden;opacity:0}
 .playbig{position:absolute;inset:0;margin:auto;z-index:3;width:84px;height:84px;border-radius:50%;display:none;place-items:center;
   background:rgba(0,0,0,.6);box-shadow:0 0 0 1px rgba(255,255,255,.25);color:var(--ink)}
+/* paused or played by a click on the picture: said once, in the middle, and gone */
+.blip{position:absolute;inset:0;margin:auto;z-index:3;width:72px;height:72px;border-radius:50%;display:grid;place-items:center;pointer-events:none;
+  background:rgba(0,0,0,.55);color:var(--ink);opacity:0;scale:.8}
+.blip svg{width:26px;height:26px}
+.blip.go{animation:blip .7s var(--ease)}
+@keyframes blip{0%{opacity:0;scale:.8}25%{opacity:1;scale:1}100%{opacity:0;scale:1.12}}
+.screen{cursor:pointer}
 .playbig svg{width:28px;height:28px;margin-left:4px}
 .film.still .playbig{display:grid}
 
@@ -102,10 +114,10 @@ html.js .beat.on > :nth-child(3){transition-delay:.24s}
 .cue::after{content:"";position:absolute;left:50%;top:7px;width:3px;height:7px;margin-left:-1.5px;border-radius:2px;background:var(--ink);animation:cue 1.9s var(--ease) infinite}
 @keyframes cue{0%{transform:none;opacity:1}70%,100%{transform:translateY(11px);opacity:0}}
 .film:not([data-beat="0"]) .cue{opacity:0}
-.seg{display:inline-flex;margin-top:1.6em;border-radius:20px;overflow:hidden;font-size:15px;
-  background:rgba(28,28,30,.66);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.seg{display:inline-flex;margin-top:1.6em;border-radius:20px;overflow:hidden;font-size:15px;background:rgba(28,28,30,.9)}
 .seg button{height:40px;padding:0 18px;color:var(--dim)}
 .seg button:hover{color:var(--ink)}
+.seg button{transition:color .3s var(--ease),background .3s var(--ease)}
 .seg button.on{color:#000;background:var(--ink);border-radius:20px}
 
 /* After the film: that it is yours to direct, and how to have it. */
@@ -125,21 +137,36 @@ section.get{padding-bottom:clamp(70px,10svh,120px)}
 footer{position:relative;z-index:2;background:#000;padding:0 24px 40px;text-align:center;color:var(--faint);font-size:13px}
 footer a:hover{color:var(--ink)}
 
-/* They arrive as they are reached, where the browser can tie that to the scroll; where
-   it cannot, they are simply there. */
-@supports (animation-timeline: view()){
+/* The scroll itself moves things, where the browser can tie them to it: the picture up
+   to the middle, the dark over it, each statement in and out as its screen goes by, what
+   comes after the film as it is reached. Those run where the page is composited, not in a
+   script, and go exactly as far as the scroll has. Where the browser cannot, the classes
+   the script sets do the same in steps, eased; with no script, everything is simply there. */
+@supports (animation-timeline: view()) {
   @media (prefers-reduced-motion:no-preference){
+    .pic{transition:scale 2.8s var(--ease);animation:seat linear both;animation-timeline:scroll(root block);animation-range:0svh 100svh}
+    .veil{transition:none;animation:dim linear both;animation-timeline:scroll(root block);animation-range:12svh 92svh}
+    .cue{animation:gone linear both;animation-timeline:scroll(root block);animation-range:0svh 24svh}
+    .beat{view-timeline:--beat block}
+    html.js .beat > *{opacity:1;transform:none;transition:none}
+    html.js .beat.hero > *{animation:leave linear both;animation-timeline:scroll(root block);animation-range:6svh 60svh}
+    html.js .beat:not(.hero) > *{animation:say linear both;animation-timeline:--beat;animation-range:cover 0% cover 100%}
     .rise{animation:rise linear both;animation-timeline:view();animation-range:entry 0% entry 70%}
     .shot{animation:grow linear both;animation-timeline:view();animation-range:entry 0% cover 38%}
   }
 }
+@keyframes seat{from{translate:-50% calc(-50% + var(--low))}to{translate:-50% calc(-50% + var(--mid))}}
+@keyframes dim{from{opacity:.12}to{opacity:.64}}
+@keyframes gone{to{opacity:0}}
+@keyframes leave{to{opacity:0;translate:0 -70px}}
+@keyframes say{0%,20%{opacity:0;translate:0 60px}40%,60%{opacity:1;translate:0 0}80%,100%{opacity:0;translate:0 -60px}}
 @keyframes rise{from{opacity:0;transform:translateY(48px)}}
 @keyframes grow{from{opacity:.2;transform:scale(.86)}}
 
 /* upright: the picture whole, across the width, and the words in the dark under it */
 @media (max-aspect-ratio:1/1){
-  .pic{width:100vw;--shift:-8svh}
-  .film[data-beat="0"] .pic{--shift:12svh}
+  .pic{width:100vw;--low:12svh;--mid:-8svh}
+  .veil{animation:none !important}
   .fade{background:linear-gradient(to bottom,rgba(0,0,0,.6),rgba(0,0,0,0) 22%)}
   .veil,.film[data-beat="1"] .veil,.film[data-beat="2"] .veil,.film[data-beat="3"] .veil{opacity:0}
   .beat:not(.hero){place-content:end center;padding-bottom:16svh}
@@ -148,7 +175,7 @@ footer a:hover{color:var(--ink)}
   .code{font-size:12px;padding-left:16px}
 }
 @media (prefers-reduced-motion:reduce){
-  .pic,.pic iframe,.veil,.btn{transition:none}
+  .pic,.pic iframe,.veil,.btn,.seg button{transition:none}
   html.js .beat > *{opacity:1;transform:none;transition:none}
   .cue::after{animation:none}
 }
@@ -160,7 +187,8 @@ footer a:hover{color:var(--ink)}
   <a class="mark" href="./" aria-label="song">
     <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 20V12M11 23V9M16 26V6M21 22V10M26 19V13" stroke="#ff7a3d" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>song
   </a>
-  <button id="sound" aria-pressed="false"></button>
+  <button class="ctl" id="pause" aria-label="Pause"></button>
+  <button class="ctl" id="sound" aria-pressed="false"></button>
   <a href="#get">Get it</a>
   <a href="https://github.com/nuterian/song">GitHub</a>
 </header>
@@ -174,6 +202,7 @@ footer a:hover{color:var(--ink)}
     <button class="playbig" id="playbig" aria-label="Play the video">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg>
     </button>
+    <span class="blip" id="blip" aria-hidden="true"></span>
     <span class="cue" aria-hidden="true"></span>
   </div>
 
@@ -240,14 +269,48 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
 // line is there.
 (function () {
   var film = document.getElementById("film"), pic = document.getElementById("pic");
-  var sound = document.getElementById("sound"), cams = document.getElementById("cams"), bar = document.getElementById("bar");
+  var sound = document.getElementById("sound"), pause = document.getElementById("pause"), blip = document.getElementById("blip");
+  var cams = document.getElementById("cams"), bar = document.getElementById("bar");
   var ICON = {
     off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></svg>',
     on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg>',
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/></svg>',
-    done: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>'
+    done: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+    play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.5v15l12-7.5z" fill="currentColor"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>'
   };
-  var frame = null, player = null, beat = null, away = false, was = false;
+  var frame = null, player = null, beat = null, away = false, was = false, stopped = false, fader = 0;
+
+  // the song's loudness, eased to where it is wanted: nothing starts or stops at full
+  function fade(to, ms, then) {
+    var a = player.audio, from = a.volume, t0 = performance.now();
+    clearInterval(fader);
+    fader = setInterval(function () {
+      var w = Math.min((performance.now() - t0) / ms, 1);
+      a.volume = Math.max(0, Math.min(1, from + (to - from) * w * (2 - w)));
+      if (w >= 1) { clearInterval(fader); if (then) then(); }
+    }, 16);
+  }
+  function rest(then) { fade(0, 260, function () { player.audio.pause(); if (then) then(); }); }
+  function go() { player.audio.volume = 0; var p = player.audio.play(); if (p && p.catch) p.catch(function () {}); fade(1, 420); }
+
+  function said() {
+    var paused = !player || player.audio.paused || stopped;
+    pause.innerHTML = paused ? ICON.play : ICON.pause;
+    pause.setAttribute("aria-label", paused ? "Play" : "Pause");
+  }
+  // pause or play, asked for: by the button in the bar, a click on the picture, or the space bar
+  function toggle(shown) {
+    if (!player) return;
+    stopped = !player.audio.paused && !stopped;
+    if (stopped) rest(); else go();
+    film.classList.remove("still");
+    said();
+    if (shown) {
+      blip.innerHTML = stopped ? ICON.pause : ICON.play;
+      blip.classList.remove("go"); void blip.offsetWidth; blip.classList.add("go");
+    }
+  }
 
   function say() {
     var muted = !player || player.audio.muted;
@@ -262,7 +325,7 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
       var b = document.createElement("button");
       b.textContent = name.charAt(0).toUpperCase() + name.slice(1);
       b.className = player.chosen.camera === name ? "on" : "";
-      b.addEventListener("click", function () { player.choose("camera", name); cameras(); });
+      b.addEventListener("click", function () { player.choose("camera", name, 1.6); cameras(); });
       cams.appendChild(b);
     });
   }
@@ -271,7 +334,7 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
   function direct() {
     if (!player || !beat) return;
     var cam = beat.dataset.camera || "hybrid";
-    if (player.chosen.camera !== cam) player.choose("camera", cam);
+    if (player.chosen.camera !== cam) player.choose("camera", cam, 2.2);      // a move, not a cut
     player.setLyrics(beat.dataset.words === "on");
     cameras();
   }
@@ -284,7 +347,7 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
     frame.title = "The music video, drawn live";
     frame.setAttribute("allow", "autoplay");
     frame.setAttribute("tabindex", "-1");
-    frame.src = "video/?bare=1&track=gravity-in-motion&camera=hybrid&lyrics=off&maxheight=1080&t=61&play=1" + (heard ? "" : "&muted=1");
+    frame.src = "video/?bare=1&adapt=1&track=gravity-in-motion&camera=hybrid&lyrics=off&maxheight=1080&t=61&play=1" + (heard ? "" : "&muted=1");
     pic.appendChild(frame);
     var tries = 0, wait = setInterval(function () {
       var w = frame.contentWindow;
@@ -292,27 +355,44 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
         clearInterval(wait);
         player = w.player;
         player.audio.addEventListener("volumechange", say);
-        // from the first chorus, and round again: the film is a loop of the song's best minute
-        player.audio.addEventListener("timeupdate", function () { if (player.audio.currentTime > 132) player.audio.currentTime = 61; });
+        // from the first chorus to the song's own end, and then from its beginning: its
+        // ending and its opening are made to be arrived at, which a jump back mid-song is not
+        player.audio.addEventListener("ended", function () { player.audio.currentTime = 0; if (!stopped && !away) go(); });
         // a browser that will not start it unasked: the play button, and a click starts it with its sound
-        player.audio.addEventListener("play", function () { film.classList.remove("still"); });
-        setTimeout(function () { if (player.audio.paused && !away) film.classList.add("still"); }, 1500);
-        say(); direct();
-        sound.classList.add("ready");
+        player.audio.addEventListener("play", function () { film.classList.remove("still"); said(); });
+        player.audio.addEventListener("pause", said);
+        setTimeout(function () { if (player.audio.paused && !away && !stopped) film.classList.add("still"); }, 1500);
+        say(); said(); direct();
+        sound.classList.add("ready"); pause.classList.add("ready");
         setTimeout(function () { film.classList.add("live"); }, 150);   // a timer, not a frame: a page not yet shown has no frames
+        // what comes after the film is decoded while there is time, not as it scrolls in
+        setTimeout(function () { var im = new Image(); im.src = "img/studio.webp"; if (im.decode) im.decode().catch(function () {}); }, 2500);
       } else if (++tries > 150) clearInterval(wait);       // 30 s: the poster stays, which is a page
     }, 200);
   }
 
   sound.addEventListener("click", function () {
     if (!player) return;
-    player.audio.muted = !player.audio.muted;
-    if (!player.audio.muted && player.audio.paused) player.audio.play();
+    var a = player.audio;
+    if (a.muted) { a.volume = 0; a.muted = false; stopped = false; if (a.paused) go(); else fade(1, 420); }
+    else fade(0, 260, function () { a.muted = true; a.volume = 1; });
   });
-  document.getElementById("playbig").addEventListener("click", function () {
+  pause.addEventListener("click", function () { toggle(false); });
+  document.getElementById("playbig").addEventListener("click", function (e) {
+    e.stopPropagation();
     if (!player) return start(true);
     player.audio.muted = false;
-    player.audio.play();
+    stopped = false;
+    go();
+  });
+  document.querySelector(".screen").addEventListener("click", function (e) {
+    if (e.target.closest("button,a")) return;
+    toggle(true);
+  });
+  addEventListener("keydown", function (e) {
+    if (e.code !== "Space" || e.target.closest("button,a,input,textarea") || away) return;
+    e.preventDefault();
+    toggle(true);
   });
 
   // which statement is on screen: the one across the middle of the window
@@ -333,8 +413,8 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
       away = !seen[0].isIntersecting;
       bar.classList.toggle("solid", away);
       if (!player) return;
-      if (away) { was = !player.audio.paused; player.audio.pause(); }
-      else if (was) player.audio.play();
+      if (away) { was = !player.audio.paused && !stopped; if (was) rest(); }
+      else if (was && !stopped) go();
     }).observe(film);
   } else {
     document.documentElement.classList.remove("js");

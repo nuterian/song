@@ -83,3 +83,44 @@ export function textureValues(buffer, spec) {
   if (spec.packing !== "planes") return new Float32Array(buffer);
   return columns(new Uint8Array(buffer), [spec.dtype], spec.width * spec.height * (spec.channels || 4))[0];
 }
+
+// A file of the bundle, fetched, inflated and unpacked: the grid's values (`kind` "grid",
+// `spec` the plan) or a texture's ("texture", its own spec). In a worker where there is
+// one, so that a hundred milliseconds of unpacking are not taken from the page that is
+// drawing; here, by the same functions, where there is not.
+let worker = null, asked = 0;
+const waiting = new Map();
+export async function decoded(url, name, kind, spec, options) {
+  const here = async () => {
+    const buffer = await fetchBytes(url, name, options);
+    return kind === "grid" ? gridValues(buffer, spec) : textureValues(buffer, spec);
+  };
+  if (typeof Worker === "undefined" || worker === false) return here();
+  try {
+    if (!worker) {
+      worker = new Worker(new URL("./bundle-worker.js", import.meta.url), { type: "module" });
+      worker.onmessage = (e) => {
+        const job = waiting.get(e.data.id);
+        waiting.delete(e.data.id);
+        if (!job) return;
+        if (e.data.error) job.reject(new Error(e.data.error)); else job.resolve(new Float32Array(e.data.buffer));
+      };
+      worker.onerror = () => {                       // no module workers here: everything waiting is done on the page
+        worker = false;
+        for (const job of waiting.values()) job.here().then(job.resolve, job.reject);
+        waiting.clear();
+      };
+    }
+    const lean = kind === "grid"
+      ? { frames_packing: spec.frames_packing, frames_dtype: spec.frames_dtype, grid: { frames: spec.grid.frames } }
+      : { packing: spec.packing, dtype: spec.dtype, width: spec.width, height: spec.height, channels: spec.channels };
+    return await new Promise((resolve, reject) => {
+      const id = ++asked;
+      waiting.set(id, { resolve, reject, here });
+      worker.postMessage({ id, url: new URL(url, location.href).href, name, kind, spec: lean, options });
+    });
+  } catch (e) {
+    if (worker === false || !(e instanceof Error) || /Worker|SecurityError/.test(String(e))) return here();
+    throw e;
+  }
+}
