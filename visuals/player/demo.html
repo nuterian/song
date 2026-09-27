@@ -88,6 +88,13 @@
   body.embed #caption { display: none; }
   body.embed #picks { padding-bottom: 16px; }
 
+  /* ?bare=1: the picture alone, filling its frame: the landing page's hero, which has the
+     controls it wants of its own and reaches the player through window.player */
+  body.bare { --w: min(100vw, 100dvh * 16 / 9); min-height: 0; height: 100dvh; background: #000; }
+  body.bare #stage { margin-top: 0; }
+  body.bare canvas { border-radius: 0; cursor: default; }
+  body.bare #bar, body.bare #picks, body.bare #caption, body.bare #big { display: none; }
+
   /* narrow: the picture across the width at the top, the controls under it */
   @media (max-width: 640px) {
     body { --w: calc(100vw - 24px); justify-content: flex-start; }

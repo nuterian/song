@@ -4,575 +4,250 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0a0c10">
-<title>song: a music video drawn from the song, and lyrics timed to the word</title>
-<meta name="description" content="Give it a track and it draws a music video from what it hears, with the lyrics timed to the word, using only free models that run on your own machine.">
+<meta name="theme-color" content="#000000">
+<title>song: a music video for any song</title>
+<meta name="description" content="Give it a track. It listens to the whole song, then draws it as a solar system where every beat, note and word moves something. Free, open source, and made on your own Mac.">
 <link rel="canonical" href="https://jugalm.com/song/">
-<!-- The card a shared link unfurls into, and what the page is for a reader that is a
-     machine: the same author id jugalm.com uses, so the two resolve to one person. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="song">
-<meta property="og:title" content="song: a music video drawn from the song">
-<meta property="og:description" content="Give it a track and it draws a music video from what it hears, with the lyrics timed to the word, using only free models that run on your own machine.">
+<meta property="og:title" content="song: a music video for any song">
+<meta property="og:description" content="Give it a track. It listens to the whole song, then draws it as a solar system where every beat, note and word moves something.">
 <meta property="og:url" content="https://jugalm.com/song/">
 <meta property="og:image" content="https://jugalm.com/song/img/cosmos-still.webp">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","@id":"https://jugalm.com/song/#app","name":"song","url":"https://jugalm.com/song/","applicationCategory":"MultimediaApplication","dateCreated":"2026","image":"https://jugalm.com/song/img/cosmos-still.webp","description":"Give it a track and it draws a music video from what it hears, with the lyrics timed to the word, using only free models that run on your own machine.","codeRepository":"https://github.com/nuterian/song","author":{"@type":"Person","@id":"https://jugalm.com/#me","name":"Jugal Manjeshwar","url":"https://jugalm.com/"},"isPartOf":{"@id":"https://jugalm.com/#site"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","@id":"https://jugalm.com/song/#app","name":"song","url":"https://jugalm.com/song/","applicationCategory":"MultimediaApplication","operatingSystem":"macOS","dateCreated":"2026","image":"https://jugalm.com/song/img/cosmos-still.webp","description":"Give it a track. It listens to the whole song, then draws it as a solar system where every beat, note and word moves something. Free, open source, and made on your own Mac.","codeRepository":"https://github.com/nuterian/song","author":{"@type":"Person","@id":"https://jugalm.com/#me","name":"Jugal Manjeshwar","url":"https://jugalm.com/"},"isPartOf":{"@id":"https://jugalm.com/#site"}}</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%23ff7a3d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
-<!-- The poster is what the page paints first and what it is judged on. It is 48 KB, and
-     the player behind it (8 MB with its song) is only fetched when it is asked for. -->
+<!-- The poster is what the page paints first; the live picture arrives over it. -->
 <link rel="preload" as="image" href="img/cosmos-still.webp" fetchpriority="high">
-
 <style>
 :root{
-  --bg:#0a0c10; --ink:#f4f6fa; --dim:#98a2b3; --faint:#5b6575;
-  --line:#1c212a; --panel:#0d1015; --accent:#ff7a3d; --good:#4ade80;
-  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+  --bg:#000; --ink:#f5f5f7; --dim:#a1a1a6; --faint:#6e6e73; --line:#1d1d1f; --accent:#ff7a3d;
   --ease:cubic-bezier(.16,.84,.34,1);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  font:17px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
-img,video{max-width:100%;height:auto;display:block}
-::selection{background:rgba(255,122,61,.32)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+img{display:block;max-width:100%;height:auto}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
 
-.wrap{max-width:700px;margin:0 auto;padding:0 24px}
-.wide{max-width:1280px;margin:0 auto;padding:0 24px}
-/* Body copy keeps a 700px measure and gives up being centred on the page, so it
-   starts where the pictures start. Centred over media half again its width, a
-   left-aligned column shares an axis with everything and an edge with nothing -
-   which is what "misaligned" looks like even when every gap is symmetrical. */
-.copy{max-width:1280px;margin:0 auto;padding:0 24px}
-.copy > *{max-width:700px}
+/* The bar: a name and two ways on. */
+header{position:absolute;inset:0 0 auto;height:52px;display:flex;align-items:center;gap:26px;padding:0 28px;z-index:3;font-size:14px;color:var(--dim)}
+header .mark{display:flex;align-items:center;gap:9px;color:var(--ink);font-weight:600;letter-spacing:-.01em;margin-right:auto}
+header .mark svg{width:20px;height:20px}
+header a:hover{color:var(--ink)}
 
-/* ---------- motion ----------
-   All of it is CSS, and all of it is an enhancement over a page that is
-   already finished without it. The obvious way to reveal on scroll is to hide
-   everything and have JavaScript add a class as an observer fires, and it is
-   wrong in one direction that matters: anywhere the script does not finish its
-   job the page is blank. Everything below is either scroll-driven (@supports, so an engine
-   without timelines simply shows the finished state) or a one-shot on load
-   whose only job is to arrive - never to hold anything back.
+/* One screen: what it is, and the thing itself. The picture takes what the words leave. */
+.hero{min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:76px 24px 28px;text-align:center}
+h1{margin:0;font-size:clamp(34px,5.6vw,68px);line-height:1.04;font-weight:650;letter-spacing:-.035em}
+.sub{margin:14px auto 0;max-width:34em;color:var(--dim);font-size:clamp(16px,1.7vw,21px);line-height:1.4}
+.stage{position:relative;flex:none;margin:26px 0 18px;aspect-ratio:16/9;
+  width:min(100%, 1180px, calc((100svh - 330px) * 16 / 9));min-width:min(100%,300px);
+  background:#000 url(img/cosmos-still.webp) center/cover no-repeat;border-radius:14px;overflow:hidden}
+.stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;opacity:0;transition:opacity .9s var(--ease)}
+.stage.live iframe{opacity:1}
+/* What the picture can be asked, its sound and its camera, under it and not on it: a
+   lyric line may be anywhere in the sky. They are there once the picture is live. */
+.pill{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border-radius:17px;
+  background:#161618;color:var(--dim);white-space:nowrap;font-size:13px}
+.pill svg{width:15px;height:15px}
+.pill:hover{color:var(--ink)}
+.seg{display:inline-flex;border-radius:17px;overflow:hidden;background:#161618;font-size:13px}
+.seg button{height:34px;padding:0 13px;color:var(--dim)}
+.seg button:hover{color:var(--ink)}
+.seg button.on{color:var(--ink);background:#2a2a2d}
+.go .pill,.go .seg{visibility:hidden;opacity:0;transition:opacity .5s var(--ease)}
+.go.live .pill,.go.live .seg{visibility:visible;opacity:1}
+.playbig{position:absolute;inset:0;margin:auto;z-index:1;width:76px;height:76px;border-radius:50%;display:none;place-items:center;
+  background:rgba(0,0,0,.72);box-shadow:0 0 0 1px rgba(255,255,255,.22);color:var(--ink)}
+.playbig svg{width:26px;height:26px;margin-left:4px}
+.stage.still .playbig{display:grid}
+.go{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px 18px;font-size:15px;
+  width:min(100%, 1180px, calc((100svh - 330px) * 16 / 9));min-width:min(100%,300px)}
+.go .pill{justify-self:start}
+.go .seg{justify-self:end}
+.go .mid{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;justify-content:center}
+.btn{display:inline-flex;align-items:center;height:42px;padding:0 22px;border-radius:21px;background:var(--ink);color:#000;font-weight:560;
+  transition:transform .2s var(--ease)}
+.btn:hover{transform:scale(1.03)}
+.go .quiet{color:var(--dim)}
+.go .quiet:hover{color:var(--ink)}
 
-   Two properties do all the work, opacity and transform, because they are the
-   two the compositor can animate without laying the page out again. The one
-   exception is the header, which animates its own blur over 96px of scroll -
-   and that one pays for itself, because it means there is no backdrop filter
-   running at all while you are at the top of the page.
+/* The second screen: that it is yours to direct, and how to have it. */
+.own{min-height:100svh;display:grid;align-content:center;justify-items:center;gap:0;padding:72px 24px 40px;text-align:center}
+h2{margin:0;font-size:clamp(28px,4.2vw,52px);line-height:1.06;font-weight:650;letter-spacing:-.03em}
+.own .shot{margin:30px 0 0;width:min(100%,1080px,calc((100svh - 480px) * 1.6));min-width:min(100%,300px);border-radius:12px;border:1px solid var(--line)}
+.get{margin:28px 0 0;display:grid;gap:14px;justify-items:center;width:min(100%,640px)}
+.code{position:relative;width:100%;text-align:left;background:#0b0b0d;border:1px solid var(--line);border-radius:12px;padding:16px 56px 16px 18px;
+  font:13.5px/1.75 var(--mono);color:var(--ink);overflow-x:auto;white-space:pre}
+.code .c{color:var(--faint)}
+.copy{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:var(--dim)}
+.copy:hover{background:var(--line);color:var(--ink)}
+.copy svg{width:16px;height:16px}
+.fine{color:var(--faint);font-size:13px;line-height:1.55;max-width:46em}
+footer{padding:0 24px 34px;text-align:center;color:var(--faint);font-size:13px}
+footer a:hover{color:var(--ink)}
 
-   Nothing above the fold starts at opacity 0, and that is not a style choice.
-   A document that is laid out but never rendered - a hidden pane, a thumbnail,
-   anything measuring the page without showing it - never advances the
-   animation clock, so a one-shot with fill-mode:both sits on its first
-   keyframe forever. A pane reporting a viewport of 0 held the whole hero at
-   opacity 0 exactly that way. So the hero only ever *moves*: frozen, it is a
-   readable hero sitting 24px low. The same rule is why the logo's meter dips
-   and returns rather than growing from nothing, and why the headline's accent
-   sweeps onto a word that is already legible ink underneath. Below the fold
-   the reveals are scroll-driven and @supports-guarded, where the fallback is
-   the finished state, so they can afford to fade. */
-@keyframes rise{from{opacity:0;transform:translateY(26px)}}
-@keyframes settle{from{opacity:0;transform:translateY(30px) scale(.985)}}
-@keyframes lift{from{opacity:0;transform:translateY(14px)}}
-@keyframes sweep{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-@keyframes dock{from{background-color:rgba(10,12,16,0)}
-  to{background-color:rgba(10,12,16,.88);border-bottom-color:rgba(28,33,42,.9)}}
-@keyframes tick{0%,100%{transform:scaleY(1)}42%{transform:scaleY(.34)}70%{transform:scaleY(1.12)}}
-@keyframes sung{from{background-position:100% 0}}
-@keyframes glide{from{transform:translateY(24px)}}
-@keyframes glidefig{from{transform:translateY(30px) scale(.986)}}
-
-/* The hero is on screen before there is anything to scroll, so it arrives on
-   its own clock. Everything below it waits for you to come to it. */
-.hero .rise{animation:glide .85s var(--ease) .02s both;animation-timeline:auto}
-.hero .wrap .rise:nth-child(2){animation-delay:.10s}
-.hero .wrap .rise:nth-child(3){animation-delay:.20s}
-.hero .wrap .rise:nth-child(4){animation-delay:.28s}
-.hero figure.rise{animation:glidefig 1s var(--ease) .36s both;animation-timeline:auto}
-
-@supports (animation-timeline: view()){
-  @media (prefers-reduced-motion:no-preference){
-    .rise{animation:rise linear both;animation-timeline:view();
-      animation-range:entry 4% entry 46%}
-    figure.rise{animation-name:settle}
-    /* Four identical boxes, so four offsets into the same range read as a
-       stagger without a single delay or a line of script. */
-    .stat{animation:lift linear both;animation-timeline:view()}
-    .stat:nth-child(1){animation-range:entry 10% entry 42%}
-    .stat:nth-child(2){animation-range:entry 14% entry 46%}
-    .stat:nth-child(3){animation-range:entry 18% entry 50%}
-    .stat:nth-child(4){animation-range:entry 22% entry 54%}
-  }
+@media (max-width:900px){
+  .go{grid-template-columns:1fr 1fr}
+  .go .mid{grid-column:1 / -1;grid-row:1}
 }
-@supports (animation-timeline: scroll()){
-  @media (prefers-reduced-motion:no-preference){
-    .playhead{animation:sweep linear both;animation-timeline:scroll()}
-    header.top{animation:dock linear both;animation-timeline:scroll();
-      animation-range:0 96px}
-  }
-}
-/* The disclosures snap open, and that is deliberate. Animating
-   ::details-content with interpolate-size is the tidy modern way to slide one
-   open, and it was here until it was measured: with the details open, the
-   content sat at block-size 0, content-visibility hidden, opacity 0. Whether
-   that was the harness or the engine hardly matters - every other animation on
-   this page fails to "no animation", and this one fails to "the disclosure
-   opens and there is nothing in it". Hidden prose is not a trade worth 340ms
-   of easing. The chevron already says the thing happened. */
-@media (prefers-reduced-motion:reduce){
-  html{scroll-behavior:auto} *{transition:none!important;animation:none!important}
-}
-/* A scroll-driven animation needs somewhere to scroll. On paper there is
-   nowhere, and every element below the first page would print blank. */
-@media print{
-  .rise,.stat{animation:none!important;opacity:1!important;transform:none!important}
-  .playhead,header.top{display:none}
-}
-
-/* ---------- header ----------
-   No backdrop-filter. There was one, and it is the first thing to go when a
-   page scrolls badly: a blur behind a sticky element has to read the composited
-   backdrop back, blur it and draw it again on every frame the header moves over
-   content, which is every scroll frame, over 3424x116 device pixels on a retina
-   screen. This one was also animating its own radius, so it could not even be
-   cached between frames. Against a ground this close to black, 88% opacity does
-   the same job for nothing.
-
-   Its own measure, narrower than the media below it. Aligned to the video the
-   nav is 1232 wide, and on a large screen that reads as two items flung into
-   opposite corners of an empty bar - the gap either side is correct and the
-   composition still looks wrong. Inside the picture's edges it belongs to the
-   page instead of framing it. */
-header.top{position:sticky;top:0;z-index:9;
-  background:rgba(10,12,16,.88);border-bottom:1px solid rgba(28,33,42,0)}
-.top .bar{max-width:1080px;margin:0 auto;padding:0 24px;
-  display:flex;align-items:center;gap:12px;height:60px}
-.playhead{position:absolute;inset:auto 0 -1px;height:2px;background:var(--accent);
-  transform:scaleX(0);transform-origin:0 50%}
-.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.03em}
-.eq{width:20px;height:16px;color:var(--accent);overflow:visible}
-.eq path{stroke:currentColor;stroke-width:2.3;stroke-linecap:round;fill:none;
-  transform-origin:50% 50%;animation:tick .85s var(--ease) both}
-.eq path:nth-child(1){animation-delay:.10s} .eq path:nth-child(2){animation-delay:.17s}
-.eq path:nth-child(3){animation-delay:.24s} .eq path:nth-child(4){animation-delay:.31s}
-.eq path:nth-child(5){animation-delay:.38s}
-.top nav{margin-left:auto;display:flex;align-items:center;gap:4px}
-.top nav a{font-size:14.5px;color:var(--dim);padding:9px 15px;border-radius:999px;
-  transition:color .18s var(--ease),background .18s var(--ease),transform .18s var(--ease)}
-.top nav a:hover{color:var(--ink)}
-.top nav a.cta{background:var(--ink);color:#0a0c10;font-weight:650}
-.top nav a.cta:hover{background:#fff;transform:translateY(-1px)}
-@media (max-width:560px){ .top nav a.ghost{display:none} }
-
-/* ---------- type ---------- */
-h1{font-size:clamp(52px,10.5vw,124px);line-height:.92;letter-spacing:-.055em;
-   margin:0 0 30px;font-weight:700;text-wrap:balance}
-h2{font-size:clamp(36px,6.4vw,74px);line-height:.98;letter-spacing:-.05em;
-   margin:0 0 22px;font-weight:700;text-wrap:balance}
-/* The headline sings its own last word, the way the video does: the accent
-   arrives across it once and stays. If background-clip:text is not there the
-   word is simply accent-coloured, which is the state it ends in anyway. */
-.lit{color:var(--accent)}
-@supports ((background-clip:text) or (-webkit-background-clip:text)){
-  .lit{color:transparent;-webkit-text-fill-color:transparent;
-    background:linear-gradient(90deg,var(--accent) 0 50%,var(--ink) 50%);
-    background-size:200% 100%;-webkit-background-clip:text;background-clip:text;
-    animation:sung 1.15s var(--ease) .5s both}
-}
-.lede{font-size:clamp(19px,2.2vw,23px);line-height:1.45;color:var(--dim);
-  margin:0 0 38px;text-wrap:pretty}
-.say{font-size:19px;line-height:1.55;color:var(--dim);margin:0;text-wrap:pretty}
-.say b,.lede b{color:var(--ink);font-weight:640}
-.kicker{font:600 12px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;
-  color:var(--accent);margin:0 0 20px}
-code{font:.87em var(--mono);background:#12161d;border:1px solid var(--line);
-  border-radius:5px;padding:1.5px 6px;color:#dde5f0}
-
-section{padding:clamp(104px,15vw,200px) 0 0}
-.hero{padding:clamp(56px,10vw,112px) 0 0;text-align:center}
-.hero .wrap{max-width:880px}
-
-/* ---------- buttons ---------- */
-.btns{display:flex;gap:12px;justify-content:center;align-items:center}
-.btn{display:inline-flex;align-items:center;justify-content:center;min-height:54px;
-  padding:0 30px;border-radius:999px;font-size:16.5px;font-weight:640;
-  border:1px solid var(--line);background:#11151c;color:var(--ink);
-  transition:border-color .18s var(--ease),background .18s var(--ease),transform .12s var(--ease)}
-.btn:hover{border-color:#38445a;background:#161b24;transform:translateY(-2px)}
-.btn:active{transform:translateY(0)}
-.btn.primary{background:var(--ink);color:#0a0c10;border-color:var(--ink)}
-.btn.primary:hover{background:#fff;border-color:#fff}
-@media (max-width:520px){
-  .btns{flex-direction:column;align-items:stretch;max-width:330px;margin-inline:auto}
-  .btn{width:100%}
-}
-.under{font:13px/1.5 var(--mono);color:var(--faint);margin:26px 0 0;letter-spacing:.04em}
-
-/* ---------- media ---------- */
-figure{margin:clamp(46px,7vw,86px) 0 0}
-/* height:auto up there is load-bearing. The width/height attributes let the
-   browser reserve the right box before the file arrives, but they also map to a
-   presentational height - and without height:auto that height wins, so every
-   shot gets drawn at the wrong shape. It happened once. */
-figure img,figure video{width:100%;border-radius:16px;border:1px solid var(--line);
-  box-shadow:0 20px 52px rgba(0,0,0,.55)}
-figcaption{margin:24px auto 0;max-width:600px;font-size:14px;line-height:1.6;
-  color:var(--faint);text-align:center}
-/* The hero is a centred composition and its caption is centred under it.
-   Everything below the hero reads down a left edge, and a caption centred over
-   a picture in that half of the page is the one line that does not. */
-section:not(.hero) figcaption{margin-left:0;text-align:left}
-figcaption b{color:var(--dim);font-weight:600}
-.strip img{border-radius:12px}
-
-/* ---------- numbers ---------- */
-/* clip, not hidden, and the two lines are not interchangeable: overflow:hidden
-   makes this grid a scroll container, and a scroll container is what view()
-   resolves against. Under `hidden` each cell is permanently "in view" of its
-   own parent, so the stagger below silently never ran - the stats measured
-   opacity 1 at every scroll position on the page. overflow:clip does the same
-   clipping without the scrollport. `hidden` is kept first for anything that
-   does not know `clip`, which loses the stagger and keeps the corners. */
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
-  border:1px solid var(--line);border-radius:16px;overflow:hidden;overflow:clip;
-  margin:clamp(48px,7vw,76px) 0 0}
-.stat{background:var(--panel);padding:38px 12px;text-align:center}
-.stat b{display:block;font:700 clamp(32px,5vw,52px)/1 var(--mono);
-  letter-spacing:-.05em;margin-bottom:11px}
-.stat span{font-size:12.5px;color:var(--faint);white-space:nowrap}
-.stat.win b{color:var(--good)}
-@media (max-width:660px){ .stats{grid-template-columns:repeat(2,1fr)} }
-
-/* ---------- disclosure ---------- */
-details{margin:clamp(48px,6vw,72px) 0 0;border-top:1px solid var(--line)}
-details summary{list-style:none;cursor:pointer;padding:19px 2px;display:flex;
-  align-items:center;gap:10px;font-size:15px;font-weight:560;color:var(--dim);
-  transition:color .18s var(--ease)}
-details summary::-webkit-details-marker{display:none}
-details summary:hover{color:var(--ink)}
-details summary::after{content:"";width:7px;height:7px;margin-left:2px;
-  border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;
-  transform:rotate(45deg) translate(-2px,-2px);transition:transform .22s var(--ease)}
-details[open] summary::after{transform:rotate(-135deg) translate(-3px,-3px)}
-details[open] summary{color:var(--ink)}
-.body{padding:4px 0 30px;font-size:16px;line-height:1.68;color:#a9b3c3}
-.body p{margin:0 0 16px}
-.body b{color:var(--ink)}
-
-pre{background:var(--panel);border:1px solid var(--line);border-radius:14px;
-  padding:22px 24px;overflow-x:auto;margin:0 0 22px;text-align:left}
-pre code{background:none;border:0;padding:0;font-size:14.5px;color:#bcc7d7;line-height:1.9}
-
-footer{margin-top:clamp(96px,12vw,160px);border-top:1px solid var(--line);
-  padding:40px 0 88px;color:var(--faint);font-size:14px;text-align:center}
-footer a{color:var(--dim)} footer a:hover{color:var(--ink)}
-
-/* ---------- the video, in the page ----------
-   A poster and a play button until it is asked for, then the demo itself in a frame. The
-   frame is only made on the click: an iframe in the markup would fetch the player, its
-   sky and a 5 MB song on every visit, for everyone who only came to read (measured: 0.1
-   MB for the page as it is, 7.3 MB in its first 8 s with the frame in the markup). Once
-   playing it is the demo's page, controls and all but its caption (?embed=1), so the box
-   grows to hold them: the demo's picture is (width - 32px) at 16:9, ~120px under it. */
-.player{container-type:inline-size}
-.screen{position:relative;aspect-ratio:16/9;border-radius:16px;overflow:hidden;
-  border:1px solid var(--line);background:#000;box-shadow:0 20px 52px rgba(0,0,0,.55)}
-.screen img{width:100%;height:100%;object-fit:cover}
-.screen .go{position:absolute;inset:0;width:100%;height:100%;border:0;padding:0;margin:0;
-  background:transparent;cursor:pointer;display:grid;place-items:center}
-.go span{width:88px;height:88px;border-radius:50%;display:grid;place-items:center;
-  background:rgba(10,12,16,.55);border:1px solid rgba(244,246,250,.3);color:var(--ink);
-  transition:transform .2s var(--ease),background .2s var(--ease)}
-.go:hover span{transform:scale(1.06);background:rgba(10,12,16,.75)}
-.go:focus-visible span{outline:2px solid var(--accent);outline-offset:4px}
-.go svg{width:30px;height:30px;margin-left:5px}
-.screen.on{aspect-ratio:auto;height:calc((100cqw - 32px) * 9 / 16 + 124px);background:var(--bg)}
-.screen iframe{width:100%;height:100%;border:0;display:block}
 @media (max-width:640px){
-  .screen.on{height:calc((100cqw - 24px) * 9 / 16 + 214px)}
-  .go span{width:68px;height:68px}
+  .go{width:100%}
+  /* narrow: the page flows, the picture straight after the words */
+  header{padding:0 18px;gap:18px}
+  .hero{min-height:0;padding:76px 16px 44px}
+  .own{min-height:0}
+  .code{font-size:12px}
+  .stage{width:100%;border-radius:10px;margin:22px 0 16px}
+  .seg button{padding:0 10px}
+  .own{padding:56px 16px 32px}
+  .own .shot{width:100%}
 }
-.hero figure .say{max-width:600px;margin:22px auto 0;font-size:14px;color:var(--faint);text-align:center}
-.hero figure .say a{color:var(--dim);border-bottom:1px solid var(--line)}
-.hero figure .say a:hover{color:var(--ink)}
-.strip3 img{border-radius:12px}
+@media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto} .stage iframe,.go .pill,.go .seg,.btn{transition:none} }
 </style>
 </head>
 <body>
 
-<header class="top">
-  <div class="bar">
-    <a class="brand" href="#top">
-      <svg class="eq" viewBox="0 0 26 20" aria-hidden="true">
-        <path d="M2 12 L2 8"/><path d="M7 15 L7 5"/><path d="M12 18 L12 2"/>
-        <path d="M17 14 L17 6"/><path d="M22 11 L22 9"/>
-      </svg>song</a>
-    <nav>
-      <a class="ghost" href="https://github.com/nuterian/song">GitHub</a>
-      <a class="ghost" href="#lyrics">Lyrics</a>
-      <a class="cta" href="video/">Watch</a>
-    </nav>
-  </div>
-  <div class="playhead" aria-hidden="true"></div>
+<header>
+  <a class="mark" href="./" aria-label="song">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 20V12M11 23V9M16 26V6M21 22V10M26 19V13" stroke="#ff7a3d" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>song
+  </a>
+  <a href="#get">Get it</a>
+  <a href="https://github.com/nuterian/song">GitHub</a>
 </header>
 
-<!-- ------------------------------------------------------------ hero -->
-<section class="hero" id="top">
-  <div class="wrap">
-    <h1 class="rise">A music video, drawn from the <span class="lit">song</span>.</h1>
-    <p class="lede rise">Give it a track. The kick, the bass, the notes and the voice
-      each move their own part of a solar system, and the words arrive as they are
-      sung. It runs on your own machine, with free models.</p>
-    <div class="btns rise">
-      <a class="btn primary" href="video/">Open the video</a>
-      <a class="btn" href="https://github.com/nuterian/song">GitHub</a>
-    </div>
+<main>
+<section class="hero">
+  <div>
+    <h1>Every song is a solar system.</h1>
+    <p class="sub">Give it a track. It listens to the whole song, then draws it: every beat, note and word moves something.</p>
   </div>
 
-  <div class="wide">
-    <figure class="rise player">
-      <div class="screen" id="screen">
-        <img src="img/cosmos-still.webp" width="1280" height="720" fetchpriority="high"
-             alt="The Sun in the middle of the frame with its orbits drawn round it, and the eight planets in a line to the right of it, over a dark sky of stars.">
-        <button class="go" type="button" aria-label="Play the video"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg></span></button>
-      </div>
-      <p class="say"><b>Gravity in Motion</b> by Jugal Manjeshwar, drawn by your browser
-        as it plays: there is no video file. Switch the camera, turn the words off, or try
-        the other song. <a href="video/">Full size</a></p>
-    </figure>
+  <div class="stage" id="stage" role="img" aria-label="The music video for Gravity in Motion, drawn live: the Sun and its planets moving with the song">
+    <button class="playbig" id="playbig" aria-label="Play the video">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg>
+    </button>
+  </div>
+
+  <div class="go" id="go">
+    <button class="pill" id="sound" aria-pressed="false"></button>
+    <span class="mid">
+      <a class="btn" href="#get">Make your own</a>
+      <a class="quiet" href="video/">Watch the whole song</a>
+    </span>
+    <span class="seg" id="cams" role="group" aria-label="Camera"></span>
   </div>
 </section>
 
-<!-- ------------------------------------------------------------ video -->
-<section>
-  <div class="copy rise">
-    <p class="kicker">The video</p>
-    <h2>Every part plays a body.</h2>
-    <p class="say">The song is split into its parts and heard one by one. The kick
-      swells the Sun, the snare sends a ring out across the orbits, the hats light the
-      stars, the bass charges the corona until it flares, each synth note lights its own
-      planet, and the voice carries the words. <b>Nothing moves unless the song does.</b></p>
-  </div>
-  <div class="wide">
-    <figure class="rise strip3">
-      <img src="img/cosmos-cameras.webp" loading="lazy" decoding="async" width="2424" height="450"
-           alt="The same moment through three cameras: the whole system from above at an angle, a closer view that leans with the music, and a close shot on Saturn.">
-      <figcaption>One moment, three cameras: <b>static, hybrid and cinematic</b>, all
-        in the same file, switched while it plays.</figcaption>
-    </figure>
-  </div>
-  <div class="copy">
-    <details class="rise">
-      <summary>What is decided, and how to change it</summary>
-      <div class="body">
-        <p>A director turns what was heard into acts, shots and the moments the beat
-        comes back. Every decision is in a <b>direction sheet</b> of about fifty lines,
-        and the default sheet is the video: bake it and you get the same picture.</p>
-        <p>The studio shows the picture, the sheet and the song on a timeline in bars.
-        Drag a shot, pick a planet, move a dial, or ask in words, "close on Saturn in the
-        second chorus", and a model on your machine answers with edits to the sheet. An
-        edit is back on screen in about a second and a half, and every change can be
-        undone.</p>
-        <p>The browser draws the same numbers the mp4 is rendered from, a grid of 262
-        channels at 120 per second, so the two cannot drift apart.</p>
-      </div>
-    </details>
+<section class="own" id="get">
+  <h2>Then direct it yourself.</h2>
+  <p class="sub">Change a shot, move a moment, or just ask. Export in 1080p when it is right.</p>
+  <img class="shot" src="img/studio.webp" width="1800" height="1125" loading="lazy" decoding="async"
+       alt="The studio: the video above a timeline of the song's sections, camera shots and lyric lines">
+  <div class="get">
+    <div class="code" id="code"><span class="c"># macOS, Apple Silicon</span>
+git clone https://github.com/nuterian/song
+cd song && ./setup.sh
+python -m visuals studio<button class="copy" id="copy" aria-label="Copy the commands"></button></div>
+    <p class="fine">Free and open source. Everything runs on your Mac: no account, no uploads, no keys.
+      The install is about 2 GB, plus free models it asks before fetching. A song takes a few minutes to prepare.</p>
   </div>
 </section>
-
-<!-- ----------------------------------------------------------- lyrics -->
-<section id="lyrics">
-  <div class="copy rise">
-    <p class="kicker">The lyrics</p>
-    <h2>Lyrics, timed to the word.</h2>
-    <p class="say">A track and a text file in. Synced lyrics and a finished karaoke
-      video out. <b>Nothing leaves your machine.</b></p>
-    <p class="under">.lrc · word .lrc · .srt · .vtt · .ass · .mp4</p>
-  </div>
-  <div class="wide">
-    <figure class="rise">
-      <video src="img/video-demo.mp4" poster="img/video-still.webp" data-loop
-             controls muted loop playsinline preload="none"
-             width="1920" height="1080"
-             aria-label="Eight bars of the karaoke video, looping: three lyric lines at the bottom left, the middle one filling word by word in an accent colour and swelling as each word is held, over a soft lit wash and a light that crosses the ceiling once a bar, with a thin smooth waveform level with it on the right that brightens where each beat falls."></video>
-      <figcaption>One command. 1080p, 60 fps. Every pixel behind the words came out of
-        the audio: <b>no footage, no template, nothing to supply.</b></figcaption>
-    </figure>
-  </div>
-  <div class="copy">
-    <div class="btns rise" style="justify-content:flex-start;margin-top:40px">
-      <a class="btn primary" href="demo/">Try it in your browser</a>
-    </div>
-  </div>
-</section>
-
-<!-- --------------------------------------------------------- accuracy -->
-<section>
-  <div class="copy rise">
-    <p class="kicker">The premise</p>
-    <h2>You already know the words.</h2>
-    <p class="say">So this is <b>forced alignment</b>, not transcription. A
-      chorus that repeats four times resolves by position, for free.</p>
-  </div>
-  <div class="wide">
-    <figure class="rise strip">
-      <img src="img/app-stage.webp" loading="lazy" decoding="async" width="1520" height="300"
-           alt="The timeline zoomed to one line, word cells along the bottom with dividers running the full height of the waveform.">
-      <figcaption>Word boundaries are cut against the audio itself: <b>a divider
-        that misses the attack is visible</b> against the thing it is cutting.</figcaption>
-    </figure>
-  </div>
-  <div class="copy">
-    <div class="stats">
-      <div class="stat win"><b>94.5</b><span>mean line score</span></div>
-      <div class="stat"><b>33/33</b><span>lines aligned</span></div>
-      <div class="stat"><b>160<small>ms</small></b><span>median disagreement</span></div>
-      <div class="stat"><b>99%</b><span>vocal coverage</span></div>
-    </div>
-    <details class="rise">
-      <summary>Three models, cross-examining each other</summary>
-      <div class="body">
-        <p><b>Demucs</b> isolates the vocal: aligning against the stem rather
-        than the mix is the single biggest accuracy win on dense productions.
-        <b>wav2vec2 CTC</b> anchors the structure in one global pass, so a 4-bar
-        instrumental is absorbed as blanks instead of sliding the rest of the
-        song. <b>Whisper</b> then refines inside each ~20-second section, where
-        it is both accurate and precise.</p>
-        <p>All three are <i>told</i> the lyrics, so all three can be confidently
-        wrong in the same place. A fourth pass is told nothing and reports what
-        it hears. It is the strongest single signal in the merge, and it is
-        what finds the chorus repeat somebody forgot to type.</p>
-        <p>Run against a deliberately degraded alignment the mean score falls
-        from <b>94.5 to 69.9</b> and lines needing review go from 2 to 11. It
-        discriminates.</p>
-      </div>
-    </details>
-  </div>
-</section>
-
-<!-- ----------------------------------------------------------- by ear -->
-<section>
-  <div class="copy rise">
-    <p class="kicker">Where models disagree</p>
-    <h2>You settle it by ear.</h2>
-    <p class="say">Two aligners agreed on 137 of 177 words, and you never see
-      those. The rest play you both candidates. <b>If neither is right, drag a
-      third onto the waveform.</b></p>
-  </div>
-  <div class="wide">
-    <figure class="rise">
-      <img src="img/app-review.webp" loading="lazy" decoding="async" width="1260" height="880"
-           alt="The Check timings card: a waveform strip with blue, green and violet markers, and three options, Now, Suggested and Adjusted, each with its own play button.">
-    </figure>
-  </div>
-  <div class="copy">
-    <details class="rise">
-      <summary>What is deliberately not automated</summary>
-      <div class="body">
-        <p>Snapping every word start to its nearest onset. It looks like free
-        accuracy, but on this track <b>41% of word starts have more than one
-        onset within ±150 ms</b>, so snapping would be a coin flip wearing a lab
-        coat. Where two models disagree and both readings are plausible, no
-        heuristic settles it honestly, so an ear does.</p>
-      </div>
-    </details>
-  </div>
-</section>
-
-<!-- ------------------------------------------------------------- app -->
-<section>
-  <div class="copy rise">
-    <p class="kicker">The whole track</p>
-    <h2>One waveform, every line.</h2>
-    <p class="say">Colour means <b>act here</b> and nothing else. Every edit
-      writes itself back and is <b>re-scored on the way</b>, so a flag never
-      describes a timing you have already fixed.</p>
-  </div>
-  <div class="wide">
-    <figure class="rise">
-      <img src="img/app-full.webp" loading="lazy" decoding="async" width="1560" height="1000"
-           alt="The song app: a waveform with every lyric line bracketed, and the lyrics listed below with per-line scores.">
-    </figure>
-  </div>
-</section>
-
-<!-- ----------------------------------------------------------- close -->
-<section>
-  <div class="wrap rise" style="text-align:center">
-    <h2>On your own machine.</h2>
-    <p class="say" style="margin-bottom:34px">Free models, no accounts, no keys, nothing
-      uploaded. Setup makes two virtual environments and fetches about 3 GB of model
-      weights, once. It is tested on macOS on Apple Silicon.</p>
-    <div>
-      <pre><code>./setup.sh
-python -m visuals studio my-song.wav</code></pre>
-    </div>
-    <div class="btns">
-      <a class="btn primary" href="video/">Open the video</a>
-      <a class="btn" href="https://github.com/nuterian/song">GitHub</a>
-    </div>
-
-    <details style="text-align:left">
-      <summary>Every command, and what lands on disk</summary>
-      <div class="body">
-        <pre><code>python -m visuals studio my-song.wav     # the video, on a timeline, edited by hand or by asking
-python -m visuals make my-song.wav       # the video, staged for the player, no studio
-python -m song                          # open the lyrics app
-python -m song track.wav lyrics.txt     # align, then open it
-python -m song audit workdir/my-track   # repair + list what needs an ear
-python -m song video workdir/my-track   # render karaoke.mp4</code></pre>
-        <p>The lyrics land in <code>workdir/&lt;track&gt;/</code>:
-        <code>lyrics.lrc</code>, <code>lyrics.word.lrc</code>,
-        <code>lyrics.srt</code>, <code>.vtt</code>, and
-        <code>project.json</code>, which holds the word timings, per-line scores, the
-        scorecard and the audit. A song that has been aligned brings its words to the
-        video.</p>
-        <p>Five minutes to align a five-minute track. Lyrics input is plain text: one
-        line per lyric line, a blank line between sections, a header naming each.
-        Demucs on Apple MPS is broken under torch 2.5, so it is CPU throughout.</p>
-      </div>
-    </details>
-  </div>
-</section>
+</main>
 
 <footer>
-  <div class="wrap">
-    <a href="https://github.com/nuterian/song">github.com/nuterian/song</a> ·
-    <a href="video/">the video</a> ·
-    <a href="demo/">the lyrics demo</a><br>
-    <span style="opacity:.65">Free, open-source models. Nothing leaves your machine.</span>
-  </div>
+  <a href="https://github.com/nuterian/song">github.com/nuterian/song</a> · MIT · made by <a href="https://jugalm.com/">Jugal Manjeshwar</a>
 </footer>
 
 <script>
-  /* The video is only fetched when it is asked for: the click puts the demo in the page,
-     playing if the browser allows it (a click here usually lets it), else waiting on its
-     own play button. */
-  const screen = document.getElementById('screen');
-  screen.querySelector('.go').addEventListener('click', () => {
-    const frame = document.createElement('iframe');
-    frame.src = 'video/?embed=1&camera=hybrid&play=1';
-    frame.title = 'Gravity in Motion, the music video';
-    frame.allow = 'autoplay; fullscreen';
-    screen.classList.add('on');
-    screen.replaceChildren(frame);
-    frame.focus();
+// The hero is the video itself, drawn live by the player in a frame of its own
+// (video/?bare=1), silent until asked. The poster is under it from the first paint, so
+// the page is whole before the player has fetched anything, and stays whole without it.
+(function () {
+  var stage = document.getElementById("stage"), sound = document.getElementById("sound"), cams = document.getElementById("cams");
+  var ICON = {
+    off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></svg>',
+    on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/></svg>',
+    done: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>'
+  };
+  var frame = null, player = null;
+
+  function say() {
+    var muted = !player || player.audio.muted;
+    sound.innerHTML = (muted ? ICON.off : ICON.on) + "<span>" + (muted ? "Sound on" : "Sound off") + "</span>";
+    sound.setAttribute("aria-pressed", String(!muted));
+  }
+
+  function cameras() {
+    cams.innerHTML = "";
+    player.variants("camera").forEach(function (name) {
+      var b = document.createElement("button");
+      b.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+      b.className = player.chosen.camera === name ? "on" : "";
+      b.addEventListener("click", function () { player.choose("camera", name); cameras(); });
+      cams.appendChild(b);
+    });
+  }
+
+  // `heard`: asked for with a click, so it may start with its sound on
+  function start(heard) {
+    if (frame) return;
+    stage.classList.remove("still");
+    frame = document.createElement("iframe");
+    frame.title = "The music video, drawn live";
+    frame.setAttribute("allow", "autoplay");
+    frame.src = "video/?bare=1&track=gravity-in-motion&camera=hybrid&lyrics=on&t=61&play=1" + (heard ? "" : "&muted=1");
+    stage.insertBefore(frame, stage.firstChild);
+    var tries = 0, wait = setInterval(function () {
+      var w = frame.contentWindow;
+      if (w && w.player) {
+        clearInterval(wait);
+        player = w.player;
+        player.audio.addEventListener("volumechange", say);
+        // on from the chorus, and round again: the hero is a loop of the song's best minute
+        player.audio.addEventListener("timeupdate", function () { if (player.audio.currentTime > 132) player.audio.currentTime = 61; });
+        say(); cameras();
+        // a browser that will not start it unasked: the play button, and a click starts it with its sound
+        player.audio.addEventListener("play", function () { stage.classList.remove("still"); });
+        setTimeout(function () { if (player.audio.paused) stage.classList.add("still"); }, 1500);
+        setTimeout(function () { stage.classList.add("live"); document.getElementById("go").classList.add("live"); }, 150);   // a timer, not a frame: a page not yet shown has no frames
+      } else if (++tries > 150) clearInterval(wait);       // 30 s: the poster stays, which is a page
+    }, 200);
+  }
+
+  sound.addEventListener("click", function () {
+    if (!player) return;
+    player.audio.muted = !player.audio.muted;
+    if (!player.audio.muted && player.audio.paused) player.audio.play();
+  });
+  document.getElementById("playbig").addEventListener("click", function () {
+    if (!player) return start(true);
+    player.audio.muted = false;
+    player.audio.play();
   });
 
-  /* The karaoke loop is below the fold, so it plays only while it is on screen, and
-     only then is it fetched; with reduced motion asked for, it waits for its controls. */
-  const clips = document.querySelectorAll('video[data-loop]');
-  if (!matchMedia('(prefers-reduced-motion: reduce)').matches && window.IntersectionObserver) {
-    const watch = new IntersectionObserver(seen => {
-      seen.forEach(({target, isIntersecting}) => {
-        if (isIntersecting) target.play().catch(() => {}); else target.pause();
-      });
-    }, {rootMargin: '150px'});
-    clips.forEach(v => watch.observe(v));
-  }
+  // It moves by itself unless the visitor has asked for less: less motion, or less data.
+  var calm = matchMedia("(prefers-reduced-motion: reduce)").matches || (navigator.connection && navigator.connection.saveData);
+  if (calm) stage.classList.add("still");
+  else if (document.readyState === "complete") start(false);
+  else addEventListener("load", function () { start(false); });
+
+  var copy = document.getElementById("copy"), code = document.getElementById("code");
+  copy.innerHTML = ICON.copy;
+  copy.addEventListener("click", function () {
+    var text = code.textContent.split("\n").filter(function (l) { return l && l.charAt(0) !== "#"; }).join("\n");
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () {
+      copy.innerHTML = ICON.done;
+      setTimeout(function () { copy.innerHTML = ICON.copy; }, 1600);
+    });
+  });
+})();
 </script>
 <script src="count.js" defer></script>
 

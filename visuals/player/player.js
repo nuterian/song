@@ -14,6 +14,7 @@ import { lyricInk, lyricOpacity, seating } from "./lyrics.js";
 
 const params = new URLSearchParams(location.search);
 if (params.get("embed")) document.body.classList.add("embed");
+if (params.get("bare")) document.body.classList.add("bare");
 const canvas = document.getElementById("gl");
 const audio = document.getElementById("audio");
 const playBtn = document.getElementById("play");
@@ -502,6 +503,8 @@ async function main() {
     `${plan.sections.length} sections  one program  - press play`;
   document.body.classList.add("ready");
   // ?play=1: start at once, if the browser allows it (it may not without a click here)
+  // ?muted=1: silent until asked, which is what lets a page start it without a click
+  if (params.get("muted")) audio.muted = true;
   if (params.get("play")) audio.play().catch(() => {});
   requestAnimationFrame(tick);
 }
