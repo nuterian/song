@@ -450,6 +450,15 @@ def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
 # a hit would land an eighth of a second off and the orbits would step. So each channel is
 # stored as float16 only if that holds it to within HALF_ERROR, and as float32 otherwise.
 #
+# And a planet's phase (where it is along its orbit, in revolutions) is float32 whatever
+# float16 would hold: HALF_ERROR is fine for a level and too coarse for a place. Saturn's
+# phase is 0.0005 coarse in float16, about 7 pixels in its close shot, so Saturn went in
+# steps some six times a second while the camera, which follows its true path, went
+# smoothly (seen on Jugal's telephone, 2026-09-28). It is rounded to PHASE_STEP first,
+# 0.06 pixels of Saturn there, so that its lowest bits, noise gzip cannot fold, are zeros:
+# 132 KB more for Gravity, where plain float32 would be 369 KB. What else says where things
+# are (distances, the camera) is a pixel or less coarse in float16, and stays so.
+#
 # Each column is written as byte planes (every value's first byte, then every second
 # byte...), because neighbouring values share their high bytes and gzip then finds them.
 #
@@ -470,6 +479,15 @@ def narrowest(values: np.ndarray) -> str:
         back = values.astype("<f2").astype("<f4")
     ok = np.isfinite(back).all() and np.abs(back - values).max(initial=0.0) <= HALF_ERROR
     return "f16" if ok else "f32"
+
+
+PHASES = ("uPh", "uPlutoPh")
+PHASE_STEP = 2.0 ** -18
+
+
+def phase(name: str) -> bool:
+    """Whether the channel `name` is a planet's phase (uPh5, uPlutoPh)."""
+    return name.split(".")[0].rstrip("0123456789") in PHASES
 
 
 def planes(values: np.ndarray, dtype: str) -> bytes:
@@ -516,7 +534,13 @@ def pack(out_dir: str | Path, dest: str | Path) -> Path:
     plan = json.loads((out_dir / "plan.json").read_text())
     stride = len(plan["grid"]["features"])
     data = np.frombuffer((out_dir / plan["frames_file"]).read_bytes(), dtype="<f4").reshape(-1, stride)
-    dtypes = [narrowest(col) for col in data.T]
+    names = [f["name"] for f in plan["grid"]["features"]]
+    if any(phase(name) for name in names):
+        data = data.copy()
+        for c, name in enumerate(names):
+            if phase(name):
+                data[:, c] = np.round(data[:, c].astype(np.float64) / PHASE_STEP) * PHASE_STEP
+    dtypes = ["f32" if phase(name) else narrowest(col) for name, col in zip(names, data.T)]
     piece = int(round(PIECE_SECONDS * plan["grid"]["rate"]))
     files = [f"frames-{k:03d}.bin.gz" for k in range(-(-len(data) // piece))]
     for old in dest.glob("frames*.bin.gz"):                      # an earlier packing's, longer or whole

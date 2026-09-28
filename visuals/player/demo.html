@@ -77,10 +77,15 @@
   #frame, #gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
   #gl { opacity: 0; transition: opacity .9s var(--ease); }
   body.ready #gl { opacity: 1; }
-  /* before it first plays the picture is of the song's strongest moment: that goes as the
-     song starts, and the song's own comes (as long going as the player's STILL_OUT) */
-  body.ready.opening #gl { opacity: 0; transition: opacity .25s ease-in; }
   body.clear #gl { cursor: none; }
+  /* Before the picture there is nothing over it (the controls came first, over black, with
+     "0:00 / 0:00"): they come up with it. If it is slow to come, a quiet sign that it is
+     coming, in the colour of the name's mark. */
+  body:not(.ready) #over, body:not(.ready) #big { opacity: 0; visibility: hidden; }
+  #stage::after { content: ""; position: absolute; left: 50%; top: calc(50% - var(--under, 0px) / 2); width: 10px; height: 10px; margin: -5px;
+    border-radius: 50%; background: #ff7a3d; opacity: 0; pointer-events: none; transition: opacity .4s var(--ease); }
+  body:not(.ready):not(.failed) #stage::after { opacity: .8; transition-delay: .4s; animation: coming 1.6s ease-in-out infinite; }
+  @keyframes coming { 50% { scale: 1.9; opacity: .3; } }
   #lyrics { position: absolute; left: 50%; top: 50%; translate: calc(-50% + var(--aside, 0px)) calc(-50% + var(--lift, 0px)); width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9;
     pointer-events: none; container-type: size; transition: opacity .6s ease; z-index: 2; }       /* over the shades, to be read */
   body.tall #lyrics { width: min(100cqw, 100cqh * 9 / 16); aspect-ratio: 9 / 16; }
@@ -185,12 +190,14 @@
      that a touch has stopped it or started it: glass, so the picture is still there behind */
   #big, #blip { position: absolute; z-index: 3; left: 50%; top: calc(50% - var(--under, 0px) / 2); width: 84px; height: 84px; margin: -42px 0 0 -42px; border-radius: 50%;
     display: grid; place-items: center; }
-  #big { background: var(--ink); color: #000; }
+  /* the way in says what it does: the song begins, with its sound */
+  #big { width: auto; height: 56px; margin: 0; translate: -50% -50%; padding: 0 26px 0 22px; border-radius: 28px; display: inline-flex; align-items: center; gap: 10px;
+    background: var(--ink); color: #000; font-size: 17px; font-weight: 600; white-space: nowrap; }
   #blip { color: var(--ink); background: rgba(22, 22, 26, .46);
     -webkit-backdrop-filter: blur(22px) saturate(1.4); backdrop-filter: blur(22px) saturate(1.4); }
   #big { transition: transform .25s var(--ease), opacity .4s var(--ease), visibility 0s; }
   #big:hover { transform: scale(1.06); }
-  #big svg { width: 30px; height: 30px; margin-left: 4px; }
+  #big svg { width: 20px; height: 20px; }
   #big[disabled], body.played #big { opacity: 0; visibility: hidden; pointer-events: none; transition: transform .25s var(--ease), opacity .4s var(--ease), visibility 0s .4s; }
   #blip { opacity: 0; pointer-events: none; }
   #blip::before { content: ""; width: 30px; height: 30px; background: currentColor;
@@ -267,6 +274,7 @@
   @media (prefers-reduced-motion: reduce) {
     .seg::before, #big, #play, #heard, #over, #gl, #end { transition: none; }
     #blip.shown { animation-duration: .01s; }
+    body:not(.ready):not(.failed) #stage::after { animation: none; }
   }
 </style>
 </head>
@@ -318,7 +326,7 @@
         </div>
       </div>
     </div>
-    <button id="big" aria-label="Play" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg></button>
+    <button id="big" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg>Play with sound</button>
     <div id="blip" aria-hidden="true"></div>
     <div id="error" role="alert" hidden></div>
     <pre id="measure" hidden></pre>
@@ -429,7 +437,7 @@
     stage.addEventListener("pointerdown", (e) => { touch = e.pointerType !== "mouse"; }, true);
     stage.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") { touch = false; show(); } });
     stage.addEventListener("focusin", (e) => { if (e.target.closest("#over")) show(); });
-    big.addEventListener("click", toggle);
+    big.addEventListener("click", () => { audio.muted = false; toggle(); });      // it says "with sound
     gl.addEventListener("click", () => {
       clearTimeout(hiding);
       if (!touch || !body.classList.contains("played")) { toggle(); return; }
@@ -442,10 +450,6 @@
       const first = !body.classList.contains("played");
       body.classList.add("played", "playing");
       if (!touch || first) later();                         // the first time, a finger's too: the picture has the screen
-      if (window.player && window.player.still !== null) {  // the still goes, and the song's own picture comes
-        body.classList.add("opening");
-        setTimeout(() => body.classList.remove("opening"), 260);
-      }
     });
     audio.addEventListener("pause", () => { body.classList.remove("playing"); show(); });
     // the end: what there is to do next

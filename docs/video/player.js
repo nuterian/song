@@ -60,7 +60,7 @@ const mmss = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0"
 // player steps at 60 too. Left to the display's own rate a 120 Hz screen would
 // decay the trails twice as fast and the two would not look alike.
 const STEP = 1 / 60;
-const STILL_OUT = 260;             // milliseconds
+const STILL_OUT = 700;             // milliseconds: the still crossing into the song's own picture
 
 function fail(message) {
   errorBox.hidden = false;
@@ -85,23 +85,29 @@ async function pickTrack() {
   return names[0];
 }
 
-function compile(gl, type, source, label) {
+// (asked whether it compiled only if the program did not link: asking waits for it)
+function compile(gl, type, source) {
   const sh = gl.createShader(type);
   gl.shaderSource(sh, source);
   gl.compileShader(sh);
-  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    fail(`${label} did not compile:\n${gl.getShaderInfoLog(sh)}`);
-  }
   return sh;
 }
 
-function link(gl, vertexSource, fragmentSource, label) {
+// Linked while the page goes on where the browser can compile on its own (asking whether
+// it has linked, before it has, stops the page until it has: 0.2 s on the M4, two on a busy
+// one, with the poster on the landing page frozen under it).
+async function link(gl, vertexSource, fragmentSource, label) {
   const prog = gl.createProgram();
-  gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, vertexSource, `${label} vertex`));
-  gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, fragmentSource, `${label} fragment`));
+  const shaders = [[compile(gl, gl.VERTEX_SHADER, vertexSource), "vertex"], [compile(gl, gl.FRAGMENT_SHADER, fragmentSource), "fragment"]];
+  for (const [sh] of shaders) gl.attachShader(prog, sh);
   gl.bindAttribLocation(prog, 0, "aPos");
   gl.linkProgram(prog);
+  const parallel = gl.getExtension("KHR_parallel_shader_compile");
+  if (parallel) while (!gl.getProgramParameter(prog, parallel.COMPLETION_STATUS_KHR)) await new Promise((next) => setTimeout(next, 16));
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    for (const [sh, which] of shaders) {
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) fail(`${label} ${which} did not compile:\n${gl.getShaderInfoLog(sh)}`);
+    }
     fail(`${label} did not link:\n${gl.getProgramInfoLog(prog)}`);
   }
   return prog;
@@ -168,8 +174,9 @@ class Grid {
       // a moment whose piece has not come is drawn as the nearest that has, and asked for next
       const pi = Math.floor(i / this.piece), pj = Math.floor(j / this.piece);
       this.at = pi;                                  // the piece being drawn: what comes next is fetched from it
-      if (!this.have[pi]) { this.wanted = pi; i = j = this.nearest(i); f = 0; }
-      else if (!this.have[pj]) { this.wanted = pj; j = i; }
+      const want = (k) => { if (this.wanted !== k) { this.wanted = k; if (this.onWant) this.onWant(); } };
+      if (!this.have[pi]) { want(pi); i = j = this.nearest(i); f = 0; }
+      else if (!this.have[pj]) { want(pj); j = i; }
     }
     for (let c = 0; c < this.stride; c++) {
       const a = this.data[i * this.stride + c];
@@ -354,9 +361,12 @@ function makeLyrics(spec, canvas, bar, camera) {
 // In pieces it is ready as soon as the one under `t` is here; the rest come after it (and
 // after `before`, if given: what the first picture is waiting for), each as the song nears
 // it, a few ahead of the one being drawn (and after the song's end, its beginning); or at
-// once, a piece found missing where the song has been moved to. A page that is left open
-// and silent fetches what it plays, not the whole song.
-async function gridOf(plan, base, t, options, before) {
+// once, a piece found missing where the song has been moved to (the fetcher is woken for
+// it, not left to find it at its next look); and first of all the pieces at `soon`, times
+// the page will want (where the song begins, when the first picture is of another moment).
+// A page that is left open and silent fetches what it plays, not the whole song. A piece
+// that does not come is asked for again, less and less often, and never given up on.
+async function gridOf(plan, base, t, options, before, soon = []) {
   if (!plan.frames_files) {
     return new Grid(plan.grid, await decoded(base + plan.frames_file, plan.frames_file, "grid", plan, options));
   }
@@ -374,17 +384,18 @@ async function gridOf(plan, base, t, options, before) {
     missing.delete(first);
     grid.at = first;
     const gap = (k) => (k - grid.at + n) % n;       // how many pieces on from the one being drawn
-    const pause = (ms) => new Promise((done) => setTimeout(done, ms));
+    const early = soon.map((u) => Math.min(Math.max(Math.floor((u * plan.grid.rate) / piece), 0), n - 1));
+    let wake = () => {};
+    grid.onWant = () => wake();
+    const nap = (ms) => new Promise((done) => { wake = done; setTimeout(done, ms); });
     let failed = 0;
     while (missing.size) {
       const wanted = missing.has(grid.wanted);        // the song has been moved there: that one now
-      const k = wanted ? grid.wanted : [...missing].reduce((a, b) => (gap(b) < gap(a) ? b : a));
-      if (!wanted && gap(k) > ahead) { await pause(500); continue; }
-      try { await bring(k); missing.delete(k); }
-      catch (e) {                                    // a piece that did not come is asked for again, a few times
-        if (++failed > 6) return;
-        await pause(1500);
-      }
+      const soonest = early.find((k) => missing.has(k));
+      const k = wanted ? grid.wanted : soonest !== undefined ? soonest : [...missing].reduce((a, b) => (gap(b) < gap(a) ? b : a));
+      if (!wanted && soonest === undefined && gap(k) > ahead) { await nap(500); continue; }
+      try { await bring(k); missing.delete(k); failed = 0; }
+      catch (e) { failed++; await nap(Math.min(1500 * 2 ** (failed - 1), 15000)); }
     }
   })();
   return grid;
@@ -405,7 +416,7 @@ async function main() {
   const strongest = (plan.drops || []).reduce((a, d) => (!a || d.strength > a.strength ? d : a), null);
   let still = !startAt && document.body.dataset.still && strongest ? Math.min(strongest.t + 0.3, plan.duration) : null;
   const texturesComing = (plan.textures || []).map((spec) => decoded(base + spec.file, spec.file, "texture", spec));
-  const gridComing = gridOf(plan, base, still ?? startAt, undefined, Promise.all(texturesComing));
+  const gridComing = gridOf(plan, base, still ?? startAt, undefined, Promise.all(texturesComing), still === null ? [] : [startAt, startAt + 15]);
   for (const coming of [gridComing, ...texturesComing]) coming.catch(() => {});   // said where they are awaited
   // silent until asked (a page that plays it behind itself): it is fetched as it plays
   if (params.get("muted")) audio.preload = "metadata";
@@ -415,47 +426,56 @@ async function main() {
   const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false });
   if (!gl) fail("this browser has no WebGL2.");
 
-  // One program, for the whole song. Nothing is ever swapped, because nothing a
-  // section decides is a switch - the section's choices are numbers in the grid
-  // below, and they arrive already ramped.
-  const prog = link(gl, plan.vertex, plan.program.fragment, plan.program.key);
-  const uniforms = {};
-  {
-    const n = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
-    for (let k = 0; k < n; k++) {
-      const name = gl.getActiveUniform(prog, k).name;
-      uniforms[name] = gl.getUniformLocation(prog, name);
+  // What the picture is drawn with, on the graphics card: made here, and made again if the
+  // card takes it away, which a telephone may while the page is in the background (the
+  // picture stayed black, the song going on)
+  let prog, uniforms, dataTextures, vao;
+  async function setup() {
+    // One program, for the whole song. Nothing is ever swapped, because nothing a
+    // section decides is a switch - the section's choices are numbers in the grid
+    // below, and they arrive already ramped.
+    prog = await link(gl, plan.vertex, plan.program.fragment, plan.program.key);
+    uniforms = {};
+    {
+      const n = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
+      for (let k = 0; k < n; k++) {
+        const name = gl.getActiveUniform(prog, k).name;
+        uniforms[name] = gl.getUniformLocation(prog, name);
+      }
     }
-  }
 
-  // Lookup textures a program samples - a star catalogue, say. Float, unfiltered, read
-  // with texelFetch, so what the shader gets is exactly what Python wrote.
-  const dataTextures = [];
-  for (const [unit, spec] of (plan.textures || []).entries()) {
-    const raw = await texturesComing[unit];
-    const tex = gl.createTexture();
-    gl.activeTexture(gl.TEXTURE1 + unit);
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    if ((spec.channels || 4) === 1) gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, spec.width, spec.height, 0, gl.RED, gl.FLOAT, raw);
-    else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, spec.width, spec.height, 0, gl.RGBA, gl.FLOAT, raw);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    dataTextures.push({ name: spec.name, unit: 1 + unit, tex });
-  }
-  // back to unit 0: everything after this binds its textures to the active unit, and
-  // would otherwise bind a render target over the top of the lookup
-  gl.activeTexture(gl.TEXTURE0);
+    // Lookup textures a program samples - a star catalogue, say. Float, unfiltered, read
+    // with texelFetch, so what the shader gets is exactly what Python wrote.
+    dataTextures = [];
+    for (const [unit, spec] of (plan.textures || []).entries()) {
+      const raw = await texturesComing[unit];
+      const tex = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE1 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      if ((spec.channels || 4) === 1) gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, spec.width, spec.height, 0, gl.RED, gl.FLOAT, raw);
+      else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, spec.width, spec.height, 0, gl.RGBA, gl.FLOAT, raw);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      dataTextures.push({ name: spec.name, unit: 1 + unit, tex });
+    }
+    // back to unit 0: everything after this binds its textures to the active unit, and
+    // would otherwise bind a render target over the top of the lookup
+    gl.activeTexture(gl.TEXTURE0);
 
-  // A full-screen triangle, same as the renderer's.
-  const vao = gl.createVertexArray();
-  gl.bindVertexArray(vao);
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(0);
-  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    // A full-screen triangle, same as the renderer's.
+    vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  }
+  await setup();
+  canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); targets = []; });     // nothing is drawn meanwhile
+  canvas.addEventListener("webglcontextrestored", async () => { await setup(); W = H = 0; fit(); });
 
   // The canvas is drawn at the display's own resolution, not at a fixed size stretched
   // to fit: on a dense screen a stretched 720p canvas is every pixel made four, and no
@@ -648,13 +668,21 @@ async function main() {
   // The wall's clock is read as the frame's own time (what requestAnimationFrame hands
   // over: when the frame began, the same step apart on an even screen), not as the moment
   // the script came to run, which is a millisecond or two uneven.
-  let sync = { wall: performance.now(), t: audio.currentTime };
+  // A song that has stopped without saying it has (waiting for its data after a jump, or
+  // stopped by the telephone while the page was away) is not carried on: the carried time
+  // ran 50 ms ahead, was set back, and ran ahead again, the same moment over and over, the
+  // trails cleared each time, a flicker that never ended. The picture holds still instead.
+  let sync = { wall: performance.now(), t: audio.currentTime }, moved = { t: -1, wall: 0 }, held = 0;
   function songTime(now) {
     const real = audio.currentTime;
-    if (audio.paused || audio.seeking) { sync = { wall: performance.now(), t: real }; return real; }
+    if (real !== moved.t) moved = { t: real, wall: now };
+    if (audio.paused || audio.seeking) { sync = { wall: performance.now(), t: real }; return (held = real); }
     const carried = sync.t + ((now - sync.wall) / 1000) * audio.playbackRate;
-    if (Math.abs(carried - real) > 0.05) { sync = { wall: performance.now(), t: real }; return real; }
-    return Math.min(Math.max(carried, sync.t), plan.duration);
+    if (Math.abs(carried - real) > 0.05) {
+      if (audio.readyState < 3 || now - moved.wall > 60) return held;          // stopped without saying so: hold, not back
+      sync = { wall: performance.now(), t: real }; return (held = real);
+    }
+    return (held = Math.min(Math.max(carried, sync.t), plan.duration));
   }
 
   // ?adapt=1: a machine that cannot keep 60 frames a second at this size is given fewer
@@ -664,6 +692,10 @@ async function main() {
   // made it faster, the size is put back as it was and left alone.
   const adapt = Boolean(params.get("adapt") || document.body.dataset.adapt);        // or as the page says
   let slow = 0, tried = null, settled = false;         // tried: {fps, quality, steps} since it was last any faster
+  // Not in the second and a half after the song starts, is moved, or the page comes back:
+  // those frames are slow for reasons of their own, and a step down there was a jolt for nothing.
+  let calmUntil = performance.now() + 1500;
+  const calm = () => { calmUntil = performance.now() + 1500; slow = 0; };
 
   function tick(stamp) {
     const now = stamp || performance.now();
@@ -671,7 +703,7 @@ async function main() {
     if (now - windowStart >= 1000) {
       const fps = Math.round(shown * 1000 / (now - windowStart));
       fpsBox.textContent = audio.paused ? `${W}x${H}` : `${fps} fps  ${slowest.toFixed(0)} ms`;
-      if (adapt && !settled && !audio.paused && !document.hidden && lastDrawn >= 0) {
+      if (adapt && !settled && !audio.paused && !document.hidden && lastDrawn >= 0 && now >= calmUntil) {
         slow = fps < 52 ? slow + 1 : 0;
         if (tried && fps >= tried.fps + 3) tried = null;                 // the last step bought something
         if (slow >= 2 && tried && tried.steps >= 2) { quality = tried.quality; settled = true; fit(); }
@@ -702,12 +734,41 @@ async function main() {
     else audio.pause();
   });
   audio.addEventListener("play", () => (playBtn.textContent = "pause"));
-  // the still is left as the song starts, or is moved: after STILL_OUT, which is how long
-  // a page has to take the picture away before the song's own is there
-  const leave = (after) => { if (still !== null) setTimeout(() => { still = null; lastDrawn = -1; }, after); };
-  audio.addEventListener("play", () => leave(STILL_OUT));
-  audio.addEventListener("seeking", () => leave(0));
+  // The still is left as the song starts, or is moved, by crossing from it to the song's own
+  // picture: a copy of it is laid over the canvas and fades as the song's comes up under it.
+  // (The canvas itself went dark and came up again, a flash of black between the two.)
+  const leave = () => {
+    if (still === null) return;
+    const copy = document.createElement("canvas");
+    if (targets.length) {
+      draw(still);                                   // the still, drawn now, so it can be copied now
+      copy.width = canvas.width; copy.height = canvas.height;
+      copy.getContext("2d").drawImage(canvas, 0, 0);
+      copy.style.cssText = `position:absolute;left:${canvas.offsetLeft}px;top:${canvas.offsetTop}px;width:${canvas.offsetWidth}px;height:${canvas.offsetHeight}px;pointer-events:none;transition:opacity ${STILL_OUT}ms ease`;
+      canvas.after(copy);
+      requestAnimationFrame(() => requestAnimationFrame(() => { copy.style.opacity = "0"; }));
+      setTimeout(() => copy.remove(), STILL_OUT + 100);
+    }
+    still = null; lastDrawn = -1;
+  };
+  audio.addEventListener("play", leave);
+  audio.addEventListener("seeking", leave);
   audio.addEventListener("pause", () => (playBtn.textContent = "play"));
+  for (const what of ["play", "seeking"]) audio.addEventListener(what, calm);
+
+  // Back from the background: a song the telephone stopped while the page was away goes on
+  // (it did not: the picture came back stopped, or stuck). A stop while the page is hidden, or
+  // within a second of its losing the screen, is the telephone's; any other is the listener's.
+  let meant = false, awayAt = -1e9;
+  audio.addEventListener("play", () => { meant = true; });
+  audio.addEventListener("pause", () => { if (!document.hidden && performance.now() - awayAt > 1000 && !audio.ended) meant = false; });
+  audio.addEventListener("ended", () => { meant = false; });
+  const away = () => { awayAt = performance.now(); };
+  const back = () => { calm(); if (meant && audio.paused) audio.play().catch(() => {}); };
+  addEventListener("blur", away);
+  addEventListener("pagehide", away);
+  document.addEventListener("visibilitychange", () => (document.hidden ? away() : back()));
+  addEventListener("pageshow", (e) => { if (e.persisted) back(); });
   seek.addEventListener("input", () => {
     audio.currentTime = Number(seek.value);
     clearFeedback();

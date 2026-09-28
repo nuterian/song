@@ -23,8 +23,8 @@
 <link rel="apple-touch-icon" href="video/icons/icon-180.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%23ff7a3d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <!-- The poster is what the page paints first; the live picture arrives over it. -->
-<link rel="preload" as="image" href="img/cosmos-still.webp" fetchpriority="high" media="(min-aspect-ratio: 1/1)">
-<link rel="preload" as="image" href="img/cosmos-still-tall.webp" fetchpriority="high" media="(max-aspect-ratio: 1/1)">
+<link rel="preload" as="image" href="img/poster.webp" fetchpriority="high" media="(min-aspect-ratio: 1/1)">
+<link rel="preload" as="image" href="img/poster-tall.webp" fetchpriority="high" media="(max-aspect-ratio: 1/1)">
 <script>document.documentElement.classList.add("js");</script>
 <style>
 :root{
@@ -76,18 +76,20 @@ header .mark{padding:12px 8px 12px 0;margin-left:0}
    own foot on a telephone, since Safari's 100lvh stops short of it), and the middle of what
    is seen is above it. */
 .screen{position:absolute;left:0;top:0;width:100%;height:calc(100svh + var(--bar));overflow:hidden;background:#000;z-index:0;--low:21svh;--mid:calc(var(--low) + 5svh);--side:0px}
-/* The poster, which the video is drawn over: as wide as the window; it sits low, the Sun
-   under what is said, on every screen of the film (a little lower after the first, where
-   more is said). Its top and bottom go to black under two strips of its own, so it has no
-   edge wherever it sits. (A mask did that first, and a mask over a canvas that is drawn
-   sixty times a second is composited sixty times a second.) */
-.pic{position:absolute;left:50%;top:50%;width:min(100vw,calc(100svh * 16 / 9 * 1.12));aspect-ratio:16/9;
+/* The poster, which the video is drawn over: the video's own frame at the moment the page
+   begins (1:32), at the size and in the place the video draws that frame, so that one
+   crosses into the other unseen (it was another moment, larger: two Suns for a moment). It
+   sits low, the Sun under what is said, on every screen of the film (a little lower after
+   the first, where more is said). Its top and bottom go to black under two strips of its
+   own, so it has no edge wherever it sits. (A mask did that first, and a mask over a canvas
+   that is drawn sixty times a second is composited sixty times a second.) */
+.pic{position:absolute;left:50%;top:50%;width:min(100vw,calc(100svh * 16 / 9));aspect-ratio:16/9;
   translate:calc(-50% + var(--side)) calc(-50% + var(--mid) - var(--bar) / 2);scale:1.12;will-change:translate,scale;
   transition:scale 2.8s var(--ease),translate 1.6s var(--ease);
-  background:#000 url(img/cosmos-still.webp) center/cover no-repeat}
+  background:#000 url(img/poster.webp) center/cover no-repeat}
 .pic::before,.pic::after{content:"";position:absolute;left:0;right:0;z-index:1;pointer-events:none}
-.pic::before{top:-1px;height:22%;background:linear-gradient(to bottom,#000,rgba(0,0,0,0))}
-.pic::after{bottom:-1px;height:18%;background:linear-gradient(to top,#000,rgba(0,0,0,0))}
+.pic::before{top:-1px;height:8%;background:linear-gradient(to bottom,#000,rgba(0,0,0,0))}
+.pic::after{bottom:-1px;height:8%;background:linear-gradient(to top,#000,rgba(0,0,0,0))}
 .film.live .pic{scale:1}
 .film[data-beat="0"] .pic{translate:calc(-50% + var(--side)) calc(-50% + var(--low) - var(--bar) / 2)}
 /* the video over it: the whole window, whatever its shape, the picture going on round its
@@ -101,7 +103,7 @@ header .mark{padding:12px 8px 12px 0;margin-left:0}
 .film[data-beat="1"] .veil,.film[data-beat="2"] .veil,.film[data-beat="3"] .veil{opacity:.24}
 /* dark for a moment, while the song is taken to where a line is sung */
 .dark{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .38s var(--ease)}
-.film.dip .dark{opacity:1}
+.film.dip .dark{opacity:.5}      /* half dark: enough to carry the jump, not a black flash */
 .fade{position:absolute;inset:0;background:
   linear-gradient(to bottom,rgba(0,0,0,.82),rgba(0,0,0,.6) 44%,rgba(0,0,0,0) 66%),
   linear-gradient(to top,#000,rgba(0,0,0,0) 14%)}
@@ -110,15 +112,22 @@ header .mark{padding:12px 8px 12px 0;margin-left:0}
 .ctl:hover{color:var(--ink)}
 .ctl svg{width:16px;height:16px}
 /* said once, under the sound control, on the first strong beat while the song is silent */
-.snd{position:relative;display:inline-flex}
-.hint{position:absolute;top:100%;left:50%;translate:-50% 4px;padding-top:7px;white-space:nowrap;font-size:0.8125rem;color:var(--ink);pointer-events:none;
-  opacity:0;transition:opacity .7s var(--ease),translate .7s var(--ease)}
-.hint.on{opacity:1;translate:-50% 0}
-header.solid .hint{opacity:0}
+/* The sound, while there is none: one white pill that says what it does, the most
+   prominent thing in the bar (the song is half of what this is). With the sound on, an
+   icon beside the pause, as small as it. */
+.ctl span{display:none}
+header.muted #sound{height:34px;padding:0 15px 0 12px;margin:0;border-radius:17px;background:var(--ink);color:#000;font-weight:600;position:relative;
+  transition:opacity .6s var(--ease),transform .25s var(--ease)}
+header.muted #sound span{display:inline}
+header.muted #sound::before{content:"";position:absolute;inset:-5px 0}     /* a finger's 44 px */
+header.muted #sound:hover{transform:scale(1.04)}
+header .gh svg{width:20px;height:20px;display:block}
 /* where the video has not started by itself (or is not to, with less motion asked for): on
    the Sun, as a video's play button is on its picture */
-.playbig{position:absolute;left:calc(50% + var(--side));top:calc(50% + var(--mid) - var(--bar) / 2);margin:-36px 0 0 -36px;z-index:3;width:72px;height:72px;border-radius:50%;display:none;place-items:center;
-  background:rgba(0,0,0,.6);box-shadow:0 0 0 1px rgba(255,255,255,.25);color:var(--ink)}
+.playbig{position:absolute;left:calc(50% + var(--side));top:calc(50% + var(--mid) - var(--bar) / 2);translate:-50% -50%;z-index:3;height:52px;padding:0 24px 0 20px;
+  border-radius:26px;display:none;align-items:center;gap:10px;background:var(--ink);color:#000;font-size:1.0625rem;font-weight:600;white-space:nowrap;
+  transition:scale .25s var(--ease)}
+.playbig:hover{scale:1.04}
 .film.still .cue{visibility:hidden}      /* not its opacity: where the scroll moves that, the scroll has the last word */
 /* paused or played by a click on the picture: said once, in the middle, and gone */
 .blip{position:absolute;inset:0;margin:auto;z-index:3;width:72px;height:72px;border-radius:50%;display:grid;place-items:center;pointer-events:none;
@@ -127,8 +136,8 @@ header.solid .hint{opacity:0}
 .blip.shown{animation:blip .7s var(--ease)}
 @keyframes blip{0%{opacity:0;scale:.8}25%{opacity:1;scale:1}100%{opacity:0;scale:1.12}}
 .beats{cursor:pointer}
-.playbig svg{width:24px;height:24px;margin-left:3px}
-.film.still .playbig{display:grid}
+.playbig svg{width:18px;height:18px}
+.film.still .playbig{display:inline-flex}
 .film[data-beat="0"] .playbig{top:calc(50% + var(--low) - var(--bar) / 2)}
 
 /* What is said over it: one thing to a screen. */
@@ -172,7 +181,7 @@ section.own,section.get{position:relative;z-index:2;text-align:center;padding:cl
 .three{margin:clamp(40px,6svh,70px) auto 0;max-width:1080px;display:grid;grid-template-columns:repeat(3,1fr);gap:28px 40px;text-align:left}
 .three b{display:block;font-size:clamp(1.25rem,2vw,1.625rem);font-weight:650;letter-spacing:-.02em;margin-bottom:.3em}
 .three span{color:var(--dim);font-size:1.0625rem;line-height:1.4}
-section.get{padding-bottom:clamp(70px,10svh,120px)}
+section.get{padding-bottom:clamp(70px,10svh,120px);min-height:calc(100svh + var(--bar))}     /* so that it can be at the head of the window */
 .code{position:relative;margin:clamp(34px,5svh,56px) auto 0;width:min(100%,660px);text-align:left;background:#0d0d0f;border-radius:16px;box-shadow:0 0 0 1px var(--line);
   padding:20px 60px 20px 22px;font:0.90625rem/1.8 var(--mono);color:var(--ink);overflow-x:auto;white-space:pre}
 .code .c{color:var(--faint)}
@@ -234,10 +243,8 @@ footer a:hover{color:var(--ink)}
 @media (max-aspect-ratio:1/1){
   /* the Sun in the middle of the room left between what is said and what is done */
   .screen{--low:calc(20px + 3.5svh);--mid:var(--low);--shade:330px}
-  .pic{width:max(100vw,calc(100svh * 9 / 16));aspect-ratio:9/16;
-    background-image:url(img/cosmos-still-tall.webp)}
-  .pic::before{height:16%}
-  .pic::after{height:12%}
+  .pic{width:min(100vw,calc(100svh * 9 / 16));aspect-ratio:9/16;
+    background-image:url(img/poster-tall.webp)}
   .fade{background:
     linear-gradient(to bottom,rgba(0,0,0,.86),rgba(0,0,0,.62) 240px,rgba(0,0,0,0) var(--shade)),
     linear-gradient(to top,rgba(0,0,0,.35),rgba(0,0,0,.86) var(--bar),rgba(0,0,0,.5) calc(var(--bar) + 90px),rgba(0,0,0,0) calc(var(--bar) + 190px))}
@@ -247,8 +254,6 @@ footer a:hover{color:var(--ink)}
   .go,.heard,.seg{margin-top:auto}
   .cue{display:none}
   header{gap:20px}
-  .ctl span{display:none}
-  .playbig{width:60px;height:60px;margin:-30px 0 0 -30px}
   /* the copy button is beside the first line, which is short: the rest may have the width,
      and a line that still does not fit goes on to the next rather than out of sight */
   .code{font-size:0.75rem;padding:18px 16px;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -278,11 +283,16 @@ footer a:hover{color:var(--ink)}
   .cue{width:2px;height:34px;margin-left:-1px;border-radius:1px;box-shadow:none;background:rgba(245,245,247,.3)}
   .cue::after{top:0;width:2px;height:12px;margin-left:-1px;border-radius:1px}
 }
+/* a telephone's bar: the name, the pause, the sound and GitHub; "Make your own" is the
+   page's own first button and its last section */
+@media (max-width:440px){
+  header .own{display:none}
+}
 @media (max-width:360px){
   header{gap:12px;padding:0 14px}
 }
 @media (prefers-reduced-motion:reduce){
-  .pic,.video iframe,.veil,.dark,.btn,.seg button,.hint{transition:none}
+  .pic,.video iframe,.veil,.dark,.btn,.seg button{transition:none}
   html.js .beat > *{opacity:1;transform:none;transition:none}
   .cue::after{animation:none}
 }
@@ -295,9 +305,9 @@ footer a:hover{color:var(--ink)}
     <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 20V12M11 23V9M16 26V6M21 22V10M26 19V13" stroke="#ff7a3d" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>song
   </a>
   <button class="ctl" id="pause" aria-label="Pause"></button>
-  <span class="snd"><button class="ctl" id="sound" aria-label="Sound on"></button><span class="hint" id="hint" aria-hidden="true">Best with sound</span></span>
-  <a href="#get">Make your own</a>
-  <a href="https://github.com/nuterian/song">GitHub</a>
+  <button class="ctl" id="sound" aria-label="Play with sound"></button>
+  <a class="own" href="#get">Make your own</a>
+  <a class="gh" href="https://github.com/nuterian/song" aria-label="GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
 </header>
 
 <div class="film" id="film" data-beat="0">
@@ -308,8 +318,8 @@ footer a:hover{color:var(--ink)}
     <div class="dark"></div>
     <div class="fade"></div>
     <div class="dusk" id="dusk"></div>
-    <button class="playbig" id="playbig" aria-label="Play the video">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg>
+    <button class="playbig" id="playbig">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg>Play with sound
     </button>
     <span class="blip" id="blip" aria-hidden="true"></span>
     <span class="cue" aria-hidden="true"></span>
@@ -385,7 +395,7 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
 (function () {
   var film = document.getElementById("film"), pic = document.getElementById("pic");
   var sound = document.getElementById("sound"), pause = document.getElementById("pause"), blip = document.getElementById("blip");
-  var cams = document.getElementById("cams"), bar = document.getElementById("bar"), hint = document.getElementById("hint");
+  var cams = document.getElementById("cams"), bar = document.getElementById("bar");
   var ICON = {
     off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></svg>',
     on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg>',
@@ -449,13 +459,13 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
 
   function say() {
     var muted = !player || player.audio.muted;
-    sound.innerHTML = (muted ? ICON.off : ICON.on) + '<span aria-hidden="true">' + (muted ? "Sound on" : "Sound off") + "</span>";
-    sound.setAttribute("aria-label", muted ? "Sound on" : "Sound off");
+    bar.classList.toggle("muted", muted);
+    sound.innerHTML = ICON.on + '<span aria-hidden="true">Play with sound</span>';
+    sound.setAttribute("aria-label", muted ? "Play with sound" : "Mute");
   }
 
-  // That it has a sound is said once, quietly, while it is silent: under the sound control,
-  // up as the song's next strong beat lands (a re-entry if one is near, else a kick), the
-  // control swelling with it; and gone a few seconds after, or as soon as the sound is on.
+  // That it has a sound is shown once while it is silent: the pill swells as the song's
+  // next strong beat lands (a re-entry if one is near, else a kick).
   function nudge() {
     var t = player.time(), near = function (x) { return x >= t + 2 && x <= t + 14; };
     var beats = (player.drops || []).filter(near);
@@ -463,10 +473,7 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
     var wait = (beats.length ? beats[0] - t : 3) * 1000;
     setTimeout(function () {
       if (!player.audio.muted || player.audio.paused || stopped || away) return;
-      hint.classList.add("on");
-      var icon = sound.querySelector("svg");
-      if (icon && icon.animate) icon.animate([{ scale: 1 }, { scale: 1.3, offset: .4 }, { scale: 1 }], { duration: 1000, delay: 200, easing: "ease-in-out" });
-      setTimeout(function () { hint.classList.remove("on"); }, 6000);
+      if (sound.animate) sound.animate([{ scale: 1 }, { scale: 1.08, offset: .4 }, { scale: 1 }], { duration: 900, delay: 200, easing: "ease-in-out" });
     }, Math.max(wait - 600, 0));
   }
 
@@ -546,7 +553,6 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
         window.songPlayer = player;
         dispatchEvent(new CustomEvent("songplayer", { detail: player }));    // what was heard is drawn from it
         player.audio.addEventListener("volumechange", say);
-        player.audio.addEventListener("volumechange", function () { if (!player.audio.muted) hint.classList.remove("on"); });
         if (player.audio.muted) {
           if (!player.audio.paused && player.audio.readyState > 2) nudge();      // it may be playing already
           else player.audio.addEventListener("playing", nudge, { once: true });
@@ -569,7 +575,7 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
         sound.classList.add("ready"); pause.classList.add("ready");
         setTimeout(function () { film.classList.add("live"); }, 60);    // a timer, not a frame: a page not yet shown has no frames
         // what comes after the film is decoded while there is time, not as it scrolls in
-        setTimeout(function () { var im = document.querySelector(".shot"); im.loading = "eager"; if (im.decode) im.decode().catch(function () {}); }, 2500);
+        setTimeout(function () { var im = document.querySelector(".shot"); im.loading = "eager"; if (im.decode) im.decode().catch(function () {}); }, 600);
       } else if (++tries > 750) clearInterval(wait);       // 30 s: the poster stays, which is a page
     }, 40);
   }
@@ -589,10 +595,16 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
   var turned = function () { if (player && player.setShape) player.setShape(upright.matches ? "tall" : "wide"); };
   if (upright.addEventListener) upright.addEventListener("change", turned); else if (upright.addListener) upright.addListener(turned);
 
+  function listen() {
+    var a = player.audio;
+    a.volume = 0; a.muted = false; stopped = false;
+    if (a.paused) go(); else fade(1, 420);
+    film.classList.remove("still"); said();
+  }
   sound.addEventListener("click", function () {
     if (!player) return;
     var a = player.audio;
-    if (a.muted) { a.volume = 0; a.muted = false; stopped = false; if (a.paused) go(); else fade(1, 420); }
+    if (a.muted) listen();
     else fade(0, 260, function () { a.muted = true; a.volume = 1; });
   });
   pause.addEventListener("click", function () { toggle(false); });
@@ -605,15 +617,27 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
   });
   // a click or a touch on the picture, where the film is (what is read after it is not the picture's)
   var page = document.getElementById("page");
+  // (while it is silent, a touch on it gives it its sound, as a video in a feed does; then
+  // it stops and starts it)
   page.addEventListener("click", function (e) {
     if (!e.target.closest(".beats") || e.target.closest("button,a")) return;
-    toggle(true);
+    if (!player || !player.audio.muted) return toggle(true);
+    listen();
+    blip.innerHTML = ICON.on;
+    blip.classList.remove("shown"); void blip.offsetWidth; blip.classList.add("shown");
   });
   // the page is what scrolls, so the keys that scroll are its from the first; and the window
   // itself never does (a link to a place on the page may ask it to)
   if (matchMedia("(hover: hover)").matches) page.focus({ preventScroll: true });
-  document.addEventListener("click", function (e) {                  // and again after a link to a place on it
-    if (e.target.closest('a[href^="#"]')) setTimeout(function () { page.focus({ preventScroll: true }); }, 0);
+  // A link to a place on the page goes there eased, not in one cut, and lands on it; and the
+  // page has the keys again after it.
+  var eased = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest('a[href^="#"]'), to = a && document.querySelector(a.getAttribute("href"));
+    if (!to) return;
+    e.preventDefault();
+    page.scrollTo({ top: page.scrollTop + to.getBoundingClientRect().top - page.getBoundingClientRect().top, behavior: eased ? "smooth" : "auto" });
+    page.focus({ preventScroll: true });
   });
   addEventListener("scroll", function () { if (scrollX || scrollY) scrollTo(0, 0); });
   addEventListener("keydown", function (e) {

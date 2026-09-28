@@ -32,6 +32,7 @@ def bundle(tmp_path_factory):
         "uKickT": np.maximum.accumulate(np.where(rng.random(FRAMES) < 0.02, t, 0.0)) + 280.0,
         "uFar": np.full(FRAMES, 1e6),                                  # beyond float16 altogether
         "uZero": np.zeros(FRAMES),
+        "uPh5": 0.5 + t / 1000.0,                                     # a planet's phase: float16 would hold it
     }
     names = list(cols)
     data = np.stack([cols[n] for n in names], axis=1).astype("<f4")
@@ -73,7 +74,20 @@ def test_each_channel_is_kept_as_narrow_as_holds_it(bundle):
     _, dest, _, _ = bundle
     plan, _ = _read(dest)
     assert "frames_file" not in plan and plan["frames_packing"] == "planes"
-    assert plan["frames_dtype"] == ["f16", "f16", "f32", "f32", "f32", "f16"]
+    assert plan["frames_dtype"] == ["f16", "f16", "f32", "f32", "f32", "f16", "f32"]
+
+
+def test_a_planets_phase_is_kept_to_a_hundredth_of_a_pixel(bundle):
+    # float16 would hold it to within HALF_ERROR, which is 7 pixels of Saturn in a close shot
+    _, dest, data, _ = bundle
+    plan, back = _read(dest)
+    c = [f["name"] for f in plan["grid"]["features"]].index("uPh5")
+    assert render.narrowest(data[:, c]) == "f16" and plan["frames_dtype"][c] == "f32"
+    assert np.abs(back[:, c] - data[:, c]).max() <= render.PHASE_STEP / 2 + 1e-7
+    for name in ("uPh5", "uPh0.static", "uPlutoPh"):
+        assert render.phase(name), name
+    for name in ("uKickA", "uPd0", "uCamX.cinematic", "uPhase", "uLean2"):
+        assert not render.phase(name), name
 
 
 def test_the_frames_are_in_pieces_of_fifteen_seconds(bundle):
@@ -97,7 +111,10 @@ def test_an_earlier_packings_frames_are_not_left_behind(bundle, tmp_path):
 def test_the_packed_frames_read_back_exactly_or_within_a_half_step(bundle):
     _, dest, data, _ = bundle
     plan, back = _read(dest)
+    names = [f["name"] for f in plan["grid"]["features"]]
     for c, dtype in enumerate(plan["frames_dtype"]):
+        if render.phase(names[c]):
+            continue                                             # to PHASE_STEP (the test above)
         if dtype == "f32":
             assert np.array_equal(back[:, c], data[:, c])        # the clocks and hit times, exact
         else:

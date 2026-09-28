@@ -1887,3 +1887,59 @@ share sheet on a telephone, which a browser without a window does not show.
   it had only after the film (a blur there would be drawn again with every frame of the
   picture). Measured, a line under the bar's words: 7 of 255 at the brightest. On a
   telephone on its side the words begin 76 px down, below the shade.
+
+## What made it look broken (2026-09-28, afternoon)
+
+Jugal: back in the browser after leaving it, the video stuck and stuttered; and at some
+moments, the camera close on Saturn, Saturn stuttered. Five readers were sent (Sonnet), each
+on one thing: coming back, the moments, the landing page, the demo, the loading; what they
+found was tried again here before it was acted on. He chose: planets' places exact, the
+dip on the third screen kept but half dark, the still crossing into the song, and the
+motion and the first seconds before the rest.
+
+- **Saturn went in steps.** A planet's phase (where it is on its orbit, in revolutions) was
+  packed as float16 wherever that held it to 2^-11, which is fine for a level and 7 pixels
+  of Saturn in its close shot (2:22 to 2:59): it moved in steps six times a second, while
+  the camera, following its true path, did not. Every slow planet, both songs. Phases are
+  float32 now, rounded to 2^-18 of a revolution (0.06 pixels there) so that their lowest
+  bits are zeros gzip can fold: the bundle is no larger (3.29 MB, was 3.31; float32 plain
+  would have been 5.2 with everything that places a body, and the springs' lowest bits, as
+  float32, are noise). Measured, Saturn's disc tracked frame to frame at 1440x900: 1.30
+  pixels at the 99th centile, none over 3 (it was 5.89, and 22 frames of 239 over 3).
+- **The clock that ran back.** The song's time is carried by the frame's clock between the
+  audio's steps and set back to the audio's if the two come 50 ms apart. An audio that
+  stops without saying so (waiting for its data after a jump, as the landing page's jump to
+  a sung line makes it, or stopped by the telephone) left the carried time running ahead,
+  set back, running ahead: the same 50 ms over and over, the trails cleared each time, a
+  flicker that never ended. Where the audio has not moved for 60 ms, or has no data ahead,
+  the time is held where it is. With the audio's clock frozen for 3 s: 5 frames drawn and
+  none going back (176 and 47).
+- **Coming back.** Nothing started a song again that the telephone had stopped while the
+  page was away. The player now does: a stop while the page is hidden, or within a second
+  of its losing the screen, is the telephone's, and the song goes on when the page is back
+  (tried by hiding both documents, the landing page's and its frame's: it plays on, the
+  button says Pause). If the graphics card takes the picture's context away, it is made
+  again when it is given back (drawn again at 60 a second; seen in a screenshot).
+- **The pieces.** The fetcher gave up for good after seven failures in the page's life; it
+  now asks again, less and less often, and never gives up (25 s cut off, then a jump to
+  3:20: the picture moves again, every frame its own). A piece the song is moved to wakes
+  the fetcher at once. A page that opens on the song's strongest moment also fetches where
+  the song begins, which it had not (pressing play showed a far moment, then jumped).
+- **Smaller.** The adapter does not judge the second and a half after the song starts, is
+  moved or the page comes back. The shader is linked while the page goes on, where the
+  browser can (it stopped the page 0.2 to 2 s, and the poster with it): no long task left,
+  cold, on the demo or the landing page.
+- **The demo's first seconds.** Before the picture, nothing over it (the controls were
+  there over black, "0:00 / 0:00"); if it is slow, a quiet dot. Pressing play crosses from
+  the still to the song's own picture over 0.7 s, a copy of the still fading over the
+  canvas; it went dark between the two. Measured, the picture's mean brightness from the
+  still to the opening: 33 to 14, never under.
+- **The landing page's first seconds.** The poster is now the video's own frame at 1:32.4,
+  with the camera the page begins with, at the size and place the video draws its frame
+  (`img/poster.webp`, `poster-tall.webp`): the crossing is not seen. It was another moment,
+  twice the Sun's size: two Suns for a moment. The dip on the third screen is half dark.
+  "Make your own" goes to the install eased and lands on it. The studio's picture is
+  fetched as soon as the video shows.
+- Tried and left: a lighter sky after the film (the Sun sinking half the window, not 0.8,
+  and 0.35 of dark, not 0.5). The sky is dark of itself: the mean went from 4 to 5 of 255,
+  and nine texts fell under 4.5 to 1. Kept as it was.
