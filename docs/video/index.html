@@ -22,9 +22,12 @@
 <meta property="og:site_name" content="song">
 <meta property="og:title" content="song: a music video, drawn from the song">
 <meta property="og:description" content="A music video drawn live in the browser from the song itself: the solar system, moved by the kick, the bass, the notes and the voice.">
+<meta property="og:url" content="https://jugalm.com/song/video/">
 <meta property="og:image" content="https://jugalm.com/song/img/card.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A music video for any song. The Sun and its planets, drawn from a song.">
+<link rel="canonical" href="https://jugalm.com/song/video/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://jugalm.com/song/img/card.jpg">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%23ff7a3d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -78,19 +81,20 @@
      song starts, and the song's own comes (as long going as the player's STILL_OUT) */
   body.ready.opening #gl { opacity: 0; transition: opacity .25s ease-in; }
   body.clear #gl { cursor: none; }
-  #lyrics { position: absolute; left: 50%; top: 50%; translate: -50% calc(-50% + var(--lift, 0px)); width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9;
+  #lyrics { position: absolute; left: 50%; top: 50%; translate: calc(-50% + var(--aside, 0px)) calc(-50% + var(--lift, 0px)); width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9;
     pointer-events: none; container-type: size; transition: opacity .6s ease; z-index: 2; }       /* over the shades, to be read */
   body.tall #lyrics { width: min(100cqw, 100cqh * 9 / 16); aspect-ratio: 9 / 16; }
   #lyrics .line {
     position: absolute; white-space: nowrap; opacity: 0;
-    font-size: calc(var(--size) * 100cqh);
+    font-size: max(12px, calc(var(--size) * 100cqh));        /* never too small to read, on a telephone on its side */
     font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 300;
     letter-spacing: 0.06em; color: rgb(238, 233, 222);
     text-shadow: 0 0 0.35em rgba(0, 0, 0, 0.55);
   }
   #lyrics .line span { opacity: 0.42; }
   /* a line keeps clear of what is over the picture: it is moved from under it (the player's setClear) */
-  #lyrics .line { transition: translate .5s var(--ease); }
+  #lyrics .line { transition: translate .5s var(--ease), filter .5s var(--ease); }
+  #lyrics .line.held { filter: opacity(0); }
 
   /* What is laid over it: a bar at the head, the controls at the foot, each on a shade that
      deepens to the edge, so they read over whatever the picture is doing. A touch on the
@@ -114,6 +118,7 @@
   #top .get { display: inline-flex; align-items: center; height: 30px; padding: 0 15px; border-radius: 15px; background: var(--ink); color: #000;
     font-size: 13px; font-weight: 600; white-space: nowrap; transition: transform .25s var(--ease); }
   #top .get:hover { transform: scale(1.04); }
+  #top .ends { display: flex; align-items: center; gap: 6px; }
 
   #foot { padding-top: 96px; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
     background: linear-gradient(to top, rgba(0, 0, 0, .84), rgba(0, 0, 0, .7) 34%, rgba(0, 0, 0, .36) 68%, rgba(0, 0, 0, 0)); }
@@ -127,13 +132,18 @@
 
   /* where in the song: a hair of a line, filled as far as the song has come; its handle is
      there when it is reached for */
-  #seek { height: 28px; margin-top: 6px; padding: 0; background: none; cursor: pointer;
+  #seek { height: 28px; margin: 6px 0 0; padding: 0; background: none; cursor: pointer;
     -webkit-appearance: none; appearance: none; --p: 0%; }
   #seek::-webkit-slider-runnable-track { height: 2px; border-radius: 1px;
     background: linear-gradient(to right, var(--ink) var(--p), rgba(245, 245, 247, .3) var(--p)); }
   #seek::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -5px; border-radius: 50%; background: var(--ink);
     scale: 0; transition: scale .2s var(--ease); }
   #seek:hover::-webkit-slider-thumb, #seek:active::-webkit-slider-thumb, #seek:focus-visible::-webkit-slider-thumb { scale: 1; }
+  /* the time under the pointer, or the finger, over the line */
+  #foot { position: relative; }
+  #foot > #peek { position: absolute; left: 0; top: 0; width: auto; translate: -50% 0; padding: 3px 8px; border-radius: 7px; background: rgba(0, 0, 0, .72);
+    color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; pointer-events: none; opacity: 0; transition: opacity .2s var(--ease); }
+  #foot > #peek.on { opacity: 1; }
   #seek::-moz-range-track { height: 2px; border-radius: 1px; background: rgba(245, 245, 247, .3); }
   #seek::-moz-range-progress { height: 2px; border-radius: 1px; background: var(--ink); }
   #seek::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: var(--ink); scale: 0; transition: scale .2s var(--ease); }
@@ -157,8 +167,10 @@
     --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 3.5v17l14-8.5z'/%3E%3C/svg%3E"); }
   body.playing #play::before { translate: 0 0;
     --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 4h4.2v16H6zM13.8 4H18v16h-4.2z'/%3E%3C/svg%3E"); }
-  #time { color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 11ch; min-height: 40px; text-align: left; transition: color .25s var(--ease); }
-  #time:hover { color: var(--ink); }
+  #time { display: inline-block; line-height: 40px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 11ch; }
+  /* another song: this one goes dark first, and the next comes out of the dark as it draws */
+  #stage { transition: opacity .35s var(--ease); }
+  body.leaving #stage { opacity: 0; }
   #time b { color: var(--ink); font-weight: 400; }
   /* the three cameras: the one taken is a light under its name, which slides to the next */
   .seg { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; height: 34px; border-radius: 17px; font-size: 13px;
@@ -189,8 +201,9 @@
   #blip.shown { animation: blip .7s var(--ease) both; }
   @keyframes blip { from { opacity: 1; scale: .82; } 30% { opacity: 1; } to { opacity: 0; scale: 1.14; } }
 
-  /* the song's end: what there is to do next, over its last picture */
-  #end { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 22px; background: rgba(0, 0, 0, .46);
+  /* the song's end: what there is to do next, over its last picture, lightly shaded, in the
+     sky above the Sun (the controls come back below it) */
+  #end { position: absolute; inset: 0; display: grid; place-content: start center; justify-items: center; gap: 22px; padding-top: max(20vh, 120px); background: rgba(0, 0, 0, .24);
     opacity: 0; visibility: hidden; transition: opacity .9s var(--ease), visibility 0s .9s; }
   body.ended #end { opacity: 1; visibility: visible; transition: opacity .9s var(--ease) .3s, visibility 0s; }
   #end .again { display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 26px 0 22px; border-radius: 24px; background: var(--ink); color: #000;
@@ -202,7 +215,9 @@
   #end .more > *::after { content: "\203A"; margin-left: .35em; }
   #end .more > *:hover { text-decoration: underline; text-underline-offset: 4px; }
 
-  #error, .said { position: absolute; left: 50%; top: 50%; translate: -50% -50%; max-width: min(80cqw, 30em); text-align: center; color: var(--ink); font-size: 17px; }
+  #error, .said { position: absolute; left: 50%; top: 50%; translate: -50% -50%; max-width: min(80cqw, 30em); text-align: center; color: var(--ink); font-size: 17px;
+    padding: 14px 20px; border-radius: 14px; background: rgba(0, 0, 0, .7); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
+  #error[hidden] { display: none; }
   body.failed #foot, body.failed #big { display: none; }
   /* ?measure=1: what this screen says of itself, and how the picture is kept up with */
   #measure { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: 50%; translate: 0 -50%; margin: 0; padding: 8px 10px; border-radius: 8px;
@@ -217,7 +232,7 @@
   /* a finger: larger to touch */
   @media (pointer: coarse) {
     .icon, #play { width: 44px; height: 44px; }
-    #time { min-height: 44px; }
+    #time { line-height: 44px; }
     #songs button { min-height: 40px; }
   }
   /* narrow: the songs have a line of their own, and the camera another */
@@ -230,9 +245,22 @@
     #bar .seg::before { border-radius: 19px; }
     #foot { padding-top: 72px; }
   }
+  /* telephones: the controls closer, so the row fits with every button it may have; the
+     narrowest, the cameras closer too */
+  @media (max-width: 430px) {
+    #bar { gap: 10px 8px; }
+    #bar .left { gap: 10px; }
+    #time { min-width: 0; }
+  }
+  @media (max-width: 360px) {
+    #bar .seg button { padding: 0 10px; }
+  }
   /* short (a phone on its side): what was heard is left out */
   @media (max-height: 600px) {
-    #heard, #hears, #caption { display: none !important; }
+    #heard, #hears { display: none !important; }
+  }
+  @media (max-height: 600px) and (orientation: landscape) {
+    #caption { display: none !important; }
     #top { padding-bottom: 36px; }
     #foot { padding-top: 56px; }
   }
@@ -255,23 +283,32 @@
           <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 20V12M11 23V9M16 26V6M21 22V10M26 19V13" stroke="#ff7a3d" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>song
         </a>
         <nav id="songs" aria-label="Song"></nav>
-        <a class="get" href="../#get">Make your own</a>
+        <span class="ends">
+          <button class="icon" id="unmute" aria-label="Sound on" title="Sound on" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></svg>
+          </button>
+          <a class="get" href="../#get">Make your own</a>
+        </span>
       </header>
       <div id="foot">
         <div id="caption"><h1 id="title">Gravity in Motion</h1><span>Jugal Manjeshwar</span></div>
         <canvas id="heard" role="img" aria-label="The kick, the bass, the notes and the voice, as they were heard"></canvas>
         <input id="seek" type="range" min="0" max="1" step="0.001" value="0" aria-label="Position in the song">
+        <span id="peek" aria-hidden="true"></span>
         <div id="bar">
           <span class="left">
             <button id="play">play</button>
-            <button id="time" title="Copy a link to this moment"><b>0:00</b> / 0:00</button>
+            <span id="time"><b>0:00</b> / 0:00</span>
           </span>
           <span class="seg" id="cams" role="group" aria-label="Camera"></span>
           <span class="right">
+            <button class="icon" id="share" aria-label="Share this moment" title="Share this moment">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 14.5V4M8 7.5l4-4 4 4"/><path d="M8.5 10.5H7A1.5 1.5 0 0 0 5.5 12v6.5A1.5 1.5 0 0 0 7 20h10a1.5 1.5 0 0 0 1.5-1.5V12a1.5 1.5 0 0 0-1.5-1.5h-1.5"/></svg>
+            </button>
             <button class="icon" id="words" aria-pressed="false" aria-label="Lyrics" title="Lyrics">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M7.5 11h4M14 11h2.5M7.5 14.5h2.5M12.5 14.5h4"/></svg>
             </button>
-            <button class="icon" id="hears" aria-pressed="true" aria-label="What was heard" title="What was heard">
+            <button class="icon" id="hears" aria-pressed="true" aria-label="What it heard: kick, bass, notes, voice" title="What it heard: kick, bass, notes, voice">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4.5 14v-4M8.25 17V7M12 19.5v-15M15.75 16.5v-9M19.5 13.5v-3"/></svg>
             </button>
             <button class="icon" id="full" aria-label="Full screen" title="Full screen">
@@ -296,7 +333,11 @@
     const params = new URLSearchParams(location.search);
     const body = document.body, stage = $("stage"), gl = $("gl");
     const audio = $("audio"), big = $("big"), seek = $("seek"), time = $("time");
-    const keep = (name, value) => { const url = new URL(location.href); url.searchParams.set(name, value); history.replaceState(null, "", url); };
+    const keep = (name, value, fallback) => {             // (a default is left out of the address)
+      const url = new URL(location.href);
+      if (value === fallback) url.searchParams.delete(name); else url.searchParams.set(name, value);
+      history.replaceState(null, "", url);
+    };
 
     // The songs: one page each (?track=), so a switch is a fresh page; the camera and the
     // words go along in the address, and it plays on if the browser allows it. A song the
@@ -313,7 +354,11 @@
       url.searchParams.set("track", song.slug);
       url.searchParams.delete("t");
       url.searchParams.set("play", "1");
-      location.assign(url);
+      if (!audio.muted) url.searchParams.delete("muted");      // it goes on as it is heard now
+      body.classList.add("leaving");
+      const v = audio.volume, t0 = performance.now();
+      (function quiet() { const w = Math.min((performance.now() - t0) / 300, 1); audio.volume = v * (1 - w); if (w < 1) requestAnimationFrame(quiet); })();
+      setTimeout(() => location.assign(url), 340);
     };
     for (const song of songs) {
       const b = document.createElement("button");
@@ -422,7 +467,7 @@
       }
       if (!hearing && strip) { const was = strip; strip = null; setTimeout(() => { if (!hearing) was.stop(); else strip = was; }, 700); }
     };
-    $("hears").addEventListener("click", () => { hearing = !hearing; keep("heard", hearing ? "on" : "off"); hear(); });
+    $("hears").addEventListener("click", () => { hearing = !hearing; keep("heard", hearing ? "on" : "off", "on"); hear(); });
     hear();
 
     // The words keep clear of what is over the picture (the player's setClear): between the
@@ -447,10 +492,13 @@
           b.setAttribute("aria-pressed", String(b.dataset.name === player.chosen.camera));
         }
       };
+      // what each is, for a visitor who has not seen them (cosmos.py's `cameras`)
+      const what = { static: "The whole system, held still", hybrid: "The whole system, turning slowly and leaning in", cinematic: "A shot for each part of the song" };
       for (const name of names) {
         const b = document.createElement("button");
         b.textContent = name.charAt(0).toUpperCase() + name.slice(1);
         b.dataset.name = name;
+        if (what[name]) b.title = what[name];
         b.addEventListener("click", () => { player.choose("camera", name, 1.2); taken(); });
         cams.appendChild(b);
       }
@@ -479,12 +527,35 @@
         seek.setAttribute("aria-valuetext", `${say} of ${total}`);
       };
       requestAnimationFrame(tick);
-      time.addEventListener("click", () => {
+
+      // the song's big moments, marked on the line (where it comes back in, at full)
+      const marks = (player.drops || []).map((d) => `${(100 * d / player.duration).toFixed(2)}% 50%`);
+      if (marks.length) Object.assign(seek.style, {
+        backgroundImage: marks.map(() => "linear-gradient(rgba(245,245,247,.6), rgba(245,245,247,.6))").join(","),
+        backgroundSize: marks.map(() => "2px 8px").join(","), backgroundPosition: marks.join(","), backgroundRepeat: "no-repeat" });
+      // and where the pointer is on it, as a time
+      const peek = $("peek"), foot = $("foot");
+      const peeked = (x) => {
+        const r = seek.getBoundingClientRect(), f = foot.getBoundingClientRect();
+        const p = Math.min(Math.max((x - r.left) / r.width, 0), 1);
+        peek.textContent = clock(p * player.duration);
+        peek.style.left = `${Math.min(Math.max(x - f.left, 28), f.width - 28)}px`;
+        peek.style.top = `${r.top - f.top - 20}px`;
+        peek.classList.add("on");
+      };
+      seek.addEventListener("pointermove", (e) => peeked(e.clientX));
+      seek.addEventListener("pointerdown", (e) => peeked(e.clientX));
+      for (const what of ["pointerleave", "pointerup", "pointercancel"]) seek.addEventListener(what, () => peek.classList.remove("on"));
+
+      // a link to this moment, with the camera and what is shown: the telephone's own way
+      // of sending it, or copied where there is none
+      $("share").addEventListener("click", () => {
         const url = new URL(location.href); url.searchParams.set("t", audio.currentTime.toFixed(1));
+        url.searchParams.delete("play"); url.searchParams.delete("muted");
         history.replaceState(null, "", url);
-        if (navigator.clipboard) navigator.clipboard.writeText(url.href).then(() => {
-          time.textContent = "Link copied"; said = ""; copied = performance.now() + 1400;
-        }, () => {});
+        const told = (text) => { time.textContent = text; said = ""; copied = performance.now() + 1400; };
+        if (navigator.share && handheld) navigator.share({ title: document.title, url: url.href }).catch(() => {});
+        else if (navigator.clipboard) navigator.clipboard.writeText(url.href).then(() => told("Link copied"), () => {});
       });
 
       hear();
@@ -528,14 +599,22 @@
       if (e.key === "f" && !e.metaKey && !e.ctrlKey && own) full.click();
     });
 
+    // opened silent (?muted=1): a way to have its sound, there while it has none
+    const unmute = $("unmute"), muted = () => { unmute.hidden = !audio.muted; };
+    audio.addEventListener("volumechange", muted);
+    unmute.addEventListener("click", () => { audio.muted = false; if (audio.paused) audio.play().catch(() => {}); });
+    muted();
+
     // what went wrong, said plainly, over the picture (what the player says of it is for its maker)
     const error = $("error");
+    audio.addEventListener("error", () => { if (error.hidden) { error.textContent = "The song could not be loaded."; error.hidden = false; } });
     new MutationObserver(() => {
       if (error.hidden || body.classList.contains("failed")) return;
       body.classList.add("failed");
       console.error(error.textContent);
       error.textContent = /WebGL2/.test(error.textContent)
         ? "This browser cannot draw the video. A recent Safari, Chrome or Firefox can."
+        : /song could not/.test(error.textContent) ? "The song could not be loaded. Reload the page to try again."
         : "The video could not be loaded. Reload the page to try again.";
       clear(false);
     }).observe(error, { attributes: true, attributeFilter: ["hidden"] });

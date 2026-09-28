@@ -2,6 +2,8 @@
  "name": "song",
  "short_name": "song",
  "description": "A music video drawn live from the song itself.",
+ "id": "./",
+ "start_url": "./",
  "display": "fullscreen",
  "display_override": [
   "fullscreen",

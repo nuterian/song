@@ -13,6 +13,12 @@ import { decoded } from "./bundle.js";
 import { lyricInk, lyricOpacity, seating } from "./lyrics.js";
 
 const params = new URLSearchParams(location.search);
+// a choice kept in the address, so a link has it; a default is left out, so a link stays short
+function note(name, value, fallback) {
+  const url = new URL(location.href);
+  if (value === fallback) url.searchParams.delete(name); else url.searchParams.set(name, value);
+  history.replaceState(null, "", url);
+}
 if (params.get("embed")) document.body.classList.add("embed");
 if (params.get("bare")) document.body.classList.add("bare");
 // The frame's shape: wide, 16:9, or tall, 9:16, for a screen held upright. The tall frame is
@@ -161,6 +167,7 @@ class Grid {
     if (this.have) {
       // a moment whose piece has not come is drawn as the nearest that has, and asked for next
       const pi = Math.floor(i / this.piece), pj = Math.floor(j / this.piece);
+      this.at = pi;                                  // the piece being drawn: what comes next is fetched from it
       if (!this.have[pi]) { this.wanted = pi; i = j = this.nearest(i); f = 0; }
       else if (!this.have[pj]) { this.wanted = pj; j = i; }
     }
@@ -195,6 +202,7 @@ function makeLyrics(spec, canvas, bar, camera) {
   frame.appendChild(canvas);
   const layer = document.createElement("div");
   layer.id = "lyrics";
+  layer.setAttribute("aria-hidden", "true");        // the song's words, as it sings them: seen, not read out line after line
   layer.style.setProperty("--size", String(tall ? tall.size : st.size));
   frame.appendChild(layer);
   const els = new Map();                           // line index -> its element, made when first needed
@@ -207,7 +215,7 @@ function makeLyrics(spec, canvas, bar, camera) {
   const turn = (name) => {
     on = name === "on";
     for (const x of toggle.querySelectorAll("button")) x.classList.toggle("on", x.dataset.name === name);
-    const url = new URL(location.href); url.searchParams.set("lyrics", name); history.replaceState(null, "", url);
+    note("lyrics", name, "on");
     // they fade, they are not switched: shown for as long as the fade out takes
     clearTimeout(fading);
     layer.hidden = false;
@@ -264,8 +272,11 @@ function makeLyrics(spec, canvas, bar, camera) {
 
   // A page may have things over the picture: a bar, controls, words of its own. A line is
   // set where the picture has room for it; while something of the page's is over that
-  // place, it is moved to just clear of it, eased, and back when it goes. `head` and
-  // `foot`: the heights in the window, in its pixels, a line is to be between (null: any).
+  // place, it is moved to just clear of it, eased, and back when it goes; one in the window
+  // that would be moved further than half again its own height, which would take it out of
+  // the room it was set in and onto whatever is there, waits unseen where it is until they
+  // go (one set below the window, as a page may set the picture, is moved up into it). `head`
+  // and `foot`: the heights in the window, in its pixels, a line is to be between (null: any).
   let head = null, foot = null;
   const moved = new Map();                           // a line's element -> how far it is moved, in pixels
   function kept() {
@@ -288,6 +299,9 @@ function makeLyrics(spec, canvas, bar, camera) {
       high = Math.max(high, a.bottom + a.by + 4);
     }
     for (const a of at) {
+      const held = a.on && a.bottom <= innerHeight && Math.abs(a.by) > 1.5 * (a.bottom - a.top);
+      if (held) a.by = 0;
+      a.l.classList.toggle("held", held);
       const by = Math.round(a.by), was = moved.get(a.l);
       if (by === (was || 0)) { if (!a.on && !by) moved.delete(a.l); continue; }
       // a line not yet seen is set there at once; one that is seen goes there, eased
@@ -338,8 +352,10 @@ function makeLyrics(spec, canvas, bar, camera) {
 
 // The grid of a plan: whole, as this machine stages it, or in pieces, as the demo has it.
 // In pieces it is ready as soon as the one under `t` is here; the rest come after it (and
-// after `before`, if given: what the first picture is waiting for), from there to the song's
-// end and then from its beginning; or on from a piece found missing, if the song is moved.
+// after `before`, if given: what the first picture is waiting for), each as the song nears
+// it, a few ahead of the one being drawn (and after the song's end, its beginning); or at
+// once, a piece found missing where the song has been moved to. A page that is left open
+// and silent fetches what it plays, not the whole song.
 async function gridOf(plan, base, t, options, before) {
   if (!plan.frames_files) {
     return new Grid(plan.grid, await decoded(base + plan.frames_file, plan.frames_file, "grid", plan, options));
@@ -354,17 +370,20 @@ async function gridOf(plan, base, t, options, before) {
   await bring(first);
   (async () => {
     if (before) await before.catch(() => {});
-    const rest = files.map((_, d) => (first + 1 + d) % files.length).filter((k) => k !== first);
+    const n = files.length, ahead = 2, missing = new Set(files.keys());
+    missing.delete(first);
+    grid.at = first;
+    const gap = (k) => (k - grid.at + n) % n;       // how many pieces on from the one being drawn
+    const pause = (ms) => new Promise((done) => setTimeout(done, ms));
     let failed = 0;
-    while (rest.length) {
-      const asked = rest.indexOf(grid.wanted);      // the song has been moved there: on from there
-      if (asked > 0) rest.push(...rest.splice(0, asked));
-      const k = rest.shift();
-      try { await bring(k); }
+    while (missing.size) {
+      const wanted = missing.has(grid.wanted);        // the song has been moved there: that one now
+      const k = wanted ? grid.wanted : [...missing].reduce((a, b) => (gap(b) < gap(a) ? b : a));
+      if (!wanted && gap(k) > ahead) { await pause(500); continue; }
+      try { await bring(k); missing.delete(k); }
       catch (e) {                                    // a piece that did not come is asked for again, a few times
         if (++failed > 6) return;
-        rest.push(k);
-        await new Promise((done) => setTimeout(done, 1500));
+        await pause(1500);
       }
     }
   })();
@@ -388,6 +407,8 @@ async function main() {
   const texturesComing = (plan.textures || []).map((spec) => decoded(base + spec.file, spec.file, "texture", spec));
   const gridComing = gridOf(plan, base, still ?? startAt, undefined, Promise.all(texturesComing));
   for (const coming of [gridComing, ...texturesComing]) coming.catch(() => {});   // said where they are awaited
+  // silent until asked (a page that plays it behind itself): it is fetched as it plays
+  if (params.get("muted")) audio.preload = "metadata";
   audio.src = base + plan.audio_file;
   if (startAt) audio.currentTime = startAt;
 
@@ -445,7 +466,9 @@ async function main() {
   // more of the sky, more of the orbits, nothing cut and nothing left black (uWiden).
   let W = 0, H = 0, targets = [], front = 0, quality = 1;
   let lift = Number(params.get("lift")) || 0;      // how far under the middle the picture is set, in the page's pixels
+  let aside = Number(params.get("aside")) || 0;    // and how far to the right of it
   document.body.style.setProperty("--lift", `${lift}px`);
+  document.body.style.setProperty("--aside", `${aside}px`);
   function fit() {
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     const aspect = canvas.clientWidth / (canvas.clientHeight || canvas.clientWidth / ASPECT[shape]);
@@ -512,7 +535,7 @@ async function main() {
       chosen[kind] = name;
       for (const [uniform, channel] of Object.entries(spec.choices[name])) feeds.set(uniform, grid.names.indexOf(channel));
       for (const b of group.querySelectorAll("button")) b.classList.toggle("on", b.dataset.name === name);
-      const url = new URL(location.href); url.searchParams.set(kind, name); history.replaceState(null, "", url);
+      note(kind, name, spec.default);
       lastDrawn = -1;
     };
     for (const name of Object.keys(spec.choices)) {
@@ -567,17 +590,18 @@ async function main() {
     // not the frame's shape the frame is in the middle, as large as fits, and the picture
     // goes on round it: the shader is told how many of the frame's heights the canvas is
     // high (uWiden: 1 where the canvas is the frame, or wider than it). And the page may
-    // have the picture lower than the middle, or higher (`lift`): the camera is slid.
+    // have the picture lower than the middle, or higher (`lift`), or to one side (`aside`):
+    // the camera is slid.
     const tall = shape === "tall", widen = Math.max(1, ASPECT[shape] / (W / H));
     if (uniforms.uTall) gl.uniform1f(uniforms.uTall, tall ? 1 : 0);
     if (uniforms.uWiden) gl.uniform1f(uniforms.uWiden, widen);
-    if (tall || lift) {
+    if (tall || lift || aside) {
       const at = (name) => fed(name, grid.names.indexOf(name));
       const roll = at("uCamRoll"), span = at("uCamSpan") * (tall ? 16 / 9 : 1), x = at("uCamX"), y = at("uCamY");
-      const down = span * lift * widen / (canvas.clientHeight || 1);          // in the scene's own measure
+      const per = span * widen / (canvas.clientHeight || 1), down = per * lift, right = per * aside;    // in the scene's own measure
       if (uniforms.uCamRoll) gl.uniform1f(uniforms.uCamRoll, roll + (tall ? Math.PI / 2 : 0));
       if (uniforms.uCamSpan) gl.uniform1f(uniforms.uCamSpan, span);
-      if (uniforms.uCamX) gl.uniform1f(uniforms.uCamX, tall ? y : x);
+      if (uniforms.uCamX) gl.uniform1f(uniforms.uCamX, (tall ? y : x) - right);
       if (uniforms.uCamY) gl.uniform1f(uniforms.uCamY, (tall ? -x : y) + down);
     }
     for (const d of dataTextures) {
@@ -730,12 +754,14 @@ async function main() {
       clearFeedback();
       lastDrawn = -1;
     },
-    // the picture set lower than the middle (or higher, less than none), by so many of the page's pixels
-    setLift(px) {
-      px = Number(px) || 0;
-      if (px === lift) return;
-      lift = px; lastDrawn = -1;
+    // the picture set lower than the middle (or higher, less than none), and to its right (or
+    // left), by so many of the page's pixels
+    setLift(px, side) {
+      px = Number(px) || 0; side = Number(side) || 0;
+      if (px === lift && side === aside) return;
+      lift = px; aside = side; lastDrawn = -1;
       document.body.style.setProperty("--lift", `${lift}px`);        // the words go with the picture
+      document.body.style.setProperty("--aside", `${aside}px`);
     },
     // the heights in the window a line of the song is to keep between (null: any)
     setClear(head, foot) { if (words) words.clear(head, foot); },
