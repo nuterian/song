@@ -73,8 +73,11 @@ header a:hover{color:var(--ink)}
 .pic::after{bottom:-1px;height:18%;background:linear-gradient(to top,#000,rgba(0,0,0,0))}
 .film.live .pic{scale:1}
 .film[data-beat="0"] .pic{translate:-50% calc(-50% + var(--low))}
-.pic iframe{position:absolute;inset:0;width:100%;height:100%;border:0;opacity:0;transition:opacity 1.4s var(--ease)}
-.film.live .pic iframe{opacity:1}
+/* the video over it: the whole window, whatever its shape, the picture going on round its
+   frame; where the poster sits is where the video's Sun is set (the script asks, a frame at a time) */
+.video{position:absolute;inset:0}
+.video iframe{position:absolute;inset:0;width:100%;height:100%;border:0;opacity:0;scale:1.12;transition:opacity 1.4s var(--ease),scale 2.8s var(--ease)}
+.film.live .video iframe{opacity:1;scale:1}
 /* what is over the picture has the dark it needs: more of it while something is being said */
 .veil{position:absolute;inset:0;background:#000;opacity:.12;transition:opacity 1.2s var(--ease);will-change:opacity}
 .film[data-beat="1"] .veil,.film[data-beat="2"] .veil,.film[data-beat="3"] .veil{opacity:.64}
@@ -204,7 +207,7 @@ footer a:hover{color:var(--ink)}
   .code{font-size:12px;padding-left:16px}
 }
 @media (prefers-reduced-motion:reduce){
-  .pic,.pic iframe,.veil,.btn,.seg button,.hint{transition:none}
+  .pic,.video iframe,.veil,.btn,.seg button,.hint{transition:none}
   html.js .beat > *{opacity:1;transform:none;transition:none}
   .cue::after{animation:none}
 }
@@ -226,6 +229,7 @@ footer a:hover{color:var(--ink)}
 <div class="film" id="film" data-beat="0">
   <div class="screen">
     <div class="pic" id="pic" role="img" aria-label="The music video for Gravity in Motion, drawn live: the Sun and its planets moving with the song"></div>
+    <div class="video" id="video"></div>
     <div class="veil"></div>
     <div class="fade"></div>
     <button class="playbig" id="playbig" aria-label="Play the video">
@@ -315,6 +319,16 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
   var from = Number(new URLSearchParams(location.search).get("t")) || 92;
   // the frame: tall where the window is upright, and changed with it if it is turned
   var upright = matchMedia("(max-aspect-ratio: 1/1)");
+  // The video has the whole window; the poster under it is where the page's style sets it
+  // (low in the hero, up to the middle as the page is read), and the video's picture is set
+  // by as much: how far the poster's middle is under the window's.
+  var screen_ = document.querySelector(".screen");
+  function lift() {
+    var p = pic.getBoundingClientRect(), s = screen_.getBoundingClientRect();
+    return Math.round(p.top + p.height / 2 - s.top - s.height / 2);
+  }
+  // a telephone draws as many pixels as it keeps up with (as the demo's page has it)
+  var phone = matchMedia("(hover: none) and (pointer: coarse)").matches && Math.min(screen.width, screen.height) < 600;
 
   // the song's loudness, eased to where it is wanted: nothing starts or stops at full
   function fade(to, ms, then) {
@@ -399,9 +413,9 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
     frame.title = "The music video, drawn live";
     frame.setAttribute("allow", "autoplay");
     frame.setAttribute("tabindex", "-1");
-    frame.src = "video/?bare=1&adapt=1&track=gravity-in-motion&camera=hybrid&lyrics=off&maxheight=1080&t=" + from + "&play=1" + (heard ? "" : "&muted=1") +
-      (upright.matches ? "&shape=tall" : "");
-    pic.appendChild(frame);
+    frame.src = "video/?bare=1&adapt=1&track=gravity-in-motion&camera=hybrid&lyrics=off&maxheight=1080&maxpixels=" + (phone ? 900000 : 1920 * 1080) +
+      "&lift=" + lift() + "&t=" + from + "&play=1" + (heard ? "" : "&muted=1") + (upright.matches ? "&shape=tall" : "");
+    document.getElementById("video").appendChild(frame);
     var tries = 0, wait = setInterval(function () {
       var w = frame.contentWindow;
       if (w && w.player) {
@@ -422,6 +436,7 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
         player.audio.addEventListener("play", function () { film.classList.remove("still"); said(); });
         player.audio.addEventListener("pause", said);
         setTimeout(function () { if (player.audio.paused && !away && !stopped) film.classList.add("still"); }, 1500);
+        (function set() { if (!away && player.setLift) player.setLift(lift()); requestAnimationFrame(set); })();
         say(); said(); direct();
         sound.classList.add("ready"); pause.classList.add("ready");
         setTimeout(function () { film.classList.add("live"); }, 60);    // a timer, not a frame: a page not yet shown has no frames
