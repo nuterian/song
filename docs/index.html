@@ -13,8 +13,12 @@
 <meta property="og:title" content="song: a music video for any song">
 <meta property="og:description" content="Give it a track. It listens to the whole song, then draws it as a solar system where every beat, note and word moves something.">
 <meta property="og:url" content="https://jugalm.com/song/">
-<meta property="og:image" content="https://jugalm.com/song/img/cosmos-still.webp">
+<meta property="og:image" content="https://jugalm.com/song/img/card.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A music video for any song. The Sun and its planets, drawn from a song.">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://jugalm.com/song/img/card.jpg">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","@id":"https://jugalm.com/song/#app","name":"song","url":"https://jugalm.com/song/","applicationCategory":"MultimediaApplication","operatingSystem":"macOS","dateCreated":"2026","image":"https://jugalm.com/song/img/cosmos-still.webp","description":"Give it a track. It listens to the whole song, then draws it as a solar system where every beat, note and word moves something. Free, open source, and made on your own Mac.","codeRepository":"https://github.com/nuterian/song","author":{"@type":"Person","@id":"https://jugalm.com/#me","name":"Jugal Manjeshwar","url":"https://jugalm.com/"},"isPartOf":{"@id":"https://jugalm.com/#site"}}</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%23ff7a3d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <!-- The poster is what the page paints first; the live picture arrives over it. -->
@@ -42,7 +46,7 @@ h2{font-size:clamp(40px,7.2vw,104px)}
 
 /* The bar: a name and two ways on, over the picture. */
 header{position:fixed;inset:0 0 auto;height:52px;display:flex;align-items:center;gap:26px;padding:0 max(22px,env(safe-area-inset-left));
-  z-index:10;font-size:14px;color:rgba(245,245,247,.72);transition:background .4s var(--ease)}
+  z-index:10;font-size:14px;color:rgba(245,245,247,.72);white-space:nowrap;transition:background .4s var(--ease)}
 header.solid{background:rgba(0,0,0,.72);backdrop-filter:saturate(1.6) blur(18px);-webkit-backdrop-filter:saturate(1.6) blur(18px)}
 header .mark{display:flex;align-items:center;gap:9px;color:var(--ink);font-weight:600;letter-spacing:-.01em;margin-right:auto}
 header .mark svg{width:20px;height:20px}
@@ -81,6 +85,12 @@ header a:hover{color:var(--ink)}
 .ctl:hover{color:var(--ink)}
 .ctl svg{width:16px;height:16px}
 header.solid .ctl{visibility:hidden;opacity:0}
+/* said once, under the sound control, on the first strong beat while the song is silent */
+.snd{position:relative;display:inline-flex}
+.hint{position:absolute;top:100%;left:50%;translate:-50% 4px;padding-top:7px;white-space:nowrap;font-size:13px;color:var(--ink);pointer-events:none;
+  opacity:0;transition:opacity .7s var(--ease),translate .7s var(--ease)}
+.hint.on{opacity:1;translate:-50% 0}
+header.solid .hint{opacity:0}
 .playbig{position:absolute;inset:0;margin:auto;z-index:3;width:84px;height:84px;border-radius:50%;display:none;place-items:center;
   background:rgba(0,0,0,.6);box-shadow:0 0 0 1px rgba(255,255,255,.25);color:var(--ink)}
 /* paused or played by a click on the picture: said once, in the middle, and gone */
@@ -114,6 +124,9 @@ html.js .beat.on > :nth-child(3){transition-delay:.24s}
 .cue::after{content:"";position:absolute;left:50%;top:7px;width:3px;height:7px;margin-left:-1.5px;border-radius:2px;background:var(--ink);animation:cue 1.9s var(--ease) infinite}
 @keyframes cue{0%{transform:none;opacity:1}70%,100%{transform:translateY(11px);opacity:0}}
 .film:not([data-beat="0"]) .cue{opacity:0}
+/* what was heard: the song's own moments, running through now (video/heard.js) */
+.heard{display:block;width:min(86vw,640px);height:98px;margin-top:1.9em;visibility:hidden}
+.heard.ready{visibility:visible}
 .seg{display:inline-flex;margin-top:1.6em;border-radius:20px;overflow:hidden;font-size:15px;background:rgba(28,28,30,.9)}
 .seg button{height:40px;padding:0 18px;color:var(--dim)}
 .seg button:hover{color:var(--ink)}
@@ -172,10 +185,12 @@ footer a:hover{color:var(--ink)}
   .beat:not(.hero){place-content:end center;padding-bottom:16svh}
   .beat.hero{padding-top:76px}
   .three{grid-template-columns:1fr;text-align:center}
+  header{gap:20px}
+  .ctl span{display:none}
   .code{font-size:12px;padding-left:16px}
 }
 @media (prefers-reduced-motion:reduce){
-  .pic,.pic iframe,.veil,.btn,.seg button{transition:none}
+  .pic,.pic iframe,.veil,.btn,.seg button,.hint{transition:none}
   html.js .beat > *{opacity:1;transform:none;transition:none}
   .cue::after{animation:none}
 }
@@ -188,7 +203,7 @@ footer a:hover{color:var(--ink)}
     <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 20V12M11 23V9M16 26V6M21 22V10M26 19V13" stroke="#ff7a3d" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>song
   </a>
   <button class="ctl" id="pause" aria-label="Pause"></button>
-  <button class="ctl" id="sound" aria-pressed="false"></button>
+  <span class="snd"><button class="ctl" id="sound" aria-pressed="false"></button><span class="hint" id="hint" aria-hidden="true">Best with sound</span></span>
   <a href="#get">Get it</a>
   <a href="https://github.com/nuterian/song">GitHub</a>
 </header>
@@ -219,6 +234,7 @@ footer a:hover{color:var(--ink)}
     <section class="beat" data-beat="1" data-camera="static" data-words="off">
       <h2>First, it listens.</h2>
       <p class="lede">The whole song, before a frame is drawn. Every kick, every note, every syllable, timed to the millisecond.</p>
+      <canvas class="heard" id="heard" role="img" aria-label="The kick, the bass, the notes and the voice of the song, each moment marked as it plays"></canvas>
     </section>
 
     <section class="beat" data-beat="2" data-camera="cinematic" data-words="on">
@@ -270,7 +286,7 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
 (function () {
   var film = document.getElementById("film"), pic = document.getElementById("pic");
   var sound = document.getElementById("sound"), pause = document.getElementById("pause"), blip = document.getElementById("blip");
-  var cams = document.getElementById("cams"), bar = document.getElementById("bar");
+  var cams = document.getElementById("cams"), bar = document.getElementById("bar"), hint = document.getElementById("hint");
   var ICON = {
     off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></svg>',
     on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg>',
@@ -280,6 +296,8 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
     pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>'
   };
   var frame = null, player = null, beat = null, away = false, was = false, stopped = false, fader = 0;
+  // where in the song it begins: the first chorus, unless the address says otherwise (?t=)
+  var from = Number(new URLSearchParams(location.search).get("t")) || 61;
 
   // the song's loudness, eased to where it is wanted: nothing starts or stops at full
   function fade(to, ms, then) {
@@ -318,6 +336,23 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
     sound.setAttribute("aria-pressed", String(!muted));
   }
 
+  // That it has a sound is said once, quietly, while it is silent: under the sound control,
+  // up as the song's next strong beat lands (a re-entry if one is near, else a kick), the
+  // control swelling with it; and gone a few seconds after, or as soon as the sound is on.
+  function nudge() {
+    var t = player.time(), near = function (x) { return x >= t + 2 && x <= t + 14; };
+    var beats = (player.drops || []).filter(near);
+    if (!beats.length && player.heard) beats = player.heard.kick.t.filter(near);
+    var wait = (beats.length ? beats[0] - t : 3) * 1000;
+    setTimeout(function () {
+      if (!player.audio.muted || player.audio.paused || stopped || away) return;
+      hint.classList.add("on");
+      var icon = sound.querySelector("svg");
+      if (icon && icon.animate) icon.animate([{ scale: 1 }, { scale: 1.3, offset: .4 }, { scale: 1 }], { duration: 1000, delay: 200, easing: "ease-in-out" });
+      setTimeout(function () { hint.classList.remove("on"); }, 6000);
+    }, Math.max(wait - 600, 0));
+  }
+
   function cameras() {
     cams.innerHTML = "";
     if (!player) return;
@@ -347,14 +382,21 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
     frame.title = "The music video, drawn live";
     frame.setAttribute("allow", "autoplay");
     frame.setAttribute("tabindex", "-1");
-    frame.src = "video/?bare=1&adapt=1&track=gravity-in-motion&camera=hybrid&lyrics=off&maxheight=1080&t=61&play=1" + (heard ? "" : "&muted=1");
+    frame.src = "video/?bare=1&adapt=1&track=gravity-in-motion&camera=hybrid&lyrics=off&maxheight=1080&t=" + from + "&play=1" + (heard ? "" : "&muted=1");
     pic.appendChild(frame);
     var tries = 0, wait = setInterval(function () {
       var w = frame.contentWindow;
       if (w && w.player) {
         clearInterval(wait);
         player = w.player;
+        window.songPlayer = player;
+        dispatchEvent(new CustomEvent("songplayer", { detail: player }));    // what was heard is drawn from it
         player.audio.addEventListener("volumechange", say);
+        player.audio.addEventListener("volumechange", function () { if (!player.audio.muted) hint.classList.remove("on"); });
+        if (player.audio.muted) {
+          if (!player.audio.paused && player.audio.readyState > 2) nudge();      // it may be playing already
+          else player.audio.addEventListener("playing", nudge, { once: true });
+        }
         // from the first chorus to the song's own end, and then from its beginning: its
         // ending and its opening are made to be arrived at, which a jump back mid-song is not
         player.audio.addEventListener("ended", function () { player.audio.currentTime = 0; if (!stopped && !away) go(); });
@@ -364,11 +406,11 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
         setTimeout(function () { if (player.audio.paused && !away && !stopped) film.classList.add("still"); }, 1500);
         say(); said(); direct();
         sound.classList.add("ready"); pause.classList.add("ready");
-        setTimeout(function () { film.classList.add("live"); }, 150);   // a timer, not a frame: a page not yet shown has no frames
+        setTimeout(function () { film.classList.add("live"); }, 60);    // a timer, not a frame: a page not yet shown has no frames
         // what comes after the film is decoded while there is time, not as it scrolls in
         setTimeout(function () { var im = new Image(); im.src = "img/studio.webp"; if (im.decode) im.decode().catch(function () {}); }, 2500);
-      } else if (++tries > 150) clearInterval(wait);       // 30 s: the poster stays, which is a page
-    }, 200);
+      } else if (++tries > 750) clearInterval(wait);       // 30 s: the poster stays, which is a page
+    }, 40);
   }
 
   sound.addEventListener("click", function () {
@@ -423,8 +465,7 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
   // It moves by itself unless the visitor has asked for less: less motion, or less data.
   var calm = matchMedia("(prefers-reduced-motion: reduce)").matches || (navigator.connection && navigator.connection.saveData);
   if (calm) film.classList.add("still", "live");
-  else if (document.readyState === "complete") start(false);
-  else addEventListener("load", function () { start(false); });
+  else start(false);
 
   var copy = document.getElementById("copy"), code = document.getElementById("code");
   copy.innerHTML = ICON.copy;
@@ -436,6 +477,15 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
     });
   });
 })();
+</script>
+<script type="module">
+// What was heard, under "First, it listens.": drawn by the player's own module, from the
+// player in the frame, once there is one.
+import { strip } from "./video/heard.js";
+const canvas = document.getElementById("heard");
+const begin = (player) => { if (player.heard) { strip(canvas, player); canvas.classList.add("ready"); } };
+if (window.songPlayer) begin(window.songPlayer);
+else addEventListener("songplayer", (e) => begin(e.detail), { once: true });
 </script>
 <script src="count.js" defer></script>
 
