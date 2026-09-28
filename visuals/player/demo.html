@@ -72,8 +72,11 @@
   #frame, #gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
   #gl { opacity: 0; transition: opacity .9s var(--ease); }
   body.ready #gl { opacity: 1; }
+  /* before it first plays the picture is of the song's strongest moment: that goes as the
+     song starts, and the song's own comes (as long going as the player's STILL_OUT) */
+  body.ready.opening #gl { opacity: 0; transition: opacity .25s ease-in; }
   body.clear #gl { cursor: none; }
-  #lyrics { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9;
+  #lyrics { position: absolute; left: 50%; top: 50%; translate: -50% calc(-50% + var(--lift, 0px)); width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9;
     pointer-events: none; container-type: size; transition: opacity .6s ease; z-index: 2; }       /* over the shades, to be read */
   body.tall #lyrics { width: min(100cqw, 100cqh * 9 / 16); aspect-ratio: 9 / 16; }
   #lyrics .line {
@@ -84,7 +87,7 @@
     text-shadow: 0 0 0.35em rgba(0, 0, 0, 0.55);
   }
   #lyrics .line span { opacity: 0.42; }
-  /* a line keeps clear of what is over the picture: it is moved from under it (`lifted`) */
+  /* a line keeps clear of what is over the picture: it is moved from under it (the player's setClear) */
   #lyrics .line { transition: translate .5s var(--ease); }
 
   /* What is laid over it: a bar at the head, the controls at the foot, each on a shade that
@@ -184,6 +187,19 @@
   #blip.shown { animation: blip .7s var(--ease) both; }
   @keyframes blip { from { opacity: 1; scale: .82; } 30% { opacity: 1; } to { opacity: 0; scale: 1.14; } }
 
+  /* the song's end: what there is to do next, over its last picture */
+  #end { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 22px; background: rgba(0, 0, 0, .46);
+    opacity: 0; visibility: hidden; transition: opacity .9s var(--ease), visibility 0s .9s; }
+  body.ended #end { opacity: 1; visibility: visible; transition: opacity .9s var(--ease) .3s, visibility 0s; }
+  #end .again { display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 26px 0 22px; border-radius: 24px; background: var(--ink); color: #000;
+    font-size: 17px; font-weight: 600; transition: transform .25s var(--ease); }
+  #end .again:hover { transform: scale(1.04); }
+  #end .again svg { width: 18px; height: 18px; }
+  #end .more { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 28px; font-size: 17px; color: var(--ink); }
+  #end .more > * { min-height: 40px; display: inline-flex; align-items: center; }
+  #end .more > *::after { content: "\203A"; margin-left: .35em; }
+  #end .more > *:hover { text-decoration: underline; text-underline-offset: 4px; }
+
   #error, .said { position: absolute; left: 50%; top: 50%; translate: -50% -50%; max-width: min(80cqw, 30em); text-align: center; color: var(--ink); font-size: 17px; }
   body.failed #foot, body.failed #big { display: none; }
   /* ?measure=1: what this screen says of itself, and how the picture is kept up with */
@@ -193,7 +209,7 @@
 
   /* ?bare=1: the picture alone, filling its frame: the landing page's hero, which has the
      controls it wants of its own and reaches the player through window.player */
-  body.bare #over, body.bare #big, body.bare #blip { display: none; }
+  body.bare #over, body.bare #big, body.bare #blip, body.bare #end { display: none; }
   body.bare #gl { opacity: 1; transition: none; cursor: default; }
 
   /* a finger: larger to touch */
@@ -219,7 +235,7 @@
     #foot { padding-top: 56px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .seg::before, #big, #play, #heard, #over, #gl { transition: none; }
+    .seg::before, #big, #play, #heard, #over, #gl, #end { transition: none; }
     #blip.shown { animation-duration: .01s; }
   }
 </style>
@@ -227,6 +243,10 @@
 <body data-bundles="./" data-track="{{track}}" data-songs="{{songs}}">
   <main id="stage">
     <canvas id="gl" width="1280" height="720" role="img" aria-label="The music video, drawn live: the Sun and its planets, moving with the song"></canvas>
+    <div id="end" aria-hidden="true">
+      <button class="again" id="again"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5"/><path d="M4.5 4.5v3.2h3.2"/></svg>Play again</button>
+      <span class="more" id="others"><a href="../#get">Make your own</a></span>
+    </div>
     <div id="over">
       <header id="top">
         <a class="mark" href="../" aria-label="song">
@@ -285,20 +305,27 @@
       here = body.dataset.track;
       const url = new URL(location.href); url.searchParams.delete("track"); history.replaceState(null, "", url);
     }
+    const go = (song) => {
+      if (song.slug === here) return;
+      const url = new URL(location.href);
+      url.searchParams.set("track", song.slug);
+      url.searchParams.delete("t");
+      url.searchParams.set("play", "1");
+      location.assign(url);
+    };
     for (const song of songs) {
       const b = document.createElement("button");
       b.textContent = song.title;
       b.classList.toggle("on", song.slug === here);
       if (song.slug === here) b.setAttribute("aria-current", "true");
-      b.addEventListener("click", () => {
-        if (song.slug === here) return;
-        const url = new URL(location.href);
-        url.searchParams.set("track", song.slug);
-        url.searchParams.delete("t");
-        url.searchParams.set("play", "1");
-        location.assign(url);
-      });
+      b.addEventListener("click", () => go(song));
       $("songs").appendChild(b);
+      if (song.slug !== here) {                             // and at the song's end, the others
+        const other = document.createElement("button");
+        other.textContent = song.title;
+        other.addEventListener("click", () => go(song));
+        $("others").prepend(other);
+      }
     }
     const now = songs.find((s) => s.slug === here);
     if (now) { $("title").textContent = now.title; document.title = `${now.title} · song`; }
@@ -314,6 +341,7 @@
     // A telephone draws as many pixels as it was seen to keep up with, and fewer if it
     // cannot (the player's ?maxpixels, ?maxheight, ?adapt).
     body.dataset.adapt = "1";
+    if (!params.get("bare") && !params.get("play")) body.dataset.still = "1";        // until it plays, the song's strongest moment
     if (phone) body.dataset.maxpixels = "900000";
     else if (handheld) body.dataset.maxheight = "1080";
     else body.dataset.maxpixels = String(2560 * 1440);        // (a window wider than 16:9 is not more to draw)
@@ -367,8 +395,18 @@
       const first = !body.classList.contains("played");
       body.classList.add("played", "playing");
       if (!touch || first) later();                         // the first time, a finger's too: the picture has the screen
+      if (window.player && window.player.still !== null) {  // the still goes, and the song's own picture comes
+        body.classList.add("opening");
+        setTimeout(() => body.classList.remove("opening"), 260);
+      }
     });
     audio.addEventListener("pause", () => { body.classList.remove("playing"); show(); });
+    // the end: what there is to do next
+    const end = $("end"), ended = (on) => { body.classList.toggle("ended", on); end.setAttribute("aria-hidden", String(!on)); end.inert = !on; };
+    ended(false);
+    audio.addEventListener("ended", () => ended(true));
+    for (const what of ["play", "seeking"]) audio.addEventListener(what, () => ended(false));
+    $("again").addEventListener("click", () => { audio.currentTime = 0; audio.play(); });
 
     // what was heard: drawn from when there is a player, faded when turned off
     const heard = $("heard"), bare = Boolean(params.get("bare") || params.get("embed"));
@@ -385,44 +423,14 @@
     $("hears").addEventListener("click", () => { hearing = !hearing; keep("heard", hearing ? "on" : "off"); hear(); });
     hear();
 
-    // The words keep clear of what is over the picture. A line is set where the picture has
-    // room for it; while the bar or the controls are over that place, it is moved to just
-    // clear of them, and back when they go. Two lines moved are kept apart.
-    const moved = new Map();                                // a line -> how far it is moved, in pixels
-    function lifted() {
-      const layer = $("lyrics");
-      if (!layer || (!moved.size && !shown())) return;
-      const lines = [...layer.children].filter((l) => Number(l.style.opacity) > 0 || moved.has(l));
-      if (!lines.length) return;
-      const box = layer.getBoundingClientRect();
-      let head = -Infinity, foot = Infinity;
-      if (shown()) {
-        const gap = Math.max(8, 0.015 * box.height);
-        const tops = [...$("foot").children].filter((c) => c.offsetParent && !c.classList.contains("off"));
-        if (tops.length) foot = tops[0].getBoundingClientRect().top - gap;
-        head = Math.max(...[...$("top").children].map((c) => c.getBoundingClientRect().bottom)) + gap;
-      }
-      const at = lines.map((l) => {
-        const mid = box.top + box.height * parseFloat(l.style.top) / 100, h = l.offsetHeight;
-        return { l, top: mid - h / 2, bottom: mid + h / 2, by: 0, on: Number(l.style.opacity) > 0 };
-      });
-      for (const a of at.filter((a) => a.on).sort((a, b) => b.bottom - a.bottom)) {      // from the lowest, up
-        if (a.bottom > foot) a.by = foot - a.bottom;
-        foot = Math.min(foot, a.top + a.by - 4);
-      }
-      for (const a of at.filter((a) => a.on).sort((a, b) => a.top - b.top)) {            // from the highest, down
-        if (a.top + a.by < head) a.by = head - a.top;
-        head = Math.max(head, a.bottom + a.by + 4);
-      }
-      for (const a of at) {
-        const by = Math.round(a.by), was = moved.get(a.l);
-        if (!a.on && was === undefined) continue;
-        if (by === (was || 0)) { if (!a.on && !by) moved.delete(a.l); continue; }
-        // a line not yet seen is set there at once; one that is seen goes there, eased
-        a.l.style.transition = was === undefined && getComputedStyle(a.l).opacity < 0.2 ? "none" : "";
-        a.l.style.translate = by ? `0 ${by}px` : "";
-        if (by || a.on) moved.set(a.l, by); else moved.delete(a.l);
-      }
+    // The words keep clear of what is over the picture (the player's setClear): between the
+    // bar's foot and the controls' head, while they are there.
+    function cleared(player) {
+      if (!shown()) return player.setClear(null, null);
+      const gap = Math.max(8, 0.012 * innerHeight);
+      const first = [...$("foot").children].find((c) => c.offsetParent && !c.classList.contains("off"));
+      const head = Math.max(...[...$("top").children].map((c) => c.getBoundingClientRect().bottom)) + gap;
+      player.setClear(Math.round(head), first ? Math.round(first.getBoundingClientRect().top - gap) : null);
     }
 
     const clock = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
@@ -458,7 +466,7 @@
       const total = clock(player.duration);
       const tick = () => {
         requestAnimationFrame(tick);
-        lifted();
+        if (!bare) cleared(player);                         // (the picture alone in another page: that page says)
         if (!shown()) return;
         const t = player.time();
         seek.style.setProperty("--p", `${(100 * Number(seek.value) / player.duration).toFixed(2)}%`);

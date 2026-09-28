@@ -54,6 +54,7 @@ const mmss = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0"
 // player steps at 60 too. Left to the display's own rate a 120 Hz screen would
 // decay the trails twice as fast and the two would not look alike.
 const STEP = 1 / 60;
+const STILL_OUT = 260;             // milliseconds
 
 function fail(message) {
   errorBox.hidden = false;
@@ -260,8 +261,47 @@ function makeLyrics(spec, canvas, bar, camera) {
   // transition on its position, meant for camera switches, which is not allowed back.
   let seat = seating();
   const placed = new Map();                          // line index -> the region its element is in
+
+  // A page may have things over the picture: a bar, controls, words of its own. A line is
+  // set where the picture has room for it; while something of the page's is over that
+  // place, it is moved to just clear of it, eased, and back when it goes. `head` and
+  // `foot`: the heights in the window, in its pixels, a line is to be between (null: any).
+  let head = null, foot = null;
+  const moved = new Map();                           // a line's element -> how far it is moved, in pixels
+  function kept() {
+    if (head === null && foot === null && !moved.size) return;
+    const seen = (l) => Number(l.style.opacity) > 0;
+    const these = [...els.values()].filter((l) => seen(l) || moved.has(l));
+    if (!these.length) return;
+    const box = layer.getBoundingClientRect();
+    const at = these.map((l) => {
+      const mid = box.top + box.height * parseFloat(l.style.top) / 100, h = l.offsetHeight;
+      return { l, top: mid - h / 2, bottom: mid + h / 2, by: 0, on: seen(l) };
+    });
+    let low = foot === null ? Infinity : foot, high = head === null ? -Infinity : head;
+    for (const a of at.filter((a) => a.on).sort((a, b) => b.bottom - a.bottom)) {      // from the lowest, up
+      if (a.bottom > low) a.by = low - a.bottom;
+      low = Math.min(low, a.top + a.by - 4);
+    }
+    for (const a of at.filter((a) => a.on).sort((a, b) => a.top - b.top)) {            // from the highest, down
+      if (a.top + a.by < high) a.by = high - a.top;
+      high = Math.max(high, a.bottom + a.by + 4);
+    }
+    for (const a of at) {
+      const by = Math.round(a.by), was = moved.get(a.l);
+      if (by === (was || 0)) { if (!a.on && !by) moved.delete(a.l); continue; }
+      // a line not yet seen is set there at once; one that is seen goes there, eased
+      a.l.style.transition = was === undefined && Number(getComputedStyle(a.l).opacity) < 0.2 ? "none" : "";
+      a.l.style.translate = by ? `0 ${by}px` : "";
+      if (by || a.on) moved.set(a.l, by); else moved.delete(a.l);
+    }
+  }
+
   return {
     get on() { return on; },
+    clear(h, f) { if (h !== head || f !== foot) { head = h; foot = f; kept(); } },
+    // the moments a line is sung from and to
+    get sung() { return lines.map((l) => [l.words[0][1], l.words[l.words.length - 1][2]]); },
     setOn(v) { turn(v ? "on" : "off"); },
     // a new bake's words (the studio's edits): set afresh, where the new layout puts them
     // and the frame's new shape: the same words, set afresh for it
@@ -271,7 +311,7 @@ function makeLyrics(spec, canvas, bar, camera) {
       shaped();
       layer.style.setProperty("--size", String(tall ? tall.size : st.size));
       for (const el of els.values()) el.remove();
-      els.clear(); placed.clear();
+      els.clear(); placed.clear(); moved.clear();
       seat = seating();
     },
     show(t) {
@@ -291,6 +331,7 @@ function makeLyrics(spec, canvas, bar, camera) {
           el.words[i].style.opacity = String(lyricInk(t, start, end, st));
         });
       });
+      kept();
     },
   };
 }
@@ -339,8 +380,13 @@ async function main() {
   // Everything the picture needs is asked for at once, and is on its way while the shader
   // is compiled: the frames under the moment it starts at, the sky, the song.
   const startAt = Number(params.get("t")) > 0 && Number(params.get("t")) < plan.duration ? Number(params.get("t")) : 0;
+  // Until it first plays, a page may have the picture be of the song's strongest moment
+  // (a moment after its strongest re-entry), not of its first, which is its darkest
+  // (data-still on the page's body; not if the address says where to begin).
+  const strongest = (plan.drops || []).reduce((a, d) => (!a || d.strength > a.strength ? d : a), null);
+  let still = !startAt && document.body.dataset.still && strongest ? Math.min(strongest.t + 0.3, plan.duration) : null;
   const texturesComing = (plan.textures || []).map((spec) => decoded(base + spec.file, spec.file, "texture", spec));
-  const gridComing = gridOf(plan, base, startAt, undefined, Promise.all(texturesComing));
+  const gridComing = gridOf(plan, base, still ?? startAt, undefined, Promise.all(texturesComing));
   for (const coming of [gridComing, ...texturesComing]) coming.catch(() => {});   // said where they are awaited
   audio.src = base + plan.audio_file;
   if (startAt) audio.currentTime = startAt;
@@ -399,6 +445,7 @@ async function main() {
   // more of the sky, more of the orbits, nothing cut and nothing left black (uWiden).
   let W = 0, H = 0, targets = [], front = 0, quality = 1;
   let lift = Number(params.get("lift")) || 0;      // how far under the middle the picture is set, in the page's pixels
+  document.body.style.setProperty("--lift", `${lift}px`);
   function fit() {
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     const aspect = canvas.clientWidth / (canvas.clientHeight || canvas.clientWidth / ASPECT[shape]);
@@ -549,7 +596,7 @@ async function main() {
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, dst.fbo);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
     gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
-    if (words) words.show(t);
+    if (words && still === null) words.show(t);
 
     const morph = values[grid.names.indexOf("uMorph")];
     const act = (plan.acts || []).find((a) => t >= a.start && t < a.end);
@@ -615,13 +662,13 @@ async function main() {
       if (now - move.t0 >= 1000 * move.seconds) { move = null; leaving.clear(); }
       lastDrawn = -1;                                // a camera on its way is drawn every frame, song playing or not
     }
-    const t = songTime(now);
+    const t = still ?? songTime(now);
     if (lastDrawn < 0 || t < lastDrawn || t - lastDrawn >= STEP - 0.002) {
       if (lastDrawn >= 0 && (t < lastDrawn || t - lastDrawn > 0.5)) clearFeedback();
       draw(t);
       shown++;                                       // frames drawn, not frames asked for
       lastDrawn = t;
-      if (!scrubbing) seek.value = String(t);
+      if (!scrubbing && still === null) seek.value = String(t);
     }
     requestAnimationFrame(tick);
   }
@@ -631,6 +678,11 @@ async function main() {
     else audio.pause();
   });
   audio.addEventListener("play", () => (playBtn.textContent = "pause"));
+  // the still is left as the song starts, or is moved: after STILL_OUT, which is how long
+  // a page has to take the picture away before the song's own is there
+  const leave = (after) => { if (still !== null) setTimeout(() => { still = null; lastDrawn = -1; }, after); };
+  audio.addEventListener("play", () => leave(STILL_OUT));
+  audio.addEventListener("seeking", () => leave(0));
   audio.addEventListener("pause", () => (playBtn.textContent = "play"));
   seek.addEventListener("input", () => {
     audio.currentTime = Number(seek.value);
@@ -679,7 +731,16 @@ async function main() {
       lastDrawn = -1;
     },
     // the picture set lower than the middle (or higher, less than none), by so many of the page's pixels
-    setLift(px) { px = Number(px) || 0; if (px !== lift) { lift = px; lastDrawn = -1; } },
+    setLift(px) {
+      px = Number(px) || 0;
+      if (px === lift) return;
+      lift = px; lastDrawn = -1;
+      document.body.style.setProperty("--lift", `${lift}px`);        // the words go with the picture
+    },
+    // the heights in the window a line of the song is to keep between (null: any)
+    setClear(head, foot) { if (words) words.clear(head, foot); },
+    get sung() { return words ? words.sung : []; },
+    get still() { return still; },
     get lyrics() { return words ? words.on : null; },
     setLyrics(v) { if (words) words.setOn(v); },
     async reload() {
@@ -698,7 +759,7 @@ async function main() {
     },
   };
 
-  draw(startAt);
+  draw(still ?? startAt);
   readout.textContent =
     `${plan.track}  ${plan.duration.toFixed(0)}s  ${plan.tempo.toFixed(1)} bpm  ` +
     `${plan.sections.length} sections  one program  - press play`;
