@@ -9,7 +9,8 @@ app starts it when it likes. So it is the picture at its liveliest, for its own 
 
 Which bars: whole bars, as many as fit in eight seconds, where the most is played (the
 kicks, the bass line's notes and the planets' notes, by their sizes), and no re-entry
-falls: a re-entry is a flash, and once a loop is a flash every few seconds.
+falls: a re-entry is a flash, and once a loop is a flash every few seconds. Or the bars
+asked for: from the bar a given moment is in, whatever falls in them.
 
 How it is made to run round. The picture is drawn from channels and from the time, and the
 time is only ever asked how long ago a hit was. So the channels are made to come back to
@@ -65,8 +66,10 @@ def lengths(bar: float, meter: int, longest: float = LONGEST, shortest: float = 
     return beats * bar / meter, beats / meter
 
 
-def window(ch: direct.Channels, got: dict, camera: str = "static", longest: float = LONGEST) -> Window:
-    """The bars to loop: see the module's docstring."""
+def window(ch: direct.Channels, got: dict, camera: str = "static", longest: float = LONGEST,
+           at: float | None = None) -> Window:
+    """The bars to loop: see the module's docstring. `at`: from the bar this moment of the
+    song is in (the last bars of the song, if it is too near its end)."""
     from . import render
 
     meta = got["meta"]
@@ -82,22 +85,27 @@ def window(ch: direct.Channels, got: dict, camera: str = "static", longest: floa
     played = lambda t0: run[np.searchsorted(t, t0 + length)] - run[np.searchsorted(t, t0)]
     drops = np.array([d["t"] for d in ch.drops], dtype=np.float64)
     span = ch.data[:, ch.index(f"uCamSpan.{camera}")].astype(np.float64)
-    at = lambda s: span[min(int(round(s * direct.RATE)), len(span) - 1)]
-    best, most = None, 0.0
-    for k, t0 in enumerate(bar_t):
-        if t0 + length > ch.duration - 0.5:
-            break
+    far = lambda s: span[min(int(round(s * direct.RATE)), len(span) - 1)]
+    fits = [k for k, t0 in enumerate(bar_t) if t0 + length <= ch.duration - 0.5]
+    if not fits:
+        raise ValueError(f"the song is {ch.duration:.1f} s long: too short for a loop of {length:.1f} s")
+    most = max(max(played(bar_t[k]) for k in fits), 1e-9)
+    if at is not None:
+        k = min(max(int(np.searchsorted(bar_t, at + 1e-6, side="right")) - 1, fits[0]), fits[-1])
+        return Window(float(bar_t[k]), length, bars, k, float(played(bar_t[k]) / most))
+    best = None
+    for k in fits:
+        t0 = bar_t[k]
         p = played(t0)
-        most = max(most, p)
         if ((drops > t0 - 0.5 * bar) & (drops < t0 + length + 0.25 * bar)).any():
             continue                                       # a re-entry in it, or its flash still on
-        if abs(np.log(at(t0 + length) / at(t0))) > 0.05:
+        if abs(np.log(far(t0 + length) / far(t0))) > 0.05:
             continue                                       # the camera is on its way somewhere
         if best is None or p > best[0]:
             best = (p, k, float(t0))
     if best is None:                                       # every window has one or the other: the liveliest, then
-        best = max((played(t0), k, float(t0)) for k, t0 in enumerate(bar_t) if t0 + length <= ch.duration - 0.5)
-    return Window(best[2], length, bars, best[1], float(best[0] / max(most, 1e-9)))
+        best = max((played(bar_t[k]), k, float(bar_t[k])) for k in fits)
+    return Window(best[2], length, bars, best[1], float(best[0] / most))
 
 
 def frames(length: float, fps: int) -> int:

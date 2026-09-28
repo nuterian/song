@@ -158,9 +158,13 @@
   #error { padding: 16px 24px; color: #e08a8a; white-space: pre-wrap; }
   #own { display: none; }                    /* what player.js keeps for itself: this page has its own */
 
-  /* ?shape=tall: the tall frame, 9:16, as high as the page has room for */
+  /* the tall frame, 9:16, as high as the page has room for */
   body.tall { --w: min(100vw - 48px, (100dvh - var(--around)) * 9 / 16); }
   body.tall #gl, body.tall #frame { aspect-ratio: 9 / 16; }
+  body.tall #stage:fullscreen > #gl, body.tall #stage:fullscreen > #frame { width: min(100vw, 100vh * 9 / 16); }
+  /* the bar and the controls are as wide as the wide picture would be: the tall one is narrow */
+  body.tall #top, body.tall #heard, body.tall #seek, body.tall #bar, body.tall #caption {
+    width: min(100vw - 48px, max((100dvh - var(--around)) * 9 / 16, 640px)); }
 
   /* ?embed=1: in a page which has its own caption and links */
   body.embed #top, body.embed #caption, body.embed #heard { display: none; }
@@ -170,6 +174,7 @@
   /* ?bare=1: the picture alone, filling its frame: the landing page's hero, which has the
      controls it wants of its own and reaches the player through window.player */
   body.bare { --w: min(100vw, 100dvh * 16 / 9); min-height: 0; height: 100dvh; }
+  body.bare.tall { --w: min(100vw, 100dvh * 9 / 16); }
   body.bare main { padding: 0; }
   body.bare #gl { border-radius: 0; cursor: default; }
   body.bare #top, body.bare #bar, body.bare #seek, body.bare #caption, body.bare #big, body.bare #heard { display: none; }
@@ -178,6 +183,9 @@
      songs another */
   @media (max-width: 720px) {
     body { --w: calc(100vw - 32px); }
+    body.tall { --around: 344px; --w: min(100vw - 32px, (100dvh - var(--around)) * 9 / 16); }
+    body.tall #top, body.tall #heard, body.tall #seek, body.tall #bar, body.tall #caption { width: calc(100vw - 32px); }
+    body.tall #caption { display: none; }
     main { justify-content: flex-start; padding-top: 4px; }
     #top { height: auto; min-height: 52px; gap: 0 16px; flex-wrap: wrap; justify-content: space-between; }
     #top .mark, #top .get { margin: 11px 0; }
@@ -224,6 +232,9 @@
         </button>
         <button class="icon" id="hears" aria-pressed="true" aria-label="What was heard" title="What was heard">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4.5 14v-4M8.25 17V7M12 19.5v-15M15.75 16.5v-9M19.5 13.5v-3"/></svg>
+        </button>
+        <button class="icon" id="tall" aria-pressed="false" aria-label="Tall frame, for a phone held upright" title="Tall frame, for a phone held upright">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/></svg>
         </button>
         <button class="icon" id="full" aria-label="Full screen" title="Full screen">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 9V6a1.5 1.5 0 0 1 1.5-1.5h3M15 4.5h3A1.5 1.5 0 0 1 19.500 6v3M19.5 15v3a1.5 1.5 0 0 1-1.500 1.500h-3M9 19.500H6A1.5 1.5 0 0 1 4.500 18v-3"/></svg>
@@ -308,6 +319,14 @@
       if (player.lyrics === null) { words.disabled = true; words.title = "This song has no lyrics"; }
       words.addEventListener("click", () => { player.setLyrics(!player.lyrics); worded(); });
       worded();
+
+      // the frame: tall on a screen held upright, unless the address says (?shape=); and as asked
+      const tall = $("tall"), upright = matchMedia("(max-aspect-ratio: 1/1)");
+      const framed = () => tall.setAttribute("aria-pressed", String(player.shape === "tall"));
+      if (!params.get("shape") && upright.matches) player.setShape("tall");
+      tall.addEventListener("click", () => { player.setShape(player.shape === "tall" ? "wide" : "tall"); framed(); });
+      upright.addEventListener("change", () => { player.setShape(upright.matches ? "tall" : "wide"); framed(); });
+      framed();
 
       // the time, and how far along the line the song has come
       let said = "", copied = 0;

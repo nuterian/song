@@ -256,10 +256,11 @@ class Session:
     # ------------------------------------------------------------------ the mp4
 
     def export(self, camera: str, words: bool = True, jobs: "Jobs | None" = None, shape: str = "wide",
-               loop: bool = False) -> dict:
+               loop: bool = False, at: float | None = None) -> dict:
         """The whole song to an mp4, as the studio shows it now: this sheet, this camera, the
         frame wide or tall, the words burned in or not. Or, with `loop`, a loop of a few of
-        its bars for Spotify's Canvas (loop.py): tall, without sound or words. One job of the
+        its bars for Spotify's Canvas (loop.py): tall, without sound or words, of its
+        liveliest bars or from the bar the moment `at` is in. One job of the
         studio's runner (`Jobs`: after any song being added, and never beside another
         export); `exporting` says how far it has got."""
         if camera not in cosmos.MODES:
@@ -268,7 +269,7 @@ class Session:
             return {"ok": False, "refused": [f"no shape {shape!r}: the frame is {' or '.join(cosmos.SHAPES)}"]}
         if self.exporting and not self.exporting.finished:
             return {"ok": False, "refused": ["an mp4 of this song is already being written: one at a time"]}
-        self.exporting = Export(self, camera, bool(words), shape, bool(loop))
+        self.exporting = Export(self, camera, bool(words), shape, bool(loop), at)
         (jobs or Jobs()).start("export", self.track.slug, self.exporting.run)
         return {"ok": True} | self.exporting.view()
 
@@ -283,9 +284,10 @@ class Export:
     the studio's runner, so two never share the GPU and the encoder (each would take twice
     as long), and it waits behind a song being added."""
 
-    def __init__(self, session: Session, camera: str, words: bool, shape: str = "wide", loop: bool = False) -> None:
+    def __init__(self, session: Session, camera: str, words: bool, shape: str = "wide", loop: bool = False,
+                 at: float | None = None) -> None:
         self.session, self.camera, self.words, self.shape = session, camera, words and not loop, "tall" if loop else shape
-        self.loop, self.window = loop, None                  # a loop's bars are known once it is baked
+        self.loop, self.at, self.window = loop, at, None     # a loop's bars are known once it is baked
         self.path = session.export_path(camera, words, shape, loop)
         self.done, self.total, self.error, self.finished = 0, 0, None, False
         self.t0, self.t1, self.first = time.time(), None, None
@@ -300,9 +302,10 @@ class Export:
             step("rendering")
             if self.loop:
                 from . import loop
-                w = loop.window(ch, self.got, self.camera)
+                w = loop.window(ch, self.got, self.camera, at=self.at)
                 self.window = {"start": round(w.start, 3), "length": round(w.length, 3), "bars": w.bars, "bar": w.bar}
-                render.canvas(self.got, self.session.track, self.session.out, camera=self.camera, ch=ch, progress=self._progress)
+                render.canvas(self.got, self.session.track, self.session.out, camera=self.camera, ch=ch,
+                              progress=self._progress, at=self.at)
             else:
                 render.render(self.got, self.session.track, self.session.out, camera=self.camera, words=self.words,
                               ch=ch, quiet=True, progress=self._progress, shape=self.shape)
@@ -703,7 +706,8 @@ def handler(sessions: dict[str, Session | Track], jobs: Jobs | None = None):
                     out = s.refresh()
                 elif url.path == "/api/export":
                     out = s.export(str(body.get("camera", "static")), bool(body.get("lyrics", True)), jobs,
-                                   str(body.get("shape", "wide")), bool(body.get("loop", False)))
+                                   str(body.get("shape", "wide")), bool(body.get("loop", False)),
+                                   None if body.get("at") is None else float(body["at"]))
                 else:
                     return self._reply({"ok": False, "refused": [f"no such question: {url.path}"]}, 404)
             except Exception as e:                            # said to the page, not swallowed

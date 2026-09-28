@@ -1521,7 +1521,33 @@ And no part of the picture changes more across the join than parts do between fr
 most any 24-pixel block changes is 21 across it, against a median of 40 elsewhere. Each
 is 461 frames, 7.683 s, h264 with no sound, 5.9 to 9.5 MB; the studio writes one in 11 s.
 
-Not done: choosing the bars by hand (the studio takes the liveliest; the playhead's bars
-would be the natural second choice). Not tried: sending one to Spotify; how it looks
-under the app's own controls.
+The bars can be chosen: the studio's Export offers "Liveliest bars" or "From the
+playhead", the bar the playhead is in (`loop.window(..., at=)`, `--canvas START`); what
+falls in bars asked for, a re-entry or a camera on its way, is in the loop. Not tried:
+sending one to Spotify; how it looks under the app's own controls.
+
+# The site on a telephone (2026-09-27)
+
+Held upright, the landing page was the wide picture as a strip across the screen, a
+quarter of its height, with what is said under it. It is the tall picture now, filling
+the screen (`?shape=tall`, asked for where the window is taller than it is wide, and
+changed with `player.setShape` if the telephone is turned): as wide as the screen or, on
+a screen narrower than 9:16, as high, its sides a little outside it, where the tall frame
+keeps nothing. What is said is over it, as on a wide screen, the picture dimmed under the
+three statements. The Sun is seated under the headline and its two links, which are a
+height in pixels, so lower on a short screen. The poster is a tall one
+(`img/cosmos-still-tall.webp`, 29 KB), preloaded by the window's shape.
+
+The demo page has the tall frame too: on a screen held upright unless the address says
+(`?shape=`), and from a control beside the full screen on any screen. Its controls keep
+the wide picture's width; on a telephone the caption gives its room to the picture.
+
+Looked at, at the moment the re-entry lands and with the video not started: 390x844,
+360x640, 430x932, 820x1180 upright, and 1440x900 as before. The play button of a browser
+that will not start it is clear of what is said by 91 px or more at each. The demo fits
+390x844 without a scroll (it was 5 px over, the first time). Frame pacing at 390x844, the
+canvas 1080 by 1920, in headless Chrome on this machine's GPU, which is not a
+telephone's: 60 frames a second, the worst 17.5 to 17.8 ms, in four runs of five; in one,
+its first seconds had 8 frames over 20 ms (the worst 34 ms) and the player drew 54 that
+second. Not looked at: a telephone.
 

@@ -165,8 +165,9 @@ function syncTransport() {
 let exportTimer = 0;
 const exportUrl = (q = "") => `/api/export?track=${encodeURIComponent(song.slug)}${q}`;
 
-// Or a loop of a few of its bars, for Spotify's Canvas: tall, without sound or words.
-let exportLoop = false;
+// Or a loop of a few of its bars, for Spotify's Canvas: tall, without sound or words; of its
+// liveliest bars, or from the bar the playhead is in.
+let exportLoop = false, exportFrom = "liveliest";
 
 async function openExport(again) {
   const p = player(), box = $("exportpop");
@@ -175,22 +176,29 @@ async function openExport(again) {
   const q = await (await fetch(exportUrl(`&camera=${encodeURIComponent(camera)}&lyrics=${lyrics ? 1 : 0}&shape=${shape}&loop=${loop ? 1 : 0}`))).json();
   if (q.job && q.job.state === "running") { watchExport(q.job); return; }
   const size = shape === "tall" ? "tall, 1080 by 1920" : "wide, 1920 by 1080";
+  const at = loop && exportFrom === "playhead" ? now() : null;
+  const bars = at === null ? "the song's liveliest bars" : `from the bar the playhead is in, ${mmss(at)}`;
   const said = loop
-    ? `A loop for Spotify's Canvas: the song's liveliest bars, 8 seconds at most, tall, 1080 by 1920, the ${esc(camera)} camera, no sound, no words, to`
+    ? `A loop for Spotify's Canvas: ${bars}, 8 seconds at most, tall, 1080 by 1920, the ${esc(camera)} camera, no sound, no words, to`
     : `The whole song, ${size}, the ${esc(camera)} camera, ${lyrics ? "with" : "without"} the words, to`;
+  const from = loop ? `<span class="seg"><button data-from="liveliest" class="${at === null ? "on" : ""}">Liveliest bars</button>` +
+    `<button data-from="playhead" class="${at === null ? "" : "on"}">From the playhead</button></span>` : "";
   box.innerHTML = `<div class="kinds"><span class="seg"><button data-loop="0" class="${loop ? "" : "on"}">Whole song</button>` +
-    `<button data-loop="1" class="${loop ? "on" : ""}">Canvas loop</button></span></div>` +
+    `<button data-loop="1" class="${loop ? "on" : ""}">Canvas loop</button></span>${from}</div>` +
     `<div class="said">${icon("download", 14)}<span>${said}</span></div>` +
     `<div class="path">${esc(q.path)}</div>` +
     `<div class="acts"><button class="pill" id="exno">Cancel</button><button class="pill go" id="exgo">${icon("download", 14)}Export</button></div>`;
   box.hidden = false;
   for (const b of box.querySelectorAll(".kinds button")) {
-    b.addEventListener("click", () => { exportLoop = b.dataset.loop === "1"; openExport(true); });
+    b.addEventListener("click", () => {
+      if (b.dataset.loop) exportLoop = b.dataset.loop === "1"; else exportFrom = b.dataset.from;
+      openExport(true);
+    });
   }
   $("exno").addEventListener("click", () => (box.hidden = true));
   $("exgo").addEventListener("click", async () => {
     box.hidden = true;
-    const r = await call("/api/export", { camera, lyrics, shape, loop });
+    const r = await call("/api/export", { camera, lyrics, shape, loop, at });
     if (!r.ok) { status("Not exported", "bad"); toast(r.refused); return; }
     watchExport(r);
   });

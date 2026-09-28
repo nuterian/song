@@ -305,10 +305,10 @@ def canvas_name(track: Track, camera: str = "static") -> str:
 
 
 def canvas(got: dict, track: Track, out_dir: str | Path, camera: str = "static", ch: direct.Channels | None = None,
-           size: tuple[int, int] = (1080, 1920), fps: int = 60, crf: int = 17, progress=None):
+           size: tuple[int, int] = (1080, 1920), fps: int = 60, crf: int = 17, progress=None, at: float | None = None):
     """A loop for Spotify's Canvas (loop.py): a few bars of the song where the most is
-    played, tall, made to run round without a seam; no sound and no words. Returns the mp4
-    and the bars it is of."""
+    played (or from the bar the moment `at` is in), tall, made to run round without a
+    seam; no sound and no words. Returns the mp4 and the bars it is of."""
     from . import loop
 
     out_dir = Path(out_dir)
@@ -319,7 +319,7 @@ def canvas(got: dict, track: Track, out_dir: str | Path, camera: str = "static",
     choices = ch.variants["camera"]["choices"]
     if camera not in choices:
         raise ValueError(f"no camera {camera!r}: the cameras are {', '.join(choices)}")
-    w = loop.window(ch, got, camera)
+    w = loop.window(ch, got, camera, at=at)
     times, rows = loop.rows(ch, w, fps)
     out_path = out_dir / canvas_name(track, camera)
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",

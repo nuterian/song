@@ -71,6 +71,18 @@ def test_the_bars_looped_are_where_the_most_is_played_and_no_re_entry_falls():
     assert w.start in (12.0, 26.0)                        # beside them: before the re-entry, or after its flash
 
 
+def test_the_bars_asked_for_are_from_the_bar_the_moment_is_in():
+    ch, got = _song(drops=(24.0,))
+    w = loop.window(ch, got, "static", at=23.1)           # a re-entry falls in them: they were asked for
+    assert (w.start, w.bar, w.length, w.bars) == (22.0, 11, pytest.approx(8.0), 4.0)
+    assert loop.window(ch, got, "static", at=22.0).bar == 11 and loop.window(ch, got, "static", at=21.999).bar == 10
+    assert loop.window(ch, got, "static", at=0.0).start == 0.0
+    last = loop.window(ch, got, "static", at=39.0)        # too near the end for four bars: the song's last four
+    assert last.start + last.length <= 40.0 - 0.5 and last.start == 30.0
+    times, rows = loop.rows(ch, w, 60)
+    assert (rows[:, list(ch.names).index("uDropT")] > 0).all()       # and the re-entry is in the loop
+
+
 def test_the_camera_is_not_on_its_way_anywhere_in_a_loop():
     ch, got = _song()
     span = ch.index("uCamSpan.static")
@@ -173,20 +185,20 @@ def test_the_studio_exports_a_loop_when_asked(monkeypatch):
     session = studio.Session(tr)
     asked = {}
 
-    def canvas(got, track, out, camera, ch, progress):
-        asked.update(camera=camera)
+    def canvas(got, track, out, camera, ch, progress, at):
+        asked.update(camera=camera, at=at)
         progress(461, 461)
         return out / "x.mp4", loop.Window(100.0, 7.68, 4.0, 52, 1.0)
 
     monkeypatch.setattr(studio.render, "canvas", canvas)
     monkeypatch.setattr(studio.render, "render", lambda *a, **k: pytest.fail("a loop is not the whole song"))
     monkeypatch.setattr(studio.render, "bake", lambda *a, **k: None)
-    monkeypatch.setattr(loop, "window", lambda ch, got, camera: loop.Window(100.0, 7.68, 4.0, 52, 1.0))
+    monkeypatch.setattr(loop, "window", lambda ch, got, camera, at: loop.Window(100.0, 7.68, 4.0, 52, 1.0))
     jobs = studio.Jobs()
-    r = session.export("hybrid", True, jobs, "wide", True)
+    r = session.export("hybrid", True, jobs, "wide", True, 101.5)
     assert r["ok"] and r["loop"] and r["shape"] == "tall" and r["lyrics"] is False
     assert r["path"].endswith(f"{tr.slug}-hybrid-canvas.mp4")
     jobs.queue.join()
     done = session.exporting.view()
-    assert asked == {"camera": "hybrid"} and done["state"] == "done" and done["done"] == 461
+    assert asked == {"camera": "hybrid", "at": 101.5} and done["state"] == "done" and done["done"] == 461
     assert done["window"] == {"start": 100.0, "length": 7.68, "bars": 4.0, "bar": 52}

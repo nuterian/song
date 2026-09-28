@@ -22,7 +22,8 @@
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","@id":"https://jugalm.com/song/#app","name":"song","url":"https://jugalm.com/song/","applicationCategory":"MultimediaApplication","operatingSystem":"macOS","dateCreated":"2026","image":"https://jugalm.com/song/img/cosmos-still.webp","description":"Give it a track. It listens to the whole song, then draws it as a solar system where every beat, note and word moves something. Free, open source, and made on your own Mac.","codeRepository":"https://github.com/nuterian/song","author":{"@type":"Person","@id":"https://jugalm.com/#me","name":"Jugal Manjeshwar","url":"https://jugalm.com/"},"isPartOf":{"@id":"https://jugalm.com/#site"}}</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%23ff7a3d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <!-- The poster is what the page paints first; the live picture arrives over it. -->
-<link rel="preload" as="image" href="img/cosmos-still.webp" fetchpriority="high">
+<link rel="preload" as="image" href="img/cosmos-still.webp" fetchpriority="high" media="(min-aspect-ratio: 1/1)">
+<link rel="preload" as="image" href="img/cosmos-still-tall.webp" fetchpriority="high" media="(max-aspect-ratio: 1/1)">
 <script>document.documentElement.classList.add("js");</script>
 <style>
 :root{
@@ -183,13 +184,18 @@ footer a:hover{color:var(--ink)}
 @media (min-aspect-ratio:19/10){
   .pic{--low:28svh}
 }
-/* upright: the picture whole, across the width, and the words in the dark under it */
+/* upright (a telephone in the hand): the tall picture, the one the studio exports for it,
+   filling the screen; a screen narrower than 9:16 loses a little of its sides, where nothing
+   is. What is said is over it, as on a wide screen. */
 @media (max-aspect-ratio:1/1){
-  .pic{width:100vw;--low:12svh;--mid:-8svh}
-  .veil{animation:none !important}
-  .fade{background:linear-gradient(to bottom,rgba(0,0,0,.6),rgba(0,0,0,0) 22%)}
-  .veil,.film[data-beat="1"] .veil,.film[data-beat="2"] .veil,.film[data-beat="3"] .veil{opacity:0}
-  .beat:not(.hero){place-content:end center;padding-bottom:16svh}
+  /* the Sun under what is said, which is a height in pixels: lower on a short screen */
+  .pic{width:max(100vw,calc(100svh * 9 / 16));aspect-ratio:9/16;--low:max(9svh,calc(350px - 36svh));--mid:0svh;
+    background-image:url(img/cosmos-still-tall.webp)}
+  .pic::before{height:16%}
+  .pic::after{height:12%}
+  .fade{background:
+    linear-gradient(to bottom,rgba(0,0,0,.86),rgba(0,0,0,0) 48%),
+    linear-gradient(to top,#000,rgba(0,0,0,0) 12%)}
   .beat.hero{padding-top:76px}
   .three{grid-template-columns:1fr;text-align:center}
   header{gap:20px}
@@ -307,6 +313,8 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
   // where in the song it begins: four seconds before its strongest re-entry, so that the
   // page opens into it; unless the address says otherwise (?t=)
   var from = Number(new URLSearchParams(location.search).get("t")) || 92;
+  // the frame: tall where the window is upright, and changed with it if it is turned
+  var upright = matchMedia("(max-aspect-ratio: 1/1)");
 
   // the song's loudness, eased to where it is wanted: nothing starts or stops at full
   function fade(to, ms, then) {
@@ -391,7 +399,8 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
     frame.title = "The music video, drawn live";
     frame.setAttribute("allow", "autoplay");
     frame.setAttribute("tabindex", "-1");
-    frame.src = "video/?bare=1&adapt=1&track=gravity-in-motion&camera=hybrid&lyrics=off&maxheight=1080&t=" + from + "&play=1" + (heard ? "" : "&muted=1");
+    frame.src = "video/?bare=1&adapt=1&track=gravity-in-motion&camera=hybrid&lyrics=off&maxheight=1080&t=" + from + "&play=1" + (heard ? "" : "&muted=1") +
+      (upright.matches ? "&shape=tall" : "");
     pic.appendChild(frame);
     var tries = 0, wait = setInterval(function () {
       var w = frame.contentWindow;
@@ -421,6 +430,9 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
       } else if (++tries > 750) clearInterval(wait);       // 30 s: the poster stays, which is a page
     }, 40);
   }
+
+  var turned = function () { if (player && player.setShape) player.setShape(upright.matches ? "tall" : "wide"); };
+  if (upright.addEventListener) upright.addEventListener("change", turned); else if (upright.addListener) upright.addListener(turned);
 
   sound.addEventListener("click", function () {
     if (!player) return;
