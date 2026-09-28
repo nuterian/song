@@ -1867,3 +1867,16 @@ share sheet on a telephone, which a browser without a window does not show.
   on a 402x874 screen: the picture 874 high, every control and the Sun where they were.
 - Seen on his telephone and still open: the time read "0:00 / 0:00" while it played in
   Safari (right in Chrome, and in Chrome here); not reproduced.
+- **Still black, and why.** With the picture as high as the screen (402x874, 160 points
+  under the bar, said the readout on his iPhone), the band was still black. A page of
+  stripes on his telephone, each way of placing them in turn: fixed, with a black
+  background or none, black; sticky while the page scrolls, with or without, black; placed
+  in a page that does not scroll, colour; in a page that scrolls, colour; a page that
+  stands still with what is read scrolling over it in a box of its own, colour, and the
+  scrolling felt as a page's does. Safari 26 does not draw what is fixed or sticky under its
+  glass bar. So the demo's stage is absolute in a page that does not scroll, and the landing
+  page stands still, the picture under it as part of it, and what is read scrolls over it
+  (`.page`, whose scroll the scroll-driven effects follow, `--page`). The cost: Safari's bar
+  no longer shrinks as the page is read, and tapping the clock may not bring the page back
+  to its head. Everything was where it was, at six window sizes; the words, 4.5 to 1 or
+  more; 60 a second, none over 20 ms.

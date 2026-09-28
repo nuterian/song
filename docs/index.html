@@ -33,7 +33,7 @@
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
 }
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%;background:#000}
+html{-webkit-text-size-adjust:100%;background:#000;overflow:hidden}
 body{margin:0;background:#000;color:var(--ink);
   font:1.1875rem/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;overflow-x:clip}
@@ -57,17 +57,21 @@ header a{padding:12px 8px;margin:0 -8px}
 header .ctl{padding:14px;margin:-14px}
 header .mark{padding:12px 8px 12px 0;margin-left:0}
 
-/* The film: one picture, pinned, the whole height of what is said over it. It is the
-   video itself, drawn live and silent in a frame of its own; the poster is under it
-   from the first paint. */
-.film{position:relative;--bar:calc(100lvh - 100svh)}
+/* The film: one picture, the whole screen, and over it the page, which is what scrolls. It
+   is the video itself, drawn live and silent in a frame of its own; the poster is under it
+   from the first paint. The page itself does not scroll: Safari (26, on an iPhone) does not
+   draw what is fixed or sticky under its glass bar at the foot, and does draw the page, so
+   the picture is part of the page, standing still, and what is read scrolls over it. */
+.film{--bar:0px;timeline-scope:--page}
+.page{position:absolute;left:0;top:0;width:100%;height:calc(100svh + var(--bar));z-index:1;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scroll-timeline:--page block}
+.page:focus{outline:none}
 /* where the Sun is: under the window's middle by --low in the first screen and --mid after it,
    and to its right by --side (the poster, the video and the play button all go by these).
    The picture goes on under a telephone's browser bar, where the bar is glass (Safari's):
    --bar is how far past the window it goes (on the film, set by the script to the screen's
    own foot on a telephone, since Safari's 100lvh stops short of it), and the middle of what
    is seen is above it. */
-.screen{position:sticky;top:0;height:calc(100svh + var(--bar));overflow:hidden;background:#000;z-index:0;--low:21svh;--mid:calc(var(--low) + 5svh);--side:0px}
+.screen{position:absolute;left:0;top:0;width:100%;height:calc(100svh + var(--bar));overflow:hidden;background:#000;z-index:0;--low:21svh;--mid:calc(var(--low) + 5svh);--side:0px}
 /* The poster, which the video is drawn over: as wide as the window; it sits low, the Sun
    under what is said, on every screen of the film (a little lower after the first, where
    more is said). Its top and bottom go to black under two strips of its own, so it has no
@@ -95,7 +99,7 @@ header .mark{padding:12px 8px 12px 0;margin-left:0}
 .dark{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .38s var(--ease)}
 .film.dip .dark{opacity:1}
 .fade{position:absolute;inset:0;background:
-  linear-gradient(to bottom,rgba(0,0,0,.82),rgba(0,0,0,.55) 38%,rgba(0,0,0,0) 62%),
+  linear-gradient(to bottom,rgba(0,0,0,.82),rgba(0,0,0,.6) 44%,rgba(0,0,0,0) 66%),
   linear-gradient(to top,#000,rgba(0,0,0,0) 14%)}
 .ctl{display:inline-flex;align-items:center;gap:7px;visibility:hidden;opacity:0;transition:opacity .6s var(--ease),color .2s}
 .ctl.ready{visibility:visible;opacity:1}
@@ -118,13 +122,13 @@ header.solid .hint{opacity:0}
 .blip svg{width:26px;height:26px}
 .blip.shown{animation:blip .7s var(--ease)}
 @keyframes blip{0%{opacity:0;scale:.8}25%{opacity:1;scale:1}100%{opacity:0;scale:1.12}}
-.screen{cursor:pointer}
+.beats{cursor:pointer}
 .playbig svg{width:24px;height:24px;margin-left:3px}
 .film.still .playbig{display:grid}
 .film[data-beat="0"] .playbig{top:calc(50% + var(--low) - var(--bar) / 2)}
 
 /* What is said over it: one thing to a screen. */
-.beats{position:relative;z-index:1;margin-top:calc(-100svh - var(--bar));pointer-events:none}
+.beats{position:relative}
 .beat{min-height:100svh;display:grid;place-content:start center;justify-items:center;text-align:center;padding:clamp(80px,11svh,130px) 24px 64px}
 .beat a,.beat button{pointer-events:auto}
 .beat .lede{color:rgba(245,245,247,.88)}
@@ -181,7 +185,7 @@ section.get{padding-bottom:clamp(70px,10svh,120px)}
 .fine{margin:26px auto 0;color:var(--dim);font-size:0.875rem;line-height:1.55;max-width:44em}
 /* what is read after the film is nearly white, so the picture under it may be less dark */
 section.own .lede,section.get .lede,.three span,.fine,.send p{color:rgba(245,245,247,.82)}
-footer{position:relative;z-index:2;background:#000;padding:0 24px 40px;text-align:center;color:var(--faint);font-size:0.8125rem}
+footer{position:relative;z-index:2;padding:0 24px calc(40px + var(--bar));text-align:center;color:rgba(245,245,247,.72);font-size:0.8125rem}
 footer a{display:inline-block;padding:14px 0;margin:-14px 0}
 footer a:hover{color:var(--ink)}
 
@@ -192,12 +196,12 @@ footer a:hover{color:var(--ink)}
    the script sets do the same in steps, eased; with no script, everything is simply there. */
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion:no-preference){
-    .pic{transition:scale 2.8s var(--ease);animation:seat linear both;animation-timeline:scroll(root block);animation-range:0svh 100svh}
-    .veil{transition:none;animation:dim linear both;animation-timeline:scroll(root block);animation-range:12svh 92svh}
-    .cue{animation:gone linear both;animation-timeline:scroll(root block);animation-range:0svh 24svh}
+    .pic{transition:scale 2.8s var(--ease);animation:seat linear both;animation-timeline:--page;animation-range:0svh 100svh}
+    .veil{transition:none;animation:dim linear both;animation-timeline:--page;animation-range:12svh 92svh}
+    .cue{animation:gone linear both;animation-timeline:--page;animation-range:0svh 24svh}
     .beat{view-timeline:--beat block}
     html.js .beat > *{opacity:1;transform:none;transition:none}
-    html.js .beat.hero > *{animation:leave linear both;animation-timeline:scroll(root block);animation-range:6svh 60svh}
+    html.js .beat.hero > *{animation:leave linear both;animation-timeline:--page;animation-range:6svh 60svh}
     html.js .beat:not(.hero) > *{animation:say linear both;animation-timeline:--beat;animation-range:cover 0% cover 100%}
     .rise{animation:rise linear both;animation-timeline:view();animation-range:entry 0% entry 70%}
     .shot{animation:grow linear both;animation-timeline:view();animation-range:entry 0% cover 38%}
@@ -292,7 +296,6 @@ footer a:hover{color:var(--ink)}
   <a href="https://github.com/nuterian/song">GitHub</a>
 </header>
 
-<main>
 <div class="film" id="film" data-beat="0">
   <div class="screen">
     <div class="pic" id="pic" role="img" aria-label="The music video for Gravity in Motion, drawn live: the Sun and its planets moving with the song"></div>
@@ -308,6 +311,8 @@ footer a:hover{color:var(--ink)}
     <span class="cue" aria-hidden="true"></span>
   </div>
 
+  <div class="page" id="page" tabindex="-1">
+  <main>
   <div class="beats">
     <section class="beat hero on" data-beat="0">
       <h1>A music video<br>for any song.</h1>
@@ -359,12 +364,13 @@ cd song && ./setup.sh
 visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-label="Copy the commands"></button></div>
   <p class="fine">The install is 2.1 GB, plus about 8 GB of free models it asks before fetching. On an M4 MacBook Air, a 5-minute song with lyrics takes about 12 minutes to prepare. The model that times the lyrics is licensed for non-commercial use.</p>
 </section>
-</div>
-</main>
+  </main>
 
-<footer>
-  <a href="https://github.com/nuterian/song">github.com/nuterian/song</a> · MIT · made by <a href="https://jugalm.com/">Jugal Manjeshwar</a>
-</footer>
+  <footer>
+    <a href="https://github.com/nuterian/song">github.com/nuterian/song</a> · MIT · made by <a href="https://jugalm.com/">Jugal Manjeshwar</a>
+  </footer>
+  </div>
+</div>
 
 <script>
 // The film is the video itself, drawn live by the player in a frame of its own
@@ -564,8 +570,9 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
     }, 40);
   }
 
-  // on a telephone, the picture as far down as the screen goes, under a glass bar (the
-  // film's --bar, from the window's height, asked every frame as the demo's page asks it)
+  // on a telephone, the picture (and the page over it) as far down as the screen goes, under
+  // a glass bar (the film's --bar, from the window's height, asked every frame as the demo's
+  // page asks it)
   if (matchMedia("(hover: none) and (pointer: coarse)").matches) (function under(was) {
     var H = innerHeight, W = innerWidth, now = W + " " + H;
     if (now !== was) {
@@ -592,10 +599,19 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
     stopped = false;
     go();
   });
-  document.querySelector(".screen").addEventListener("click", function (e) {
-    if (e.target.closest("button,a")) return;
+  // a click or a touch on the picture, where the film is (what is read after it is not the picture's)
+  var page = document.getElementById("page");
+  page.addEventListener("click", function (e) {
+    if (!e.target.closest(".beats") || e.target.closest("button,a")) return;
     toggle(true);
   });
+  // the page is what scrolls, so the keys that scroll are its from the first; and the window
+  // itself never does (a link to a place on the page may ask it to)
+  if (matchMedia("(hover: hover)").matches) page.focus({ preventScroll: true });
+  document.addEventListener("click", function (e) {                  // and again after a link to a place on it
+    if (e.target.closest('a[href^="#"]')) setTimeout(function () { page.focus({ preventScroll: true }); }, 0);
+  });
+  addEventListener("scroll", function () { if (scrollX || scrollY) scrollTo(0, 0); });
   addEventListener("keydown", function (e) {
     if (e.code !== "KeyK" || e.metaKey || e.ctrlKey || e.altKey || e.target.closest("input,textarea") || away) return;
     e.preventDefault();
@@ -633,7 +649,7 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
     past = p * p * (3 - 2 * p);
     dusk.style.opacity = (past * 0.5).toFixed(3);
   }
-  addEventListener("scroll", beyond, { passive: true });
+  document.getElementById("page").addEventListener("scroll", beyond, { passive: true });
   addEventListener("resize", beyond);
   beyond();
 
