@@ -1,7 +1,7 @@
 /* One POST per page view, and nothing else: the same count jugalm.com keeps, to
    the same self-hosted Umami (stats.jugalm.com) under the same website id, so the
    whole domain reads as one site and song is the rows whose URL begins /song/.
-   This is the WEBSITE's counter, for this page and the live demo. The tool itself
+   This is the WEBSITE's counter, for the pages that load it (the landing page). The tool itself
    has none and never will: nothing leaves your machine. No cookies, no storage, no
    identifier; Do Not Track and Global Privacy Control are honoured; anything that
    is not jugalm.com is not a visit. text/plain is load-bearing: sendBeacon always
