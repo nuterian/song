@@ -393,17 +393,24 @@ async function main() {
   // The canvas is drawn at the display's own resolution, not at a fixed size stretched
   // to fit: on a dense screen a stretched 720p canvas is every pixel made four, and no
   // shader can look sharp through that. Capped, so a 5K window does not ask for 5K.
+  // The canvas has the shape its box has. Where that is the frame's (16:9, or 9:16), the
+  // picture is the frame; where the page gives it another (a whole window, a whole screen),
+  // the frame is as large as fits inside, in the middle, and the picture goes on round it:
+  // more of the sky, more of the orbits, nothing cut and nothing left black (uWiden).
   let W = 0, H = 0, targets = [], front = 0, quality = 1;
+  let lift = Number(params.get("lift")) || 0;      // how far under the middle the picture is set, in the page's pixels
   function fit() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 3), aspect = ASPECT[shape];
-    let w = Math.round(canvas.clientWidth * dpr * quality), h = Math.round(canvas.clientWidth * dpr * quality / aspect);
-    // the cap is on the frame's short side: its height when it is wide, its width when tall
-    const cap = (Number(params.get("maxheight") || document.body.dataset.maxheight) || 1440) * quality;
-    if (Math.min(w, h) > cap) {
-      if (aspect > 1) { h = Math.round(cap); w = Math.round(h * aspect); }
-      else { w = Math.round(cap); h = Math.round(w / aspect); }
-    }
-    if (!w || (w === W && h === H)) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const aspect = canvas.clientWidth / (canvas.clientHeight || canvas.clientWidth / ASPECT[shape]);
+    let w = canvas.clientWidth * dpr, h = w / aspect;
+    // two caps, as the page says (?maxheight, ?maxpixels): on the short side, and on the
+    // pixels in all, which is what a frame costs
+    const shrink = (by) => { if (by < 1) { w *= by; h *= by; } };
+    shrink((Number(params.get("maxheight") || document.body.dataset.maxheight) || 1440) / Math.min(w, h));
+    const most = Number(params.get("maxpixels") || document.body.dataset.maxpixels);
+    if (most) shrink(Math.sqrt(most / (w * h)));
+    w = Math.round(w * quality); h = Math.round(h * quality);
+    if (!w || !h || (w === W && h === H)) return;
     for (const old of targets) { gl.deleteFramebuffer(old.fbo); gl.deleteTexture(old.tex); }
     W = canvas.width = w; H = canvas.height = h;
     gl.activeTexture(gl.TEXTURE0);
@@ -509,14 +516,22 @@ async function main() {
       const loc = uniforms[name];
       if (loc) gl.uniform1f(loc, fed(name, c));
     }
-    if (uniforms.uTall) gl.uniform1f(uniforms.uTall, shape === "tall" ? 1 : 0);
-    if (shape === "tall") {                          // the camera, turned: cosmos.py's `turned`
+    // The camera. In the tall frame it is turned: cosmos.py's `turned`. In a canvas that is
+    // not the frame's shape the frame is in the middle, as large as fits, and the picture
+    // goes on round it: the shader is told how many of the frame's heights the canvas is
+    // high (uWiden: 1 where the canvas is the frame, or wider than it). And the page may
+    // have the picture lower than the middle, or higher (`lift`): the camera is slid.
+    const tall = shape === "tall", widen = Math.max(1, ASPECT[shape] / (W / H));
+    if (uniforms.uTall) gl.uniform1f(uniforms.uTall, tall ? 1 : 0);
+    if (uniforms.uWiden) gl.uniform1f(uniforms.uWiden, widen);
+    if (tall || lift) {
       const at = (name) => fed(name, grid.names.indexOf(name));
-      const roll = at("uCamRoll"), span = at("uCamSpan"), x = at("uCamX"), y = at("uCamY");
-      if (uniforms.uCamRoll) gl.uniform1f(uniforms.uCamRoll, roll + Math.PI / 2);
-      if (uniforms.uCamSpan) gl.uniform1f(uniforms.uCamSpan, span * 16 / 9);
-      if (uniforms.uCamX) gl.uniform1f(uniforms.uCamX, y);
-      if (uniforms.uCamY) gl.uniform1f(uniforms.uCamY, -x);
+      const roll = at("uCamRoll"), span = at("uCamSpan") * (tall ? 16 / 9 : 1), x = at("uCamX"), y = at("uCamY");
+      const down = span * lift * widen / (canvas.clientHeight || 1);          // in the scene's own measure
+      if (uniforms.uCamRoll) gl.uniform1f(uniforms.uCamRoll, roll + (tall ? Math.PI / 2 : 0));
+      if (uniforms.uCamSpan) gl.uniform1f(uniforms.uCamSpan, span);
+      if (uniforms.uCamX) gl.uniform1f(uniforms.uCamX, tall ? y : x);
+      if (uniforms.uCamY) gl.uniform1f(uniforms.uCamY, (tall ? -x : y) + down);
     }
     for (const d of dataTextures) {
       gl.activeTexture(gl.TEXTURE0 + d.unit);
@@ -559,29 +574,40 @@ async function main() {
   // milliseconds in one browser, tens in another), and a picture drawn from it skips a frame
   // whenever two steps fall close together. Between its steps the time is carried forward
   // by the clock on the wall, and set by the audio's again only if the two come 50 ms apart.
+  // The wall's clock is read as the frame's own time (what requestAnimationFrame hands
+  // over: when the frame began, the same step apart on an even screen), not as the moment
+  // the script came to run, which is a millisecond or two uneven.
   let sync = { wall: performance.now(), t: audio.currentTime };
   function songTime(now) {
     const real = audio.currentTime;
-    if (audio.paused || audio.seeking) { sync = { wall: now, t: real }; return real; }
+    if (audio.paused || audio.seeking) { sync = { wall: performance.now(), t: real }; return real; }
     const carried = sync.t + ((now - sync.wall) / 1000) * audio.playbackRate;
-    if (Math.abs(carried - real) > 0.05) { sync = { wall: now, t: real }; return real; }
-    return Math.min(carried, plan.duration);
+    if (Math.abs(carried - real) > 0.05) { sync = { wall: performance.now(), t: real }; return real; }
+    return Math.min(Math.max(carried, sync.t), plan.duration);
   }
 
   // ?adapt=1: a machine that cannot keep 60 frames a second at this size is given fewer
   // pixels, a step at a time, and never more again (a size that comes and goes is worse).
+  // Unless fewer buy nothing: a screen that is itself slower than 60 (a telephone saving its
+  // battery shows 30) is as slow at any size. If two steps down, half the pixels, have not
+  // made it faster, the size is put back as it was and left alone.
   const adapt = Boolean(params.get("adapt") || document.body.dataset.adapt);        // or as the page says
-  let slow = 0;
+  let slow = 0, tried = null, settled = false;         // tried: {fps, quality, steps} since it was last any faster
 
-  function tick() {
-    const now = performance.now();
+  function tick(stamp) {
+    const now = stamp || performance.now();
     slowest = Math.max(slowest, now - lastTick); lastTick = now;
     if (now - windowStart >= 1000) {
       const fps = Math.round(shown * 1000 / (now - windowStart));
       fpsBox.textContent = audio.paused ? `${W}x${H}` : `${fps} fps  ${slowest.toFixed(0)} ms`;
-      if (adapt && !audio.paused && !document.hidden && lastDrawn >= 0) {
+      if (adapt && !settled && !audio.paused && !document.hidden && lastDrawn >= 0) {
         slow = fps < 52 ? slow + 1 : 0;
-        if (slow >= 2 && quality > 0.5) { quality = Math.max(0.5, quality * 0.85); slow = 0; fit(); }
+        if (tried && fps >= tried.fps + 3) tried = null;                 // the last step bought something
+        if (slow >= 2 && tried && tried.steps >= 2) { quality = tried.quality; settled = true; fit(); }
+        else if (slow >= 2 && quality > 0.5) {
+          tried = tried ? { ...tried, steps: tried.steps + 1 } : { fps, quality, steps: 1 };
+          quality = Math.max(0.5, quality * 0.85); slow = 0; fit();
+        }
       }
       shown = 0; slowest = 0; windowStart = now;
     }
@@ -652,6 +678,8 @@ async function main() {
       clearFeedback();
       lastDrawn = -1;
     },
+    // the picture set lower than the middle (or higher, less than none), by so many of the page's pixels
+    setLift(px) { px = Number(px) || 0; if (px !== lift) { lift = px; lastDrawn = -1; } },
     get lyrics() { return words ? words.on : null; },
     setLyrics(v) { if (words) words.setOn(v); },
     async reload() {

@@ -48,24 +48,14 @@
     src: url("fonts/Inter-Light.woff2") format("woff2"); }
   :root {
     color-scheme: dark;
-    --ink: #f5f5f7; --dim: #a1a1a6; --faint: #6e6e73; --line: #1d1d1f; --accent: #ff7a3d;
+    --ink: #f5f5f7; --dim: rgba(245, 245, 247, .74); --faint: rgba(245, 245, 247, .52); --accent: #ff7a3d;
     --ease: cubic-bezier(.16, .84, .34, 1);
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: #000; color: var(--dim); }
-  /* One column as wide as the picture: as wide as the window allows, and short enough at
-     16:9 that what is over and under it (the bar, the heard moments, the controls: --around)
-     still fits. The page is the height of the window, and nothing in it moves. */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: var(--dim); }
   body {
-    --around: 300px;
-    /* what the screen keeps for itself, where the page has the whole of it (from the home
-       screen): the clock and the island over it, the bar to go home under it */
-    --kept: calc(env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px));
-    --w: min(100vw - 48px, (100dvh - var(--around) - var(--kept)) * 16 / 9);
-    padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
-    min-height: 100dvh; display: flex; flex-direction: column;
     font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
+    -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;
   }
   a { color: inherit; text-decoration: none; }
   button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
@@ -73,8 +63,45 @@
   svg { display: block; }
   [hidden] { display: none !important; }     /* whatever else says how a thing is laid out */
 
-  /* The bar: the name, the songs, and the way to a video of one's own. */
-  #top { height: 52px; flex: none; display: flex; align-items: center; gap: 28px; width: var(--w); margin: 0 auto; color: rgba(245, 245, 247, .72); }
+  /* The picture is the page: over the whole window, whatever its shape, and the whole
+     screen where the page has it (a telephone's home screen, the browser's full screen).
+     How large that is the page's script measures, every frame (`sized`): what CSS is told
+     of a telephone's window is not always so. The frame (16:9, or 9:16 held upright) is as
+     large as fits inside, in the middle, and the picture goes on round it (player.js, `fit`):
+     the words are set in the frame. Everything else is laid over the picture. */
+  #stage { position: fixed; left: 0; top: 0; width: var(--fw, 100vw); height: var(--fh, 100dvh); overflow: hidden; background: #000;
+    container-type: size; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+  #frame, #gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+  #gl { opacity: 0; transition: opacity .9s var(--ease); }
+  body.ready #gl { opacity: 1; }
+  body.clear #gl { cursor: none; }
+  #lyrics { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9;
+    pointer-events: none; container-type: size; transition: opacity .6s ease; z-index: 2; }       /* over the shades, to be read */
+  body.tall #lyrics { width: min(100cqw, 100cqh * 9 / 16); aspect-ratio: 9 / 16; }
+  #lyrics .line {
+    position: absolute; white-space: nowrap; opacity: 0;
+    font-size: calc(var(--size) * 100cqh);
+    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 300;
+    letter-spacing: 0.06em; color: rgb(238, 233, 222);
+    text-shadow: 0 0 0.35em rgba(0, 0, 0, 0.55);
+  }
+  #lyrics .line span { opacity: 0.42; }
+  /* a line keeps clear of what is over the picture: it is moved from under it (`lifted`) */
+  #lyrics .line { transition: translate .5s var(--ease); }
+
+  /* What is laid over it: a bar at the head, the controls at the foot, each on a shade that
+     deepens to the edge, so they read over whatever the picture is doing. A touch on the
+     picture takes them away and another brings them back; a mouse at rest while it plays
+     takes them away too. */
+  #over { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none;
+    transition: opacity .5s var(--ease), visibility 0s; }
+  body.clear #over { opacity: 0; visibility: hidden; transition: opacity .5s var(--ease), visibility 0s .5s; }
+  #top, #foot { --side: clamp(24px, 2.6vw, 56px); pointer-events: none;
+    padding-left: max(var(--side), env(safe-area-inset-left, 0px)); padding-right: max(var(--side), env(safe-area-inset-right, 0px)); }
+  #top > *, #foot > * { pointer-events: auto; }
+  #top { display: flex; align-items: center; gap: 28px; min-height: 56px; color: var(--dim);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 12px); padding-bottom: 64px;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, .62), rgba(0, 0, 0, .44) 30%, rgba(0, 0, 0, .16) 68%, rgba(0, 0, 0, 0)); }
   #top .mark { display: flex; align-items: center; gap: 9px; color: var(--ink); font-weight: 600; letter-spacing: -.01em; }
   #top .mark svg { width: 20px; height: 20px; }
   #songs { display: flex; gap: 26px; margin: 0 auto; }
@@ -85,196 +112,160 @@
     font-size: 13px; font-weight: 600; white-space: nowrap; transition: transform .25s var(--ease); }
   #top .get:hover { transform: scale(1.04); }
 
-  main { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; padding-bottom: 8px; }
-  #stage, #heard, #seek, #bar, #caption { width: var(--w); margin: 0 auto; }
-  #stage { position: relative; }
-  #gl, #frame { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; }
-  #gl { background: #000; border-radius: 10px; cursor: pointer; }
-  #frame { position: relative; }
-  #frame #gl { height: 100%; }
-  #lyrics { position: absolute; inset: 0; pointer-events: none; overflow: hidden; container-type: size; transition: opacity .6s ease; }
-  #lyrics .line {
-    position: absolute; white-space: nowrap; opacity: 0;
-    font-size: calc(var(--size) * 100cqh);
-    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 300;
-    letter-spacing: 0.06em; color: rgb(238, 233, 222);
-    text-shadow: 0 0 0.35em rgba(0, 0, 0, 0.55);
-  }
-  #lyrics .line span { opacity: 0.42; }
+  #foot { padding-top: 96px; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+    background: linear-gradient(to top, rgba(0, 0, 0, .84), rgba(0, 0, 0, .7) 34%, rgba(0, 0, 0, .36) 68%, rgba(0, 0, 0, 0)); }
+  #foot > * { display: block; width: 100%; }
+  #caption { margin: 0 0 14px; font-size: 13px; color: var(--dim); display: flex; align-items: baseline; gap: 10px; }
+  #caption h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
 
-  /* a play affordance over the picture until it first plays */
-  #big {
-    position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px;
-    border-radius: 50%; background: rgba(0, 0, 0, .72); box-shadow: 0 0 0 1px rgba(255, 255, 255, .25);
-    color: var(--ink); display: grid; place-items: center;
-    transition: transform .25s var(--ease), opacity .4s var(--ease);
-  }
-  #big:hover { transform: scale(1.06); }
-  #big svg { width: 26px; height: 26px; margin-left: 4px; }
-  #big[disabled], body.played #big { opacity: 0; pointer-events: none; }
-  /* Full screen: the picture alone. The browser's own, where it has one for more than a
-     video; where it has not (a telephone's Safari), or the address asks for the picture
-     alone (?full=1), the picture over the whole page, which is as near as a page can come.
-     How large the screen is, and the picture in it, the page's script measures (`sized`):
-     what CSS is told of a window's height is short of it on a telephone, where the page
-     has the whole screen. On a telephone the picture fills the screen, either way up, and
-     what of it does not fit is outside; on a desk it is whole, in the middle. */
-  #stage:fullscreen, body.filled #stage { width: var(--fw, 100vw); height: var(--fh, 100vh); display: grid; place-items: center; place-content: center;
-    overflow: hidden; background: #000; }
-  body.filled { overflow: hidden; }
-  body.filled #stage { position: fixed; left: 0; top: 0; z-index: 50; margin: 0; }
-  #stage:fullscreen > #gl, #stage:fullscreen > #frame, body.filled #stage > #gl, body.filled #stage > #frame { width: var(--pw, min(100vw, 100vh * 16 / 9)); }
-  #stage:fullscreen #gl, body.filled #gl { border-radius: 0; }
-  /* the words keep inside what of the picture is on the screen, as large as they were */
-  #stage:fullscreen #lyrics, body.filled #lyrics { inset: var(--cut, 0%) 0; }
-  #stage:fullscreen #lyrics .line, body.filled #lyrics .line { font-size: calc(var(--size) * 100cqh / var(--kept-share, 1)); }
-  #leave { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); right: calc(env(safe-area-inset-right, 0px) + 14px); z-index: 2;
-    width: 40px; height: 40px; border-radius: 50%;
-    display: none; place-items: center; background: rgba(0, 0, 0, .6); box-shadow: 0 0 0 1px rgba(255, 255, 255, .25); color: var(--ink); }
-  #leave svg { width: 18px; height: 18px; }
-  body.filled #leave { display: grid; transition: opacity .4s var(--ease); }
-  /* while it plays there is only the picture: a touch stops it, and the way out is there */
-  body.filled.playing #leave { opacity: 0; pointer-events: none; }
-
-  /* what was heard, under the picture: its room is kept when it is turned off, so nothing moves */
-  #heard { display: block; height: 98px; margin-top: 16px; transition: opacity .6s var(--ease); }
+  /* what was heard: its room is kept when it is turned off, so nothing moves */
+  #heard { height: 98px; transition: opacity .6s var(--ease); }
   #heard.off { opacity: 0; }
 
   /* where in the song: a hair of a line, filled as far as the song has come; its handle is
      there when it is reached for */
-  #seek { display: block; height: 28px; margin-top: 6px; padding: 0; background: none; cursor: pointer;
+  #seek { height: 28px; margin-top: 6px; padding: 0; background: none; cursor: pointer;
     -webkit-appearance: none; appearance: none; --p: 0%; }
   #seek::-webkit-slider-runnable-track { height: 2px; border-radius: 1px;
-    background: linear-gradient(to right, var(--ink) var(--p), rgba(245, 245, 247, .16) var(--p)); transition: height .2s var(--ease); }
+    background: linear-gradient(to right, var(--ink) var(--p), rgba(245, 245, 247, .3) var(--p)); }
   #seek::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -5px; border-radius: 50%; background: var(--ink);
     scale: 0; transition: scale .2s var(--ease); }
   #seek:hover::-webkit-slider-thumb, #seek:active::-webkit-slider-thumb, #seek:focus-visible::-webkit-slider-thumb { scale: 1; }
-  #seek::-moz-range-track { height: 2px; border-radius: 1px; background: rgba(245, 245, 247, .16); }
+  #seek::-moz-range-track { height: 2px; border-radius: 1px; background: rgba(245, 245, 247, .3); }
   #seek::-moz-range-progress { height: 2px; border-radius: 1px; background: var(--ink); }
   #seek::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: var(--ink); scale: 0; transition: scale .2s var(--ease); }
   #seek:hover::-moz-range-thumb, #seek:active::-moz-range-thumb { scale: 1; }
 
   /* the controls: play and the time, the camera, and what is shown */
-  #bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px 20px; height: 44px; }
+  #bar { display: grid !important; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px 20px; min-height: 44px; }
   #bar .left { display: flex; align-items: center; gap: 14px; }
   #bar .right { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
-  .icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: var(--dim);
+  .icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--dim);
     transition: color .25s var(--ease), background .25s var(--ease), opacity .25s var(--ease); }
   .icon svg { width: 20px; height: 20px; }
   .icon:hover { color: var(--ink); }
-  .icon[aria-pressed="true"] { color: var(--ink); background: rgba(245, 245, 247, .1); }
+  .icon[aria-pressed="true"] { color: var(--ink); background: rgba(245, 245, 247, .14); }
   .icon[disabled] { opacity: .3; cursor: default; }
-  #play { position: relative; width: 36px; height: 36px; border-radius: 50%; background: var(--ink); color: #000; font-size: 0;
+  #play { position: relative; flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--ink); color: #000; font-size: 0;
     transition: transform .25s var(--ease); }
   #play:hover { transform: scale(1.06); }
-  #play::before { content: ""; position: absolute; inset: 0; margin: auto; translate: 1.5px 0; width: 16px; height: 16px; background: currentColor;
+  #play::before { content: ""; position: absolute; inset: 0; margin: auto; translate: 1.5px 0; width: 17px; height: 17px; background: currentColor;
     -webkit-mask: var(--shape) center / contain no-repeat; mask: var(--shape) center / contain no-repeat;
     --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 3.5v17l14-8.5z'/%3E%3C/svg%3E"); }
   body.playing #play::before { translate: 0 0;
     --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 4h4.2v16H6zM13.8 4H18v16h-4.2z'/%3E%3C/svg%3E"); }
-  #time { color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 11ch; text-align: left; transition: color .25s var(--ease); }
+  #time { color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 11ch; min-height: 40px; text-align: left; transition: color .25s var(--ease); }
   #time:hover { color: var(--ink); }
   #time b { color: var(--ink); font-weight: 400; }
   /* the three cameras: the one taken is a light under its name, which slides to the next */
-  .seg { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; height: 32px; border-radius: 16px; background: rgba(28, 28, 30, .9); font-size: 13px; }
-  .seg::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: calc(100% / var(--n, 3)); border-radius: 16px; background: var(--ink);
+  .seg { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; height: 34px; border-radius: 17px; font-size: 13px;
+    background: rgba(120, 120, 128, .32); -webkit-backdrop-filter: blur(18px) saturate(1.6); backdrop-filter: blur(18px) saturate(1.6); }
+  .seg::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: calc(100% / var(--n, 3)); border-radius: 17px; background: var(--ink);
     translate: calc(var(--i, 0) * 100%) 0; transition: translate .45s var(--ease); }
   .seg:not([style]) { visibility: hidden; }
-  .seg button { position: relative; padding: 0 16px; color: var(--dim); transition: color .3s var(--ease); white-space: nowrap; }
-  .seg button:hover { color: var(--ink); }
+  .seg button { position: relative; padding: 0 16px; color: var(--ink); transition: color .3s var(--ease); white-space: nowrap; }
   .seg button.on { color: #000; }
 
-  #caption { margin-top: 10px; margin-bottom: 0; color: var(--faint); font-size: 13px; display: flex; gap: 20px; justify-content: space-between; }
-  #caption b { color: var(--dim); font-weight: 500; }
-  #caption a:hover { color: var(--ink); }
-  #error { padding: 16px 24px; color: #e08a8a; white-space: pre-wrap; }
+  /* the way in, over the picture until it first plays, as the play button is; and the sign
+     that a touch has stopped it or started it: glass, so the picture is still there behind */
+  #big, #blip { position: absolute; z-index: 3; left: 50%; top: 50%; width: 84px; height: 84px; margin: -42px 0 0 -42px; border-radius: 50%;
+    display: grid; place-items: center; }
+  #big { background: var(--ink); color: #000; }
+  #blip { color: var(--ink); background: rgba(22, 22, 26, .46);
+    -webkit-backdrop-filter: blur(22px) saturate(1.4); backdrop-filter: blur(22px) saturate(1.4); }
+  #big { transition: transform .25s var(--ease), opacity .4s var(--ease), visibility 0s; }
+  #big:hover { transform: scale(1.06); }
+  #big svg { width: 30px; height: 30px; margin-left: 4px; }
+  #big[disabled], body.played #big { opacity: 0; visibility: hidden; pointer-events: none; transition: transform .25s var(--ease), opacity .4s var(--ease), visibility 0s .4s; }
+  #blip { opacity: 0; pointer-events: none; }
+  #blip::before { content: ""; width: 30px; height: 30px; background: currentColor;
+    -webkit-mask: var(--shape) center / contain no-repeat; mask: var(--shape) center / contain no-repeat;
+    --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 4h4.2v16H6zM13.8 4H18v16h-4.2z'/%3E%3C/svg%3E"); }
+  #blip.play::before { translate: 2px 0;
+    --shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 3.5v17l14-8.5z'/%3E%3C/svg%3E"); }
+  #blip.shown { animation: blip .7s var(--ease) both; }
+  @keyframes blip { from { opacity: 1; scale: .82; } 30% { opacity: 1; } to { opacity: 0; scale: 1.14; } }
+
+  #error, .said { position: absolute; left: 50%; top: 50%; translate: -50% -50%; max-width: min(80cqw, 30em); text-align: center; color: var(--ink); font-size: 17px; }
+  body.failed #foot, body.failed #big { display: none; }
+  /* ?measure=1: what this screen says of itself, and how the picture is kept up with */
+  #measure { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: 50%; translate: 0 -50%; margin: 0; padding: 8px 10px; border-radius: 8px;
+    font: 10px/1.45 ui-monospace, Menlo, monospace; color: var(--ink); background: rgba(0, 0, 0, .66); pointer-events: none; white-space: pre; }
   #own { display: none; }                    /* what player.js keeps for itself: this page has its own */
-
-  /* the tall frame, 9:16, as high as the page has room for */
-  body.tall { --w: min(100vw - 48px, (100dvh - var(--around) - var(--kept)) * 9 / 16); }
-  body.tall #gl, body.tall #frame { aspect-ratio: 9 / 16; }
-  body.tall #stage:fullscreen > #gl, body.tall #stage:fullscreen > #frame,
-  body.filled.tall #stage > #gl, body.filled.tall #stage > #frame { width: var(--pw, min(100vw, 100vh * 9 / 16)); }
-  /* the bar and the controls are as wide as the wide picture would be: the tall one is narrow */
-  body.tall #top, body.tall #heard, body.tall #seek, body.tall #bar, body.tall #caption {
-    width: min(100vw - 48px, max((100dvh - var(--around) - var(--kept)) * 9 / 16, 640px)); }
-
-  /* ?embed=1: in a page which has its own caption and links */
-  body.embed #top, body.embed #caption, body.embed #heard { display: none; }
-  body.embed main { padding-top: 16px; }
-  body.embed { --around: 110px; }
 
   /* ?bare=1: the picture alone, filling its frame: the landing page's hero, which has the
      controls it wants of its own and reaches the player through window.player */
-  body.bare { --w: min(100vw, 100dvh * 16 / 9); min-height: 0; height: 100dvh; padding: 0; }
-  body.bare.tall { --w: min(100vw, 100dvh * 9 / 16); }
-  body.bare main { padding: 0; }
-  body.bare #gl { border-radius: 0; cursor: default; }
-  body.bare #top, body.bare #bar, body.bare #seek, body.bare #caption, body.bare #big, body.bare #heard { display: none; }
+  body.bare #over, body.bare #big, body.bare #blip { display: none; }
+  body.bare #gl { opacity: 1; transition: none; cursor: default; }
 
-  /* narrow: the picture across the width at the top; the camera has a line of its own, the
-     songs another */
-  @media (max-width: 720px) {
-    body { --w: calc(100vw - 32px); }
-    body.tall { --around: 344px; --w: min(100vw - 32px, (100dvh - var(--around) - var(--kept)) * 9 / 16); }
-    body.tall #top, body.tall #heard, body.tall #seek, body.tall #bar, body.tall #caption { width: calc(100vw - 32px); }
-    body.tall #caption { display: none; }
-    main { justify-content: flex-start; padding-top: 4px; }
-    #top { height: auto; min-height: 52px; gap: 0 16px; flex-wrap: wrap; justify-content: space-between; }
-    #top .mark, #top .get { margin: 11px 0; }
-    #songs { order: 3; flex: 0 0 100%; justify-content: center; margin: 2px 0 12px; }
-    #bar { grid-template-columns: 1fr auto; height: auto; padding-top: 4px; }
-    #bar .seg { grid-column: 1 / -1; grid-row: 2; height: 36px; border-radius: 18px; }
-    #bar .seg::before { border-radius: 18px; }
-    #caption { margin-top: 18px; padding-bottom: 20px; flex-direction: column; gap: 6px; text-align: center; align-items: center; }
+  /* a finger: larger to touch */
+  @media (pointer: coarse) {
+    .icon, #play { width: 44px; height: 44px; }
+    #time { min-height: 44px; }
+    #songs button { min-height: 40px; }
   }
-  /* short (a phone on its side): the picture has the height, and what was heard is left out */
+  /* narrow: the songs have a line of their own, and the camera another */
+  @media (max-width: 720px) {
+    #top, #foot { --side: 16px; }
+    #top { flex-wrap: wrap; justify-content: space-between; gap: 0 16px; padding-bottom: 48px; }
+    #songs { order: 3; flex: 0 0 100%; justify-content: center; margin: 4px 0 0; }
+    #bar { grid-template-columns: 1fr auto; }
+    #bar .seg { grid-column: 1 / -1; grid-row: 2; height: 38px; border-radius: 19px; }
+    #bar .seg::before { border-radius: 19px; }
+    #foot { padding-top: 72px; }
+  }
+  /* short (a phone on its side): what was heard is left out */
   @media (max-height: 600px) {
-    body { --around: 150px; }
-    #heard, #hears, #caption { display: none; }
+    #heard, #hears, #caption { display: none !important; }
+    #top { padding-bottom: 36px; }
+    #foot { padding-top: 56px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .seg::before, #big, #play, #heard { transition: none; }
+    .seg::before, #big, #play, #heard, #over, #gl { transition: none; }
+    #blip.shown { animation-duration: .01s; }
   }
 </style>
 </head>
 <body data-bundles="./" data-track="gravity-in-motion" data-songs="[{&quot;slug&quot;: &quot;gravity-in-motion&quot;, &quot;title&quot;: &quot;Gravity in Motion&quot;}, {&quot;slug&quot;: &quot;shattered-voices&quot;, &quot;title&quot;: &quot;Shattered Voices&quot;}]">
-  <header id="top">
-    <a class="mark" href="../" aria-label="song">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 20V12M11 23V9M16 26V6M21 22V10M26 19V13" stroke="#ff7a3d" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>song
-    </a>
-    <nav id="songs" aria-label="Song"></nav>
-    <a class="get" href="../#get">Make your own</a>
-  </header>
-  <main>
-    <div id="stage">
-      <canvas id="gl" width="1280" height="720" aria-label="The music video"></canvas>
-      <button id="big" aria-label="Play" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg></button>
-      <button id="leave" aria-label="Leave full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  <main id="stage">
+    <canvas id="gl" width="1280" height="720" role="img" aria-label="The music video, drawn live: the Sun and its planets, moving with the song"></canvas>
+    <div id="over">
+      <header id="top">
+        <a class="mark" href="../" aria-label="song">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 20V12M11 23V9M16 26V6M21 22V10M26 19V13" stroke="#ff7a3d" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>song
+        </a>
+        <nav id="songs" aria-label="Song"></nav>
+        <a class="get" href="../#get">Make your own</a>
+      </header>
+      <div id="foot">
+        <div id="caption"><h1 id="title">Gravity in Motion</h1><span>Jugal Manjeshwar</span></div>
+        <canvas id="heard" role="img" aria-label="The kick, the bass, the notes and the voice, as they were heard"></canvas>
+        <input id="seek" type="range" min="0" max="1" step="0.001" value="0" aria-label="Position in the song">
+        <div id="bar">
+          <span class="left">
+            <button id="play">play</button>
+            <button id="time" title="Copy a link to this moment"><b>0:00</b> / 0:00</button>
+          </span>
+          <span class="seg" id="cams" role="group" aria-label="Camera"></span>
+          <span class="right">
+            <button class="icon" id="words" aria-pressed="false" aria-label="Lyrics" title="Lyrics">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M7.5 11h4M14 11h2.5M7.5 14.5h2.5M12.5 14.5h4"/></svg>
+            </button>
+            <button class="icon" id="hears" aria-pressed="true" aria-label="What was heard" title="What was heard">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4.5 14v-4M8.25 17V7M12 19.5v-15M15.75 16.5v-9M19.5 13.5v-3"/></svg>
+            </button>
+            <button class="icon" id="full" aria-label="Full screen" title="Full screen">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 9V6a1.5 1.5 0 0 1 1.5-1.5h3M15 4.5h3A1.5 1.5 0 0 1 19.500 6v3M19.5 15v3a1.5 1.5 0 0 1-1.500 1.500h-3M9 19.500H6A1.5 1.5 0 0 1 4.500 18v-3"/></svg>
+            </button>
+          </span>
+        </div>
+      </div>
     </div>
-    <canvas id="heard" role="img" aria-label="The kick, the bass, the notes and the voice, as they were heard"></canvas>
-    <input id="seek" type="range" min="0" max="1" step="0.001" value="0" aria-label="Position in the song">
-    <div id="bar">
-      <span class="left">
-        <button id="play">play</button>
-        <button id="time" title="Copy a link to this moment"><b>0:00</b> / 0:00</button>
-      </span>
-      <span class="seg" id="cams" role="group" aria-label="Camera"></span>
-      <span class="right">
-        <button class="icon" id="words" aria-pressed="false" aria-label="Lyrics" title="Lyrics">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M7.5 11h4M14 11h2.5M7.5 14.5h2.5M12.5 14.5h4"/></svg>
-        </button>
-        <button class="icon" id="hears" aria-pressed="true" aria-label="What was heard" title="What was heard">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4.5 14v-4M8.25 17V7M12 19.5v-15M15.75 16.5v-9M19.5 13.5v-3"/></svg>
-        </button>
-        <button class="icon" id="full" aria-label="Full screen" title="Full screen">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 9V6a1.5 1.5 0 0 1 1.5-1.5h3M15 4.5h3A1.5 1.5 0 0 1 19.500 6v3M19.5 15v3a1.5 1.5 0 0 1-1.500 1.500h-3M9 19.500H6A1.5 1.5 0 0 1 4.500 18v-3"/></svg>
-        </button>
-      </span>
-    </div>
-    <p id="caption"><span><b id="title">Gravity in Motion</b> by Jugal Manjeshwar. Drawn in your browser, from the song itself.</span>
-      <a href="https://github.com/nuterian/song">GitHub</a></p>
-    <div id="error" hidden></div>
+    <button id="big" aria-label="Play" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg></button>
+    <div id="blip" aria-hidden="true"></div>
+    <div id="error" role="alert" hidden></div>
+    <pre id="measure" hidden></pre>
+    <noscript><p class="said">This video is drawn live by JavaScript. Turn it on to watch.</p></noscript>
   </main>
   <div id="own"><span id="clock"></span><span id="readout">loading</span><span id="fps"></span><span id="choices"></span></div>
   <audio id="audio" preload="auto"></audio>
@@ -283,13 +274,19 @@
     // time, the three cameras, the words, what was heard, the full screen.
     const $ = (id) => document.getElementById(id);
     const params = new URLSearchParams(location.search);
+    const body = document.body, stage = $("stage"), gl = $("gl");
     const audio = $("audio"), big = $("big"), seek = $("seek"), time = $("time");
     const keep = (name, value) => { const url = new URL(location.href); url.searchParams.set(name, value); history.replaceState(null, "", url); };
 
     // The songs: one page each (?track=), so a switch is a fresh page; the camera and the
-    // words go along in the address, and it plays on if the browser allows it.
-    const songs = JSON.parse(document.body.dataset.songs);
-    const here = params.get("track") || document.body.dataset.track;
+    // words go along in the address, and it plays on if the browser allows it. A song the
+    // page has not got is the first it has (said before the player reads the address).
+    const songs = JSON.parse(body.dataset.songs);
+    let here = params.get("track") || body.dataset.track;
+    if (!songs.some((s) => s.slug === here)) {
+      here = body.dataset.track;
+      const url = new URL(location.href); url.searchParams.delete("track"); history.replaceState(null, "", url);
+    }
     for (const song of songs) {
       const b = document.createElement("button");
       b.textContent = song.title;
@@ -308,38 +305,127 @@
     const now = songs.find((s) => s.slug === here);
     if (now) { $("title").textContent = now.title; document.title = `${now.title} · song`; }
 
-    // ?full=1: a link to the picture alone, over the whole page from the first; the first
-    // touch, which starts it with its sound, also asks the browser for its own full screen,
-    // where it has one (it gives it only to a touch). Opened from a telephone's home
-    // screen, where there is no browser round it, it is the picture alone too.
+    // What it is opened on. From a telephone's home screen there is no browser round it.
+    // ?full=1: a link to the picture with nothing over it; the first touch, which starts it
+    // with its sound, also asks the browser for its own full screen, where it has one.
     const home = navigator.standalone === true || matchMedia("(display-mode: standalone), (display-mode: fullscreen)").matches;
     const alone = Boolean(params.get("full")) || home;
-    if (alone) document.body.classList.add("filled");
-    // a telephone draws fewer pixels, and fewer still if it cannot keep up (the player's ?adapt, ?maxheight)
     const handheld = matchMedia("(hover: none) and (pointer: coarse)").matches;
-    document.body.dataset.adapt = "1";
-    if (handheld) document.body.dataset.maxheight = "1080";
+    const phone = handheld && Math.min(screen.width, screen.height) < 600;
+    const own = Boolean(document.fullscreenEnabled && stage.requestFullscreen);
+    // A telephone draws as many pixels as it was seen to keep up with, and fewer if it
+    // cannot (the player's ?maxpixels, ?maxheight, ?adapt).
+    body.dataset.adapt = "1";
+    if (phone) body.dataset.maxpixels = "900000";
+    else if (handheld) body.dataset.maxheight = "1080";
+    else body.dataset.maxpixels = String(2560 * 1440);        // (a window wider than 16:9 is not more to draw)
+
+    // What is over the picture, there or away (body.clear). A finger: a touch on the picture
+    // takes it away or brings it back, and two touches stop the song or start it. A mouse:
+    // a click stops and starts, as on any video; it is there while the mouse moves, and
+    // goes when it has been still for three seconds of the song.
+    let touch = handheld, tapped = 0, hiding = 0, resting = 0, strip = null;
+    const shown = () => !body.classList.contains("clear");
+    const clear = (on) => {
+      body.classList.toggle("clear", on);
+      clearTimeout(resting);                                // what was heard is not drawn where it is not seen
+      if (!on && strip) strip.rest(false);
+      if (on) resting = setTimeout(() => { if (strip && !shown()) strip.rest(true); }, 600);
+    };
+    const later = (after = 3000) => {
+      clearTimeout(hiding);
+      hiding = setTimeout(() => {
+        if (!audio.paused && !stage.querySelector("#over :hover, #over :focus-visible")) clear(true);
+      }, after);
+    };
+    const show = () => { clear(false); clearTimeout(hiding); if (!touch && !audio.paused) later(); };
+    if (alone) clear(true);
+
+    const blip = $("blip");
+    const sign = (playing) => {
+      blip.classList.remove("shown");
+      blip.classList.toggle("play", playing);
+      void blip.offsetWidth;                                // so that it begins again
+      blip.classList.add("shown");
+    };
     const toggle = () => {
-      if (alone && document.body.classList.contains("filled") && !document.fullscreenElement
-          && document.fullscreenEnabled && $("stage").requestFullscreen) $("stage").requestFullscreen().catch(() => {});
+      if (body.classList.contains("played")) sign(audio.paused);
+      else if (alone && own && !document.fullscreenElement) stage.requestFullscreen().catch(() => {});
       $("play").click();
     };
+    stage.addEventListener("pointerdown", (e) => { touch = e.pointerType !== "mouse"; }, true);
+    stage.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") { touch = false; show(); } });
+    stage.addEventListener("focusin", (e) => { if (e.target.closest("#over")) show(); });
     big.addEventListener("click", toggle);
-    $("gl").addEventListener("click", toggle);
-    audio.addEventListener("play", () => document.body.classList.add("played", "playing"));
-    audio.addEventListener("pause", () => document.body.classList.remove("playing"));
+    gl.addEventListener("click", () => {
+      clearTimeout(hiding);
+      if (!touch || !body.classList.contains("played")) { toggle(); return; }
+      const at = performance.now(), twice = at - tapped < 320;
+      tapped = twice ? 0 : at;
+      clear(shown());                                       // (the second of two touches puts it back as it was)
+      if (twice) toggle();
+    });
+    audio.addEventListener("play", () => {
+      const first = !body.classList.contains("played");
+      body.classList.add("played", "playing");
+      if (!touch || first) later();                         // the first time, a finger's too: the picture has the screen
+    });
+    audio.addEventListener("pause", () => { body.classList.remove("playing"); show(); });
 
     // what was heard: drawn from when there is a player, faded when turned off
     const heard = $("heard"), bare = Boolean(params.get("bare") || params.get("embed"));
-    let drawing = null, hearing = params.get("heard") !== "off";
+    let hearing = params.get("heard") !== "off";
     const hear = async () => {
       heard.classList.toggle("off", !hearing);
       $("hears").setAttribute("aria-pressed", String(hearing));
-      if (hearing && !drawing && !bare && window.player) drawing = (await import("./heard.js")).strip(heard, window.player);
-      if (!hearing && drawing) { const was = drawing; drawing = null; setTimeout(() => { if (!hearing) was.stop(); else drawing = was; }, 700); }
+      if (hearing && !strip && !bare && window.player) {
+        strip = (await import("./heard.js")).strip(heard, window.player);
+        strip.rest(!shown());
+      }
+      if (!hearing && strip) { const was = strip; strip = null; setTimeout(() => { if (!hearing) was.stop(); else strip = was; }, 700); }
     };
     $("hears").addEventListener("click", () => { hearing = !hearing; keep("heard", hearing ? "on" : "off"); hear(); });
     hear();
+
+    // The words keep clear of what is over the picture. A line is set where the picture has
+    // room for it; while the bar or the controls are over that place, it is moved to just
+    // clear of them, and back when they go. Two lines moved are kept apart.
+    const moved = new Map();                                // a line -> how far it is moved, in pixels
+    function lifted() {
+      const layer = $("lyrics");
+      if (!layer || (!moved.size && !shown())) return;
+      const lines = [...layer.children].filter((l) => Number(l.style.opacity) > 0 || moved.has(l));
+      if (!lines.length) return;
+      const box = layer.getBoundingClientRect();
+      let head = -Infinity, foot = Infinity;
+      if (shown()) {
+        const gap = Math.max(8, 0.015 * box.height);
+        const tops = [...$("foot").children].filter((c) => c.offsetParent && !c.classList.contains("off"));
+        if (tops.length) foot = tops[0].getBoundingClientRect().top - gap;
+        head = Math.max(...[...$("top").children].map((c) => c.getBoundingClientRect().bottom)) + gap;
+      }
+      const at = lines.map((l) => {
+        const mid = box.top + box.height * parseFloat(l.style.top) / 100, h = l.offsetHeight;
+        return { l, top: mid - h / 2, bottom: mid + h / 2, by: 0, on: Number(l.style.opacity) > 0 };
+      });
+      for (const a of at.filter((a) => a.on).sort((a, b) => b.bottom - a.bottom)) {      // from the lowest, up
+        if (a.bottom > foot) a.by = foot - a.bottom;
+        foot = Math.min(foot, a.top + a.by - 4);
+      }
+      for (const a of at.filter((a) => a.on).sort((a, b) => a.top - b.top)) {            // from the highest, down
+        if (a.top + a.by < head) a.by = head - a.top;
+        head = Math.max(head, a.bottom + a.by + 4);
+      }
+      for (const a of at) {
+        const by = Math.round(a.by), was = moved.get(a.l);
+        if (!a.on && was === undefined) continue;
+        if (by === (was || 0)) { if (!a.on && !by) moved.delete(a.l); continue; }
+        // a line not yet seen is set there at once; one that is seen goes there, eased
+        a.l.style.transition = was === undefined && getComputedStyle(a.l).opacity < 0.2 ? "none" : "";
+        a.l.style.translate = by ? `0 ${by}px` : "";
+        if (by || a.on) moved.set(a.l, by); else moved.delete(a.l);
+      }
+    }
 
     const clock = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
     function ready(player) {
@@ -348,7 +434,10 @@
       const taken = () => {
         cams.style.setProperty("--n", names.length);
         cams.style.setProperty("--i", Math.max(names.indexOf(player.chosen.camera), 0));
-        for (const b of cams.children) b.classList.toggle("on", b.dataset.name === player.chosen.camera);
+        for (const b of cams.children) {
+          b.classList.toggle("on", b.dataset.name === player.chosen.camera);
+          b.setAttribute("aria-pressed", String(b.dataset.name === player.chosen.camera));
+        }
       };
       for (const name of names) {
         const b = document.createElement("button");
@@ -366,25 +455,20 @@
       words.addEventListener("click", () => { player.setLyrics(!player.lyrics); worded(); });
       worded();
 
-      // the frame is the screen's: tall on one held upright, and changed with it if it is
-      // turned; unless the address says which (?shape=)
-      const upright = matchMedia("(max-aspect-ratio: 1/1)");
-      if (!params.get("shape")) {
-        if (upright.matches) player.setShape("tall");
-        upright.addEventListener("change", () => player.setShape(upright.matches ? "tall" : "wide"));
-      }
-
       // the time, and how far along the line the song has come
       let said = "", copied = 0;
       const total = clock(player.duration);
       const tick = () => {
         requestAnimationFrame(tick);
+        lifted();
+        if (!shown()) return;
         const t = player.time();
         seek.style.setProperty("--p", `${(100 * Number(seek.value) / player.duration).toFixed(2)}%`);
         const say = clock(t);
         if (say === said || performance.now() < copied) return;
         said = say;
         time.innerHTML = `<b>${say}</b> / ${total}`;
+        seek.setAttribute("aria-valuetext", `${say} of ${total}`);
       };
       requestAnimationFrame(tick);
       time.addEventListener("click", () => {
@@ -398,63 +482,87 @@
       hear();
     }
 
-    // Full screen: the browser's, where it has one for more than a video; where it has not,
-    // or will not give it, the picture over the whole page, and a way out of that.
-    const full = $("full"), stage = $("stage");
-    const own = Boolean(document.fullscreenEnabled && stage.requestFullscreen);
-    const fill = (on) => document.body.classList.toggle("filled", on);
-
-    // How large the screen is, and the picture in it, while it is the picture alone.
+    // The window, asked every frame: a telephone does not always say when it has been
+    // turned, or says so before its window has its new size. The stage is as large as it
+    // is, and the frame's shape is the window's: tall in one held upright (unless the
+    // address says which, ?shape=).
+    const follows = !["tall", "wide"].includes(params.get("shape"));
+    const near = (a, b) => Math.abs(a - b) <= 0.15 * b;
+    let measured = "";
     function sized() {
-      const body = document.body, on = body.classList.contains("filled") || document.fullscreenElement === stage;
-      for (const name of ["--fw", "--fh", "--pw", "--cut", "--kept-share"]) body.style.removeProperty(name);
-      if (!on) return;
-      // From the home screen the page has the whole screen, and the window's height is said
-      // short of it (by the clock's bar): the screen's own size is what is true there.
-      const upright = matchMedia("(orientation: portrait)").matches;
-      const long = Math.max(screen.width, screen.height), short = Math.min(screen.width, screen.height);
-      const whole = home && handheld && !document.fullscreenElement;
-      const W = whole ? (upright ? short : long) : Math.max(innerWidth, document.documentElement.clientWidth);
-      const H = whole ? (upright ? long : short) : Math.max(innerHeight, document.documentElement.clientHeight);
-      const aspect = body.classList.contains("tall") ? 9 / 16 : 16 / 9;
-      const inside = Math.min(W, H * aspect), over = Math.max(W, H * aspect);
-      // filled, on a telephone, unless that would leave out more than a third of the picture
-      // (on its side in a browser with its bars up, a telephone's window is 5:2: three tenths)
-      const width = handheld && over / inside <= 1.5 ? over : inside;
-      const share = Math.min(1, H / (width / aspect));          // how much of the picture's height is on the screen
+      let W = innerWidth, H = innerHeight;
+      // From the home screen the page has the whole screen, and its window is said short of
+      // it (by the clock's bar): the screen's own size is what is true there.
+      if (home && handheld && !document.fullscreenElement) {
+        const long = Math.max(screen.width, screen.height), short = Math.min(screen.width, screen.height);
+        const [w, h] = W > H ? [long, short] : [short, long];
+        if (near(W, w) && near(H, h)) [W, H] = [w, h];
+      }
+      if (!W || !H) return;
+      if (follows && window.player) window.player.setShape(W > H ? "wide" : "tall");
+      if (`${W} ${H}` === measured) return;
+      measured = `${W} ${H}`;
       body.style.setProperty("--fw", `${W}px`);
       body.style.setProperty("--fh", `${H}px`);
-      body.style.setProperty("--pw", `${width.toFixed(1)}px`);
-      body.style.setProperty("--kept-share", share.toFixed(4));
-      body.style.setProperty("--cut", `${(50 * (1 - share)).toFixed(3)}%`);
     }
-    for (const what of ["resize", "orientationchange"]) addEventListener(what, () => { sized(); setTimeout(sized, 350); });
-    document.addEventListener("fullscreenchange", sized);
-    new MutationObserver(sized).observe(document.body, { attributes: true, attributeFilter: ["class"] });
-    sized();
+    (function watch() { sized(); requestAnimationFrame(watch); })();
+
+    // Full screen: the browser's own, where it has one for more than a video (a telephone's
+    // Safari has not: there the page is as much of the screen as a page can be).
+    const full = $("full");
+    full.hidden = !own;
     full.addEventListener("click", () => {
       if (document.fullscreenElement) document.exitFullscreen();
-      else if (document.body.classList.contains("filled")) fill(false);
-      else if (own) stage.requestFullscreen().catch(() => fill(true));
-      else fill(true);
-    });
-    $("leave").addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (document.fullscreenElement) document.exitFullscreen();
-      fill(false);
+      else stage.requestFullscreen().catch(() => {});
     });
     addEventListener("keydown", (e) => {
-      if (e.key === "f" && !e.metaKey && !e.ctrlKey) full.click();
-      if (e.key === "Escape") fill(false);
+      if (!touch) show();
+      if (e.key === "f" && !e.metaKey && !e.ctrlKey && own) full.click();
     });
+
+    // what went wrong, said plainly, over the picture (what the player says of it is for its maker)
+    const error = $("error");
+    new MutationObserver(() => {
+      if (error.hidden || body.classList.contains("failed")) return;
+      body.classList.add("failed");
+      console.error(error.textContent);
+      error.textContent = /WebGL2/.test(error.textContent)
+        ? "This browser cannot draw the video. A recent Safari, Chrome or Firefox can."
+        : "The video could not be loaded. Reload the page to try again.";
+      clear(false);
+    }).observe(error, { attributes: true, attributeFilter: ["hidden"] });
+
+    if (params.get("measure")) {
+      const box = $("measure"), probe = document.createElement("div");
+      probe.style.cssText = "position:fixed;visibility:hidden;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)";
+      body.appendChild(probe);
+      box.hidden = false;
+      const px = (v) => Math.round(parseFloat(v));
+      setInterval(() => {
+        const s = stage.getBoundingClientRect(), safe = getComputedStyle(probe), v = window.visualViewport, words = $("lyrics");
+        const f = words ? words.getBoundingClientRect() : s;
+        box.textContent = [
+          `window  ${innerWidth} x ${innerHeight}`,
+          `root    ${document.documentElement.clientWidth} x ${document.documentElement.clientHeight}`,
+          v ? `visual  ${Math.round(v.width)} x ${Math.round(v.height)}  at ${Math.round(v.offsetLeft)},${Math.round(v.offsetTop)}  x${v.scale.toFixed(2)}` : "visual  none",
+          `screen  ${screen.width} x ${screen.height}  x${devicePixelRatio}  ${screen.orientation ? screen.orientation.type : window.orientation}`,
+          `safe    ${px(safe.paddingTop)} ${px(safe.paddingRight)} ${px(safe.paddingBottom)} ${px(safe.paddingLeft)}`,
+          `home ${home ? "yes" : "no"}  finger ${handheld ? "yes" : "no"}  phone ${phone ? "yes" : "no"}  full ${document.fullscreenElement ? "yes" : own ? "no" : "none"}`,
+          `stage   ${Math.round(s.width)} x ${Math.round(s.height)}  at ${Math.round(s.left)},${Math.round(s.top)}`,
+          `frame   ${Math.round(f.width)} x ${Math.round(f.height)}  ${window.player ? window.player.shape : ""}`,
+          `drawn   ${gl.width} x ${gl.height}  ${(gl.width * gl.height / 1e6).toFixed(2)} MP`,
+          `rate    ${audio.paused ? "paused" : $("fps").textContent}`,
+        ].join("\n");
+      }, 500);
+    }
 
     // the big button is only offered once the picture can play
     new MutationObserver((_, watch) => {
-      if (!document.body.classList.contains("ready") || !window.player) return;
+      if (!body.classList.contains("ready") || !window.player) return;
       watch.disconnect();
       big.disabled = false;
       ready(window.player);
-    }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    }).observe(body, { attributes: true, attributeFilter: ["class"] });
   </script>
   <script type="module" src="player.js"></script>
 </body>

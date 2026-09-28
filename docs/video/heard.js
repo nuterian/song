@@ -5,7 +5,8 @@
 // channels the picture is drawn from, and the clock is the picture's own (player.time).
 //
 //   strip(canvas, player)   draws into `canvas`, at the size the page gives it, for as long
-//                           as it is on screen; returns { stop() }
+//                           as it is on screen; returns { stop(), rest(on) }: rest(true)
+//                           while it is not to be seen (under something, faded away)
 //
 // Nothing is decided here. It draws what it is given, sixty times a second, and costs a
 // few dozen rectangles a frame.
@@ -42,7 +43,7 @@ export function from(times, t) {
 
 export function strip(canvas, player) {
   const ctx = canvas.getContext("2d");
-  let W = 0, H = 0, dpr = 1, frame = 0, shown = true, drawn = -1, stopped = false;
+  let W = 0, H = 0, dpr = 1, frame = 0, shown = true, drawn = -1, stopped = false, resting = false;
 
   function fit() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -100,7 +101,7 @@ export function strip(canvas, player) {
   function tick() {
     if (stopped) return;
     frame = shown ? requestAnimationFrame(tick) : 0;
-    if (!W) return;
+    if (!W || resting) return;
     const t = player.time();
     if (t === drawn) return;                                 // the song stands still, and so does this
     draw(t);
@@ -119,5 +120,6 @@ export function strip(canvas, player) {
 
   return {
     stop() { stopped = true; cancelAnimationFrame(frame); sized.disconnect(); seen.disconnect(); },
+    rest(on) { resting = Boolean(on); },
   };
 }

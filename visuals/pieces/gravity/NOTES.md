@@ -1622,3 +1622,78 @@ to 436 across and 0 to 852 down; on its side, 852x393, it is 0 to 852 across and
 436 down; in a browser on its side with its bars up, 852x340, it fills that; a line of
 the song is inside the screen in each. Not on a telephone: that is Jugal's to say.
 
+
+## The picture is the page (2026-09-28)
+
+Jugal, with the last of that on his telephone: upright it fills, on its side it does not,
+and not the same each time he tries; the picture alone is not as smooth as the picture in
+the page; and then what he wants of the page. "The video fills the entire width and height
+in both views", with everything else laid over it; a touch takes what is over it away and
+another brings it back, two touches stop and start it. "Across the board, maximize full
+screen content. I don't want dull black spaces"; a shade is fine, for what must be read.
+
+- **Why it did not always fill.** Two things. On its side in Safari with more of its bars
+  up than was tried (a window flatter than 852x340), filling would have left out more than
+  the third that was allowed, so the picture was whole, with nothing at its sides. And
+  the size was measured when the telephone said it had been turned, which it says before
+  its window has its new size, or not at all. There is no such rule now, and the window
+  is asked every frame (`sized`): two numbers read, and nothing done unless they changed.
+  The frame's shape (tall, upright) is taken from the same two numbers, not from a media
+  query's event.
+- **The picture goes on round its frame; it is not cut to fill.** A window is seldom
+  16:9. To fill it the picture was made larger than the window and its sides left outside,
+  which loses the outer planets and draws pixels nobody sees. Now the canvas is the
+  window, the frame (16:9, or 9:16) is as large as fits in its middle, and round it there
+  is more sky and more orbit. The shader measures in the frame's heights, and is told how
+  many of them the canvas is high (`uWiden`, 1 unless the canvas is narrower than the
+  frame). Measured: the frame cut from a canvas taller or wider than it, against the
+  canvas that is the frame, at three moments, two cameras, both shapes: 0.00 % of the
+  pixels differ by more than 8 of 255 (24 pairs). The wide and the tall export are as they
+  were: 0 pixels of 518,400 differ, in 8 frames. (Tried first without touching the shader,
+  by telling it a camera farther off and a `uTall` between 0 and 1: the planets and the
+  sky were right, and the ripples in the sky, which are measured in the picture's heights,
+  ran a fifth too fast. Dropped.) A frame takes as long as it did, within what the machine
+  varies by: at 1080p, turn about, 18.0 ms and 18.6 ms against 18.1 and 19.4 with Jugal's
+  own browser busy; the page's own rate is below.
+- **The words are set in the frame**, which is whole in the window whatever its shape, so
+  none is cut (on a tablet on its side they were, by an eighth of the picture). A line
+  that would be under the bar or the controls while they are there is moved to just clear
+  of them, eased, and back when they go; one that appears while they are there, appears
+  clear of them.
+- **What is over the picture.** At the head, the name, the songs, "Make your own"; at the
+  foot, the song's title, what was heard, where in the song, play and the time, the
+  cameras, the words, what was heard, the full screen (where the browser has one): each on
+  a shade that deepens to the edge. A finger: a touch on the picture takes them away or
+  brings them back; two within a third of a second stop or start the song (the first of
+  the two has already hidden or shown them, and the second puts that back). The first
+  time it plays they go by themselves after three seconds. A mouse: a click stops and
+  starts, as on any video; they are there while it moves and go after three seconds of
+  stillness, unless it is on them. Stopping brings them back. A sign in the middle says
+  which was done. What was heard is not drawn while it is not seen (`strip.rest`).
+- **The picture alone is no longer a state of the page.** `?full=1`, and the page opened
+  from a telephone's home screen, open with nothing over the picture; the button to leave
+  is gone, with what it left. From the home screen the stage is the screen's size, not
+  the window's, if the two are within 15 % (they are not, in a tablet's split view).
+- **As smooth as the picture in the page was.** A telephone drew 2.07 million pixels for
+  the picture alone (1080x1920) and 0.88 for the picture in the page, which Jugal found
+  smooth: it now draws 0.90 at most, whatever the window (`?maxpixels`), and a desk as
+  many as 2560x1440. The song's clock is carried by the frame's own time, not by when the
+  script came to run: from one frame to the next it varied by 1.1 ms, and by 0.5 to 0.7
+  now. And a telephone that shows 30 frames a second to save its battery was given fewer
+  and fewer pixels for nothing: if two steps down do not make it faster, the size is put
+  back and left.
+- **The landing page's picture is the window too.** The video's frame is over the whole
+  screen, and the poster under it is where the style sets it, low in the hero; the video's
+  Sun is set by as much (`setLift`, asked a frame at a time from where the poster is, so
+  the scroll moves both). No band at the sides of a wide window, or of a telephone on its
+  side. (The layer was first given the class the film takes when the video starts, and
+  the film collapsed as it started: Jugal saw it before it was looked for.)
+- `?measure=1` says what the screen says of itself, and the rate: for a telephone, which
+  cannot be tried here.
+
+Measured in a browser without a window, on the M4, the best of three runs of six seconds,
+and none of the three with a frame over 20 ms unless said: the demo at 1440x900 (3.32
+million pixels) and 1920x1080 (3.69), 60 a second; made to say what a telephone says,
+upright and on its side (0.90), 60; the landing page at 1440x900 (1.87) and 1920x1080
+(2.07), 60 in six runs of six, and once, earlier, 57 and 56 in two of three. Not on a
+telephone, and not in Safari: that is Jugal's to say.
