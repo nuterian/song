@@ -1697,3 +1697,48 @@ million pixels) and 1920x1080 (3.69), 60 a second; made to say what a telephone 
 upright and on its side (0.90), 60; the landing page at 1440x900 (1.87) and 1920x1080
 (2.07), 60 in six runs of six, and once, earlier, 57 and 56 in two of three. Not on a
 telephone, and not in Safari: that is Jugal's to say.
+
+## The picture is what is shown (2026-09-28, later)
+
+Six readers were sent over everything that is public (the landing page wide and on a
+telephone, the demo the same, the keyboard and what is said to a screen reader, and the
+README, the repository's page and the links' previews), each to say what is broken, what
+is rough and what would add; what they said was tried again here before it was acted on.
+Jugal chose the first of it: on the landing page, less dark over the picture, the words
+shown where the page says they arrive, and three things mended; on the demo, an ending,
+and a first sight that is not the song's darkest moment.
+
+- **Less dark, and the Sun under what is said.** On the three screens after the first the
+  picture was under 64 % black, and what was said was in the middle, over the Sun: the
+  sentence in grey on the Sun's brown measured 3.0 to 1. Now what is said is at the head
+  of every screen, as on the first; the Sun is under it, a little lower than on the first
+  (`--mid`); the dark over the picture is 24 %, and the shade at the head of the screen
+  reaches lower. The sentence is nearly white. Measured, the sentence against every pixel
+  behind it, at three sizes, the three screens: least 5.6 to 1, median 14; none under 4.5.
+- **The words arrive.** The page begins at 1:32, by Jugal's choice, and no line is sung
+  from there to 2:06: who reads at a usual pace saw none under "The words arrive as they
+  are sung". Where no line is within four seconds when that screen is reached, the song
+  is taken to 1.6 s before the next, under 0.4 s of dark. Once; and only while it is
+  silent: a song that is being listened to is not moved. (On Gravity the line and the
+  re-entry at 2:06 land together.)
+- **A line keeps clear of what a page has over the picture**, and of the window's foot:
+  the player's `setClear(head, foot)`, which the demo's page and the landing page both
+  ask, a frame at a time. It was the demo page's own; two implementations would have been
+  one too many. (The landing page's picture is the demo's page in a frame, and that page
+  went on asking for itself, a frame after the landing page had: each undid the other.
+  It does not ask, in a frame.) With the picture set lower, the words are set lower with
+  it (`--lift`), and the lowest are below the window: they are moved up into it.
+- **Mended.** The sign that the picture was stopped or started was at the head of the
+  screen: its class `go` was also the hero's row of links', whose margin it took; it is
+  `shown`. The last line of the install is `visuals/.venv/bin/python -m visuals studio`,
+  as the README has it: `python` alone is not there on a Mac as it comes. The camera
+  buttons are made once and then only lit, with `aria-pressed`: made again at every
+  choice, the one that had the keyboard was gone, and the keyboard with it.
+- **The demo's first sight** is the song's strongest moment, a third of a second after
+  its strongest re-entry (`data-still`; on Gravity, 4:13, the planets in a row), not its
+  first, which is its darkest. The time still says 0:00, and the song begins at its
+  beginning: as it starts, the still goes in a quarter of a second and the song's own
+  picture comes (the player's `STILL_OUT`). Not where the address says where to begin,
+  or that it is to play at once.
+- **The demo's end.** The song stopped, on its last picture. Now, over it: "Play again",
+  the other song, "Make your own".
