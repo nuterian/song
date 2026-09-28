@@ -95,7 +95,7 @@ header.solid .hint{opacity:0}
    the picture, where the cue to scroll would be (the middle is the words') */
 .playbig{position:absolute;left:50%;bottom:64px;margin-left:-36px;z-index:3;width:72px;height:72px;border-radius:50%;display:none;place-items:center;
   background:rgba(0,0,0,.6);box-shadow:0 0 0 1px rgba(255,255,255,.25);color:var(--ink)}
-.film.still .cue{opacity:0}
+.film.still .cue{visibility:hidden}      /* not its opacity: where the scroll moves that, the scroll has the last word */
 /* paused or played by a click on the picture: said once, in the middle, and gone */
 .blip{position:absolute;inset:0;margin:auto;z-index:3;width:72px;height:72px;border-radius:50%;display:grid;place-items:center;pointer-events:none;
   background:rgba(0,0,0,.55);color:var(--ink);opacity:0;scale:.8}
