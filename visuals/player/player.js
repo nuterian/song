@@ -113,7 +113,7 @@ function makeTarget(gl, width, height) {
 /* The grid, read the way each channel's kind says: a level is interpolated
    between samples, an index is held. This mirrors Timeline.window in listen.py. */
 class Grid {
-  constructor(header, data) {
+  constructor(header, data, piece = 0) {
     this.rate = header.rate;
     this.frames = header.frames;
     this.names = header.features.map((f) => f.name);
@@ -124,13 +124,39 @@ class Grid {
     if (this.data.length !== want) {
       fail(`the frames hold ${this.data.length} floats, plan.json says ${want}`);
     }
+    // In pieces of `piece` frames (the demo's bundle), which come one by one: `have` says
+    // which are here, `wanted` which was last found missing.
+    this.piece = piece;
+    this.have = piece ? new Uint8Array(Math.ceil(this.frames / piece)) : null;
+    this.wanted = -1;
+  }
+
+  put(k, values) {
+    this.data.set(values, k * this.piece * this.stride);
+    this.have[k] = 1;
+  }
+
+  // the frame that is here and nearest to frame i, whose piece is not
+  nearest(i) {
+    const k = Math.floor(i / this.piece);
+    for (let d = 1; d < this.have.length; d++) {
+      if (this.have[k - d]) return (k - d + 1) * this.piece - 1;
+      if (this.have[k + d]) return (k + d) * this.piece;
+    }
+    return i;
   }
 
   read(t, out) {
     const x = Math.min(Math.max(t * this.rate, 0), this.frames - 1);
-    const i = Math.floor(x);
-    const j = Math.min(i + 1, this.frames - 1);
-    const f = x - i;
+    let i = Math.floor(x);
+    let j = Math.min(i + 1, this.frames - 1);
+    let f = x - i;
+    if (this.have) {
+      // a moment whose piece has not come is drawn as the nearest that has, and asked for next
+      const pi = Math.floor(i / this.piece), pj = Math.floor(j / this.piece);
+      if (!this.have[pi]) { this.wanted = pi; i = j = this.nearest(i); f = 0; }
+      else if (!this.have[pj]) { this.wanted = pj; j = i; }
+    }
     for (let c = 0; c < this.stride; c++) {
       const a = this.data[i * this.stride + c];
       out[c] = this.kinds[c] === "lerp" ? a + (this.data[j * this.stride + c] - a) * f : a;
@@ -248,13 +274,55 @@ function makeLyrics(spec, canvas, bar, camera) {
   };
 }
 
+// The grid of a plan: whole, as this machine stages it, or in pieces, as the demo has it.
+// In pieces it is ready as soon as the one under `t` is here; the rest come after it (and
+// after `before`, if given: what the first picture is waiting for), from there to the song's
+// end and then from its beginning; or on from a piece found missing, if the song is moved.
+async function gridOf(plan, base, t, options, before) {
+  if (!plan.frames_files) {
+    return new Grid(plan.grid, await decoded(base + plan.frames_file, plan.frames_file, "grid", plan, options));
+  }
+  const files = plan.frames_files, piece = plan.frames_piece, frames = plan.grid.frames;
+  const grid = new Grid(plan.grid, new Float32Array(frames * plan.grid.features.length), piece);
+  const bring = async (k) => {
+    const spec = { frames_packing: plan.frames_packing, frames_dtype: plan.frames_dtype, frames: Math.min(piece, frames - k * piece) };
+    grid.put(k, await decoded(base + files[k], files[k], "grid", spec, options));
+  };
+  const first = Math.min(Math.max(Math.floor((t * plan.grid.rate) / piece), 0), files.length - 1);
+  await bring(first);
+  (async () => {
+    if (before) await before.catch(() => {});
+    const rest = files.map((_, d) => (first + 1 + d) % files.length).filter((k) => k !== first);
+    let failed = 0;
+    while (rest.length) {
+      const asked = rest.indexOf(grid.wanted);      // the song has been moved there: on from there
+      if (asked > 0) rest.push(...rest.splice(0, asked));
+      const k = rest.shift();
+      try { await bring(k); }
+      catch (e) {                                    // a piece that did not come is asked for again, a few times
+        if (++failed > 6) return;
+        rest.push(k);
+        await new Promise((done) => setTimeout(done, 1500));
+      }
+    }
+  })();
+  return grid;
+}
+
 async function main() {
   const track = await pickTrack();
   const base = `${bundles}${encodeURIComponent(track)}/`;
   const planRes = await fetch(base + "plan.json");
   if (!planRes.ok) fail(`no plan for "${track}". Run:  python -m visuals render <song-workdir>`);
   let plan = await planRes.json();
-  let grid = new Grid(plan.grid, await decoded(base + plan.frames_file, plan.frames_file, "grid", plan));
+  // Everything the picture needs is asked for at once, and is on its way while the shader
+  // is compiled: the frames under the moment it starts at, the sky, the song.
+  const startAt = Number(params.get("t")) > 0 && Number(params.get("t")) < plan.duration ? Number(params.get("t")) : 0;
+  const texturesComing = (plan.textures || []).map((spec) => decoded(base + spec.file, spec.file, "texture", spec));
+  const gridComing = gridOf(plan, base, startAt, undefined, Promise.all(texturesComing));
+  for (const coming of [gridComing, ...texturesComing]) coming.catch(() => {});   // said where they are awaited
+  audio.src = base + plan.audio_file;
+  if (startAt) audio.currentTime = startAt;
 
   const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false });
   if (!gl) fail("this browser has no WebGL2.");
@@ -276,7 +344,7 @@ async function main() {
   // with texelFetch, so what the shader gets is exactly what Python wrote.
   const dataTextures = [];
   for (const [unit, spec] of (plan.textures || []).entries()) {
-    const raw = await decoded(base + spec.file, spec.file, "texture", spec);
+    const raw = await texturesComing[unit];
     const tex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE1 + unit);
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -319,7 +387,7 @@ async function main() {
     lastDrawn = -1;
   }
 
-  audio.src = base + plan.audio_file;
+  let grid = await gridComing;
   seek.max = String(plan.duration);
 
   let values = new Float32Array(grid.stride);
@@ -524,8 +592,7 @@ async function main() {
     history.replaceState(null, "", url);
     if (navigator.clipboard) navigator.clipboard.writeText(url.href).catch(() => {});
   });
-  const startAt = Number(params.get("t"));
-  if (startAt > 0 && startAt < plan.duration) { audio.currentTime = startAt; seek.value = String(startAt); }
+  if (startAt) seek.value = String(startAt);
 
   // The studio (visuals/studio/) edits the sheet and bakes it again; it hands the new bake
   // to this page here, and the song plays on. Only what a bake makes is read again - the
@@ -535,11 +602,16 @@ async function main() {
     get chosen() { return { ...chosen }; },
     variants(kind) { return Object.keys(((plan.variants || {})[kind] || {}).choices || {}); },
     choose(kind, name, seconds = 0) { if (pickers[kind]) pickers[kind](name, seconds); },
+    // the song's clock as the picture has it, and the moments heard in it (render.heard)
+    time() { return songTime(performance.now()); },
+    get heard() { return plan.heard || null; },
+    get drops() { return (plan.drops || []).map((d) => d.t); },
+    get duration() { return plan.duration; },
     get lyrics() { return words ? words.on : null; },
     setLyrics(v) { if (words) words.setOn(v); },
     async reload() {
       const next = await (await fetch(base + "plan.json", { cache: "no-store" })).json();
-      grid = new Grid(next.grid, await decoded(base + next.frames_file, next.frames_file, "grid", next, { cache: "no-store" }));
+      grid = await gridOf(next, base, audio.currentTime, { cache: "no-store" });
       if (values.length !== grid.stride) values = new Float32Array(grid.stride);
       plan = next;
       for (const [kind, pick] of Object.entries(pickers)) {
@@ -553,7 +625,7 @@ async function main() {
     },
   };
 
-  draw(startAt > 0 && startAt < plan.duration ? startAt : 0);
+  draw(startAt);
   readout.textContent =
     `${plan.track}  ${plan.duration.toFixed(0)}s  ${plan.tempo.toFixed(1)} bpm  ` +
     `${plan.sections.length} sections  one program  - press play`;

@@ -13,8 +13,9 @@ import pytest
 from visuals.pieces.gravity import ROOT, render
 
 BUNDLE_JS = ROOT / "visuals" / "player" / "bundle.js"
-FRAMES = 1001                     # odd, so a float16 column leaves the next one unaligned
+FRAMES = 4001                     # odd, so a float16 column leaves the next one unaligned; three pieces
 node = pytest.mark.skipif(shutil.which("node") is None, reason="no node to run the player's reader")
+ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="no ffmpeg to make a song with")
 
 
 @pytest.fixture(scope="module")
@@ -50,24 +51,47 @@ def bundle(tmp_path_factory):
 
 
 def _read(dest):
-    """The packed bundle read back, the way the plan describes it."""
+    """The packed bundle read back, the way the plan describes it: piece after piece."""
     plan = json.loads((dest / "plan.json").read_text())
-    raw = gzip.decompress((dest / plan["frames_file"]).read_bytes())
-    frames, at, cols = plan["grid"]["frames"], 0, []
-    for dtype in plan["frames_dtype"]:
-        size = 2 if dtype == "f16" else 4
-        chunk = np.frombuffer(raw[at:at + frames * size], dtype=np.uint8).reshape(size, frames)
-        cols.append(np.ascontiguousarray(chunk.T).view("<f2" if size == 2 else "<f4")[:, 0].astype("<f4"))
-        at += frames * size
-    assert at == len(raw)
-    return plan, np.stack(cols, axis=1)
+    left, pieces = plan["grid"]["frames"], []
+    for name in plan["frames_files"]:
+        raw = gzip.decompress((dest / name).read_bytes())
+        frames, at, cols = min(plan["frames_piece"], left), 0, []
+        for dtype in plan["frames_dtype"]:
+            size = 2 if dtype == "f16" else 4
+            chunk = np.frombuffer(raw[at:at + frames * size], dtype=np.uint8).reshape(size, frames)
+            cols.append(np.ascontiguousarray(chunk.T).view("<f2" if size == 2 else "<f4")[:, 0].astype("<f4"))
+            at += frames * size
+        assert at == len(raw)
+        pieces.append(np.stack(cols, axis=1))
+        left -= frames
+    assert left == 0
+    return plan, np.concatenate(pieces)
 
 
 def test_each_channel_is_kept_as_narrow_as_holds_it(bundle):
     _, dest, _, _ = bundle
     plan, _ = _read(dest)
-    assert plan["frames_file"].endswith(".gz") and plan["frames_packing"] == "planes"
+    assert "frames_file" not in plan and plan["frames_packing"] == "planes"
     assert plan["frames_dtype"] == ["f16", "f16", "f32", "f32", "f32", "f16"]
+
+
+def test_the_frames_are_in_pieces_of_fifteen_seconds(bundle):
+    _, dest, _, _ = bundle
+    plan = json.loads((dest / "plan.json").read_text())
+    assert plan["frames_piece"] == 15 * 120
+    assert plan["frames_files"] == ["frames-000.bin.gz", "frames-001.bin.gz", "frames-002.bin.gz"]
+    assert sorted(p.name for p in dest.glob("frames*")) == plan["frames_files"]
+
+
+def test_an_earlier_packings_frames_are_not_left_behind(bundle, tmp_path):
+    out, _, _, _ = bundle
+    dest = tmp_path / "song"
+    dest.mkdir()
+    (dest / "frames.bin.gz").write_bytes(b"the whole, as it was once packed")
+    (dest / "frames-007.bin.gz").write_bytes(b"of a longer song")
+    render.pack(out, dest)
+    assert sorted(p.name for p in dest.glob("frames*")) == ["frames-000.bin.gz", "frames-001.bin.gz", "frames-002.bin.gz"]
 
 
 def test_the_packed_frames_read_back_exactly_or_within_a_half_step(bundle):
@@ -95,7 +119,7 @@ def test_textures_audio_and_the_plan(bundle):
 def test_packing_again_gives_the_same_bytes(bundle, tmp_path):
     out, dest, _, _ = bundle
     again = render.pack(out, tmp_path / "again")
-    for name in ("frames.bin.gz", "uTex.bin.gz", "plan.json"):
+    for name in ("frames-000.bin.gz", "frames-002.bin.gz", "uTex.bin.gz", "plan.json"):
         assert (again / name).read_bytes() == (dest / name).read_bytes(), name
 
 
@@ -134,10 +158,80 @@ def test_the_player_reads_the_packed_bundle_as_python_does(bundle, tmp_path):
 const dir = {json.dumps(str(dest))};
 const plan = JSON.parse(readFileSync(dir + "/plan.json", "utf8"));
 const bytes = (name) => {{ const b = readFileSync(dir + "/" + name); return b.buffer.slice(b.byteOffset, b.byteOffset + b.length); }};
-const grid = B.gridValues(await B.inflate(bytes(plan.frames_file)), plan);
+const grid = [];
+for (const [k, name] of plan.frames_files.entries()) {{
+  const frames = Math.min(plan.frames_piece, plan.grid.frames - k * plan.frames_piece);
+  grid.push(...B.gridValues(await B.inflate(bytes(name)), {{ ...plan, frames }}));
+}}
 const spec = plan.textures[0];
 const tex = B.textureValues(await B.inflate(bytes(spec.file)), spec);
 console.log(JSON.stringify({{ grid: Array.from(grid), tex: Array.from(tex) }}));
 """))
     assert np.array_equal(np.array(got["grid"], dtype="<f4").reshape(back.shape), back)
     assert np.array_equal(np.array(got["tex"], dtype="<f4"), texture.ravel())
+
+
+def _atoms(data: bytes) -> list[bytes]:
+    at, out = 0, []
+    while at + 8 <= len(data):
+        size = int.from_bytes(data[at:at + 4], "big")
+        out.append(data[at + 4:at + 8])
+        at += size if size >= 8 else len(data)
+    return out
+
+
+@ffmpeg
+def test_the_packed_audio_has_its_index_first_and_is_the_same_sound(tmp_path):
+    src, dst = tmp_path / "mix.m4a", tmp_path / "packed.m4a"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=3", "-c:a", "aac", str(src)], check=True)
+    before = _atoms(src.read_bytes())
+    assert before.index(b"moov") > before.index(b"mdat")             # as ffmpeg writes it, unasked
+    render.faststart(src, dst)
+    after = _atoms(dst.read_bytes())
+    assert after.index(b"moov") < after.index(b"mdat")
+    pcm = [subprocess.run(["ffmpeg", "-v", "error", "-i", str(p), "-f", "s16le", "-"], capture_output=True, check=True).stdout
+           for p in (src, dst)]
+    assert len(pcm[0]) > 100_000 and pcm[0] == pcm[1]
+    render.faststart(dst, tmp_path / "again.m4a")                    # already so: a copy
+    assert (tmp_path / "again.m4a").read_bytes() == dst.read_bytes()
+
+
+def test_what_was_heard_is_read_back_from_the_channels():
+    from visuals.pieces.gravity import direct, shader_cosmos
+
+    n = 120 * 10
+    kicks, sizes = np.array([1.0, 1.5, 2.0, 7.25]), np.array([0.8, 0.5, 1.2, 0.9])
+    bass, syll = np.array([0.5, 0.75, 1.0, 1.25, 1.5, 6.0]), np.array([3.0, 3.2, 3.4])
+    cols = {}
+    KT, KA = direct.held_events(kicks, sizes, n)
+    cols["uKickT"], cols["uKickA"] = KT[:, 0], KA[:, 0]
+    PT, PA = direct.held_events(bass, np.full(len(bass), 0.6), n, shader_cosmos.N_PROM)
+    WT, WA = direct.held_events(syll, np.full(len(syll), 0.4), n, shader_cosmos.N_WIND)
+    for k in range(shader_cosmos.N_PROM):
+        cols[f"uPromT{k}"], cols[f"uPromA{k}"] = PT[:, k], PA[:, k]
+    for k in range(shader_cosmos.N_WIND):
+        cols[f"uWindT{k}"], cols[f"uWindA{k}"] = WT[:, k], WA[:, k]
+    ch = direct.Channels(list(cols), [direct.HOLD] * len(cols), np.stack(list(cols.values()), axis=1).astype("f4"), [], 10.0)
+    ch.planet_notes = [(np.array([4.0, 5.0]), np.array([0.5, 0.7])), (np.array([4.5]), np.array([1.3]))] + [(np.array([]), np.array([]))] * 6
+
+    heard = render.heard(ch)
+    assert heard["kick"] == {"t": [1.0, 1.5, 2.0, 7.25], "a": [0.8, 0.5, 1.0, 0.9], "k": [0, 0, 0, 0]}
+    assert heard["bass"]["t"] == [0.5, 0.75, 1.0, 1.25, 1.5, 6.0] and heard["bass"]["k"] == [0, 1, 2, 3, 0, 1]
+    assert heard["voice"]["t"] == [3.0, 3.2, 3.4]
+    assert heard["notes"] == {"t": [4.0, 4.5, 5.0], "a": [0.5, 1.0, 0.7], "k": [0, 1, 0]}
+    json.dumps(heard)                                                 # plain numbers: it goes in the plan
+
+
+@node
+def test_the_strip_finds_its_moments_and_lights_them_on_time(tmp_path):
+    heard_js = ROOT / "visuals" / "player" / "heard.js"
+    script = f"""import {{ from, lit }} from {json.dumps(heard_js.as_uri())};
+const t = [0.5, 1, 1, 2.5, 7];
+console.log(JSON.stringify({{ from: [0, 0.5, 0.75, 1, 3, 7, 8].map((x) => from(t, x)),
+  lit: [-1, -0.1, -0.05, 0, 0.1, 1].map(lit) }}));"""
+    (tmp_path / "heard.mjs").write_text(script)
+    got = json.loads(subprocess.run(["node", str(tmp_path / "heard.mjs")], capture_output=True, text=True, check=True).stdout)
+    assert got["from"] == [0, 0, 1, 1, 4, 4, 5]
+    dark, rising, half, peak, after, late = got["lit"]
+    assert dark == 0 and rising == 0 and 0 < half < 1 and peak == 1          # it comes up to its moment: nothing at once
+    assert peak > after > late > 0

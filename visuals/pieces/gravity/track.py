@@ -158,7 +158,8 @@ def prepare(track: Track, say=print) -> None:
         separate(track, say)
     if not track.mix_m4a.exists():
         # the song tool's recipe (song/server.py), so both players hear the same thing
-        _ffmpeg("-i", str(track.audio), "-ac", "2", "-c:a", "aac", "-b:a", "128k", str(track.mix_m4a))
+        _ffmpeg("-i", str(track.audio), "-ac", "2", "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart", str(track.mix_m4a))     # its index first: a player starts it anywhere at once
 
 
 def separate(track: Track, say=print) -> None:

@@ -3,7 +3,8 @@
 //
 //   as `export` writes it (render.py): float32, frame by frame, as is. This machine.
 //   as `pack` writes it: channel by channel, each column float16 or float32 as the plan's
-//   `frames_dtype` lists, as byte planes, gzipped (the file's name ends in .gz). The demo.
+//   `frames_dtype` lists, as byte planes, gzipped (the file's name ends in .gz), and the
+//   frames in pieces (`frames_files`, `frames_piece` frames to each). The demo.
 //
 // Everything comes out as the same Float32Array, so nothing after this knows which it was.
 // A test (test_pack.py) runs this under node against what Python packed; nothing here
@@ -60,18 +61,11 @@ export async function inflate(buffer) {
   return new Response(stream).arrayBuffer();
 }
 
-// A file of the bundle, as bytes, inflated if the plan named it .gz.
-export async function fetchBytes(url, name, options) {
-  const res = await fetch(url, options);
-  if (!res.ok) throw new Error(`${name}: ${res.status} ${res.statusText}`);
-  const buffer = await res.arrayBuffer();
-  return name.endsWith(".gz") ? inflate(buffer) : buffer;
-}
-
-// The grid: frames x channels, frame by frame, float32.
+// The grid, or a piece of it (`plan.frames` says how many frames, if not all of them):
+// frames x channels, frame by frame, float32.
 export function gridValues(buffer, plan) {
   if (plan.frames_packing !== "planes") return new Float32Array(buffer);
-  const frames = plan.grid.frames, stride = plan.frames_dtype.length;
+  const frames = plan.frames ?? plan.grid.frames, stride = plan.frames_dtype.length;
   const cols = columns(new Uint8Array(buffer), plan.frames_dtype, frames);
   const out = new Float32Array(frames * stride);
   cols.forEach((col, c) => { for (let i = 0; i < frames; i++) out[i * stride + c] = col[i]; });
@@ -84,40 +78,55 @@ export function textureValues(buffer, spec) {
   return columns(new Uint8Array(buffer), [spec.dtype], spec.width * spec.height * (spec.channels || 4))[0];
 }
 
-// A file of the bundle, fetched, inflated and unpacked: the grid's values (`kind` "grid",
-// `spec` the plan) or a texture's ("texture", its own spec). In a worker where there is
-// one, so that a hundred milliseconds of unpacking are not taken from the page that is
-// drawing; here, by the same functions, where there is not.
+// A file's bytes as the values they hold: inflated if its name ends in .gz, and unpacked.
+export async function unpacked(bytes, name, kind, spec) {
+  const buffer = name.endsWith(".gz") ? await inflate(bytes) : bytes;
+  return kind === "grid" ? gridValues(buffer, spec) : textureValues(buffer, spec);
+}
+
+// A file of the bundle, fetched and unpacked: the grid's values or a piece of them (`kind`
+// "grid", `spec` the plan) or a texture's ("texture", its own spec). It is fetched here, on
+// the page, so that it is asked for at once and a page that has preloaded it is given what
+// it has; it is unpacked in a worker where there is one, so that those milliseconds are not
+// taken from the page that is drawing, and here, by the same function, where there is not.
 let worker = null, asked = 0;
 const waiting = new Map();
-export async function decoded(url, name, kind, spec, options) {
-  const here = async () => {
-    const buffer = await fetchBytes(url, name, options);
-    return kind === "grid" ? gridValues(buffer, spec) : textureValues(buffer, spec);
-  };
-  if (typeof Worker === "undefined" || worker === false) return here();
+function hire() {
+  if (worker !== null || typeof Worker === "undefined") return;
   try {
-    if (!worker) {
-      worker = new Worker(new URL("./bundle-worker.js", import.meta.url), { type: "module" });
-      worker.onmessage = (e) => {
-        const job = waiting.get(e.data.id);
-        waiting.delete(e.data.id);
-        if (!job) return;
-        if (e.data.error) job.reject(new Error(e.data.error)); else job.resolve(new Float32Array(e.data.buffer));
-      };
-      worker.onerror = () => {                       // no module workers here: everything waiting is done on the page
-        worker = false;
-        for (const job of waiting.values()) job.here().then(job.resolve, job.reject);
-        waiting.clear();
-      };
-    }
+    worker = new Worker(new URL("./bundle-worker.js", import.meta.url), { type: "module" });
+    worker.onmessage = (e) => {
+      const job = waiting.get(e.data.id);
+      waiting.delete(e.data.id);
+      if (!job) return;
+      if (e.data.error) job.reject(new Error(e.data.error)); else job.resolve(new Float32Array(e.data.buffer));
+    };
+    worker.onerror = () => {                         // no module workers here: everything waiting is done on the page
+      worker = false;
+      for (const job of waiting.values()) job.here().then(job.resolve, job.reject);
+      waiting.clear();
+    };
+  } catch (e) {
+    worker = false;
+  }
+}
+
+export async function decoded(url, name, kind, spec, options) {
+  const plain = !name.endsWith(".gz") && (kind === "grid" ? spec.frames_packing : spec.packing) !== "planes";
+  if (!plain) hire();                                // it starts while the file is on its way
+  const res = await fetch(url, options);
+  if (!res.ok) throw new Error(`${name}: ${res.status} ${res.statusText}`);
+  const bytes = await res.arrayBuffer();
+  const here = () => unpacked(bytes, name, kind, spec);
+  if (plain || !worker) return here();
+  try {
     const lean = kind === "grid"
-      ? { frames_packing: spec.frames_packing, frames_dtype: spec.frames_dtype, grid: { frames: spec.grid.frames } }
+      ? { frames_packing: spec.frames_packing, frames_dtype: spec.frames_dtype, frames: spec.frames ?? spec.grid.frames }
       : { packing: spec.packing, dtype: spec.dtype, width: spec.width, height: spec.height, channels: spec.channels };
     return await new Promise((resolve, reject) => {
       const id = ++asked;
       waiting.set(id, { resolve, reject, here });
-      worker.postMessage({ id, url: new URL(url, location.href).href, name, kind, spec: lean, options });
+      worker.postMessage({ id, bytes, name, kind, spec: lean });   // a copy: the page keeps its own, in case
     });
   } catch (e) {
     if (worker === false || !(e instanceof Error) || /Worker|SecurityError/.test(String(e))) return here();

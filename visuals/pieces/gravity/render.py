@@ -294,6 +294,37 @@ def stage(got: dict, track: Track, out_dir: str | Path, ch: direct.Channels | No
     return out_dir
 
 
+def heard(ch: direct.Channels) -> dict:
+    """What was heard, as the moments themselves: every kick, every note of the bass line,
+    every note a planet plays, every syllable. They are read back out of the baked channels
+    (and the planets' parts), so they are the very moments the picture moves to, not a
+    second opinion. For a page to draw beside the picture (player/heard.js).
+
+    Each part is {"t": seconds, "a": sizes 0..1, "k": which of several}: for the notes `k`
+    is the planet, Mercury 0 to Neptune 7."""
+    col = {name: ch.data[:, c] for c, name in enumerate(ch.names)}
+
+    def held(time: str, size: str, slots: int | None = None) -> list[tuple[float, float, int]]:
+        out = []
+        for k in range(slots or 1):
+            t, a = col[f"{time}{'' if slots is None else k}"], col[f"{size}{'' if slots is None else k}"]
+            first = np.flatnonzero(np.diff(t, prepend=np.float32(-1000.0)) != 0)
+            out += [(float(t[i]), float(a[i]), k) for i in first if t[i] > -100]
+        return out
+
+    def part(events) -> dict:
+        events = sorted(events)
+        return {"t": [round(t, 3) for t, _, _ in events], "a": [round(min(max(a, 0.0), 1.0), 2) for _, a, _ in events],
+                "k": [k for _, _, k in events]}
+
+    notes = [(float(t), float(a), planet) for planet, (tt, aa) in enumerate(getattr(ch, "planet_notes", None) or [])
+             for t, a in zip(tt, aa)]
+    return {"kick": part(held("uKickT", "uKickA")),
+            "bass": part(held("uPromT", "uPromA", shader_cosmos.N_PROM)),
+            "notes": part(notes),
+            "voice": part(held("uWindT", "uWindA", shader_cosmos.N_WIND))}
+
+
 def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
     """plan.json + frames.bin + audio, in the format visuals/player already reads."""
     bad = [name for name, col in zip(ch.names, ch.data.T) if not np.isfinite(col).all()]
@@ -332,6 +363,7 @@ def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
         words = lyrics.layout(track, ch, (getattr(ch, "sheet", None) or {}).get("lyrics"))
         if words:
             plan["lyrics"] = words
+        plan["heard"] = heard(ch)
     (out_dir / "frames.bin").write_bytes(ch.data.astype("<f4").tobytes())
     (out_dir / "plan.json").write_text(json.dumps(plan, indent=1) + "\n")
     src, dst = track.mix_m4a, out_dir / "mix.m4a"
@@ -357,7 +389,13 @@ def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
 #
 # Each column is written as byte planes (every value's first byte, then every second
 # byte...), because neighbouring values share their high bytes and gzip then finds them.
-# On Gravity: 2.9 MB, against 5.1 MB for plain float16 and 14.7 MB for float32, gzipped.
+#
+# And the frames are cut into pieces of PIECE_SECONDS, each a file of its own, so that a
+# page draws as soon as it has the piece under the moment it starts at, and has the rest
+# come while it plays. On Gravity: twenty pieces, 3.3 MB in all and 0.16 MB the largest
+# wait, against 2.9 MB in one (and 5.1 MB for plain float16, 14.7 MB for float32, gzipped).
+
+PIECE_SECONDS = 15.0
 
 # half of float16's step between 1 and 2: whatever it holds this well is as good as exact
 HALF_ERROR = 2.0 ** -11
@@ -382,19 +420,50 @@ def _gzip(path: Path, data: bytes) -> None:
     path.write_bytes(gzip.compress(data, compresslevel=9, mtime=0))
 
 
+def faststart(src: Path, dst: Path) -> None:
+    """The audio copied, with its index (the `moov` atom) before its samples if it was
+    after them: a page that starts a song in its middle then finds where in one request,
+    not after reading to the end of the file. Nothing is encoded again."""
+    data = src.read_bytes()
+    at, order = 0, []
+    while at + 8 <= len(data):
+        size, kind = int.from_bytes(data[at:at + 4], "big"), data[at + 4:at + 8]
+        if size == 1 and at + 16 <= len(data):
+            size = int.from_bytes(data[at + 8:at + 16], "big")
+        if size < 8:
+            break
+        order.append(kind)
+        at += size
+    late = b"moov" in order and b"mdat" in order and order.index(b"moov") > order.index(b"mdat")
+    if late and shutil.which("ffmpeg"):
+        done = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(src), "-c", "copy",
+                               "-fflags", "+bitexact", "-movflags", "+faststart", "-f", "mp4", str(dst)])
+        if done.returncode == 0:
+            return
+    dst.write_bytes(data)                                        # follows a link: a copy
+
+
 def pack(out_dir: str | Path, dest: str | Path) -> Path:
-    """The bundle in `out_dir`, written compact into `dest`: the frames channel by channel,
-    each at the narrowest precision that holds it, as byte planes, gzipped; the textures the
-    same way; the audio copied (never linked); and a plan that says so. The player reads
-    either form (player/bundle.js)."""
+    """The bundle in `out_dir`, written compact into `dest`: the frames in pieces, channel by
+    channel, each at the narrowest precision that holds it, as byte planes, gzipped; the
+    textures the same way, whole; the audio copied (never linked); and a plan that says so.
+    The player reads either form (player/bundle.js)."""
     out_dir, dest = Path(out_dir), Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
     plan = json.loads((out_dir / "plan.json").read_text())
     stride = len(plan["grid"]["features"])
     data = np.frombuffer((out_dir / plan["frames_file"]).read_bytes(), dtype="<f4").reshape(-1, stride)
     dtypes = [narrowest(col) for col in data.T]
-    _gzip(dest / "frames.bin.gz", b"".join(planes(col, dt) for col, dt in zip(data.T, dtypes)))
-    plan.update(frames_file="frames.bin.gz", frames_packing="planes", frames_dtype=dtypes)
+    piece = int(round(PIECE_SECONDS * plan["grid"]["rate"]))
+    files = [f"frames-{k:03d}.bin.gz" for k in range(-(-len(data) // piece))]
+    for old in dest.glob("frames*.bin.gz"):                      # an earlier packing's, longer or whole
+        if old.name not in files:
+            old.unlink()
+    for k, name in enumerate(files):
+        part = data[k * piece:(k + 1) * piece]
+        _gzip(dest / name, b"".join(planes(col, dt) for col, dt in zip(part.T, dtypes)))
+    del plan["frames_file"]
+    plan.update(frames_files=files, frames_piece=piece, frames_packing="planes", frames_dtype=dtypes)
     for spec in plan.get("textures", []):
         values = np.frombuffer((out_dir / spec["file"]).read_bytes(), dtype="<f4")
         dtype = narrowest(values)
@@ -402,6 +471,6 @@ def pack(out_dir: str | Path, dest: str | Path) -> Path:
         spec.update(file=f"{spec['name']}.bin.gz", packing="planes", dtype=dtype)
     audio = out_dir / plan["audio_file"]
     if audio.exists():
-        shutil.copyfile(audio, dest / plan["audio_file"])       # follows the link: a copy
+        faststart(audio, dest / plan["audio_file"])
     (dest / "plan.json").write_text(json.dumps(plan, separators=(",", ":")) + "\n")
     return dest
