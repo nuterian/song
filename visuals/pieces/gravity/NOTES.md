@@ -1373,3 +1373,26 @@ narrower than the window and its sides show.
 A browser holding the old `player.js` and fetching the new plan fails (it has no
 `frames_file`); GitHub Pages keeps files for ten minutes, so that is a visitor who was
 there in the ten minutes before a deploy. Not measured: Safari, Firefox, a phone.
+
+## The demo page, again (2026-09-27)
+
+Jugal, of the demo page as it was deployed: "this ui doesn't look great, it needs to be
+way more polished". It was the player's own controls, as made for working: a button that
+said "pause", a time to the tenth of a second, the browser's slider in orange, four rows of
+labelled pills. The page has its own now (`player/demo.html`), over `window.player`, and
+the player's are kept out of sight (`#own`):
+
+- a bar as wide as the picture: the name, the songs, "Make your own";
+- the picture; what was heard; the song's length as a hair of a line, filled as far as it
+  has come, its handle there when reached for;
+- one row: play and the time (a click copies a link to the moment, and says so), the three
+  cameras as one control whose light slides to the one taken, and three icons: the words,
+  what was heard, full screen (`f`; left out where the browser has it only for video).
+
+The landing page's colours and its ease, black under everything, nothing orange but the
+mark. It fits the window at 1440x900, 1920x1080, 1000x574 and 390x844 (no scroll in any),
+and each control was pressed and read back in each. 60 frames a second while it plays and
+through a change of camera, the worst frame 17.7-17.8 ms, in eight runs of nine; one run
+had five frames over 20 ms (the worst 33.7 ms), which did not come back and whose cause is
+not known. Not looked at: Safari, Firefox, a phone in the hand.
+
