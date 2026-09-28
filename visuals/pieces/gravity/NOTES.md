@@ -1119,6 +1119,9 @@ was. A test runs the reader under node against numpy.
 | the page and its three scripts | | | | | 0.04 MB |
 | | | | | | **13.82 MB** |
 
+(Since then the frames are in pieces and the sky is kept once: see "Seen in sync, and a
+faster start" at the end.)
+
 The sky is the same for both songs and is shipped twice (0.85 MB); a shared copy would
 need the plan to point outside its own folder. Opening the demo fetches 4.0 MB before the
 first frame (the plan, the frames, the sky; the audio streams), drawn 0.5 s after the
@@ -1276,3 +1279,87 @@ after the page asks for it. One run of the five, the first, had one frame of 234
 scrolling from the film into the studio section (a long task of 323 ms); the studio's
 picture is decoded ahead of time since, and it has not come back in the runs after. Not
 measured: Safari, Firefox, a phone, the fanless machine once it is hot.
+
+## Seen in sync, and a faster start (2026-09-27)
+
+Two things the page did badly. It claims that everything moves with the music and starts
+silent, so most visitors never hear what the picture is moving to. And it took 2.5 s at
+20 Mbps to show a moving picture, because everything was fetched one thing after another
+and the whole song's frames came before the first of them was drawn.
+
+**What was heard, drawn** (`render.heard`, `player/heard.js`). The plan carries the
+moments themselves: every kick, every note of the bass line, every note a planet plays,
+every syllable. They are read back out of the baked channels (`uKickT`, `uPromT0..3`,
+`uWindT0..3`) and the planets' parts, so they are the moments the picture moves to and
+not a second opinion. `heard.js` draws them as four lines running through a line in the
+middle, which is now; a mark comes up over its last tenth of a second and is brightest on
+its moment. It is under "First, it listens." on the landing page and under the picture in
+the demo (`heard on | off`; left out where the window is under 600 px high). The clock is
+the player's (`player.time()`), so the strip and the picture cannot disagree. Gravity: 291
+kicks, 1580 bass notes, 1555 notes, 416 syllables; 55 KB in the plan, which goes out
+gzipped at 46 KB with the rest of it.
+
+**Said once, that it has a sound.** "Best with sound", under the sound control, up as the
+next re-entry lands (a kick, if no re-entry is within 14 s), the control swelling with it;
+gone after 6 s or when the sound is turned on. Once a page load, and never while the song
+is heard, paused or out of view.
+
+**The link's card**: `docs/img/card.jpg`, 1200x630, a frame of the video (static camera,
+1:40) under the headline, set in Helvetica Neue. 61 KB.
+
+**The start.** What changed, in the order it mattered:
+
+- The frames are in pieces of 15 s (`render.PIECE_SECONDS`, `frames_files`,
+  `frames_piece`). The player is ready with the piece under the moment it starts at, and
+  has the rest come after the first picture: from there to the end, then from the
+  beginning. A moment whose piece has not come is drawn as the nearest that has, and its
+  piece is asked for next and the order goes on from it. The pieces cost 12 % more in all
+  (3.31 MB against 2.94 MB for Gravity), which keeping the sky once pays for.
+- Everything the first picture needs is asked for at once and is on its way while the
+  shader compiles: the plan, the sky and the scripts from the page's head (preload), the
+  piece and the song as soon as the plan is read. The files are fetched on the page and
+  unpacked in the worker, which is hired before the first file is asked for.
+- The audio has its index first (`render.faststart`, and `track.prepare` for songs from
+  now on): one request to start a song in its middle, where it was three. Nothing is
+  encoded again; the decoded samples are the same (md5).
+- The sky is kept once (`docs/video/sky/`, `demo.share`).
+- The landing page asks for the player as its own script runs, not at `load`, and looks
+  for it every 40 ms, not every 200.
+
+The frames, the sky and the sound are what is deployed, value for value (checked against
+`HEAD`'s files). Measured in headless Chrome against a server that gives every response
+one shared link of the stated speed and delay, and gzips text as GitHub Pages does; three
+runs each, the spread under 0.02 s:
+
+| the landing page, from the request to a moving picture | before | after |
+|---|---|---|
+| 20 Mbps, 40 ms | 2.50 s, 4.15 MB fetched first | **0.77 s**, 1.51 MB |
+| 5 Mbps, 80 ms | 7.95 s, 4.13 MB | **2.61 s**, 1.22 MB |
+
+| docs/video/ | frames | plan | audio | all |
+|---|---|---|---|---|
+| Gravity in Motion (4:46), 20 pieces, the largest 0.20 MB | 3.31 MB | 0.15 MB | 4.76 MB | 8.22 MB |
+| Shattered Voices (2:35), 11 pieces | 1.77 MB | 0.11 MB | 2.61 MB | 4.49 MB |
+| the sky, once | | | | 0.85 MB |
+| the page, its scripts, the font | | | | 0.18 MB |
+| | | | | **13.74 MB** |
+
+Frame pacing is as it was: 60 frames a second at rest, on the strip, scrolling through
+the film and past it, the worst frame 17.6-17.8 ms, none over 20 ms, no long task (three
+runs); and the same in the 7 s after the picture starts to move, while the other nineteen
+pieces arrive. A jump in the demo to 4:10 the moment it opens: its piece came 0.36 s
+later at 20 Mbps, and the ones after it next.
+
+What is left of the wait is the sky: 0.85 MB of the 1.5 MB. It could be packed smaller
+without changing a value (the Milky Way is a smooth field; its differences would gzip far
+better than its values). Not done.
+
+Found on the way: Gravity has no kick from 0:26 to 1:36 but one, and the landing page
+starts at 1:01, so the strip's first line is empty for the first half minute, and "the
+kick pulls the orbits" is said over a passage with none. `?t=` on the landing page starts
+it elsewhere, to try: 1:32 puts the re-entry at 1:36, the song's strongest after its
+first, four seconds after the page opens.
+
+A browser holding the old `player.js` and fetching the new plan fails (it has no
+`frames_file`); GitHub Pages keeps files for ten minutes, so that is a visitor who was
+there in the ten minutes before a deploy. Not measured: Safari, Firefox, a phone.
