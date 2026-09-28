@@ -133,6 +133,7 @@ uniform float uField, uExposure, uStars, uBeats, uRays;
 uniform float uDropT, uDropA, uCrashT, uCrashA;
 uniform float uCamTurn, uCamTilt, uCamRoll, uCamSpan, uCamX, uCamY;
 uniform float uTall;               // 1 in the tall frame, whose camera is the wide frame's turned and 16/9 as far off (unset = 0)
+uniform float uWiden;              // how many of the frame's heights the picture is high: more than 1 where it goes on round the frame (unset = 1)
 {_palette_uniforms()}
 {_scalars("uRingT", N_RINGS)}
 {_scalars("uRingA", N_RINGS)}
@@ -386,8 +387,12 @@ void main() {{
     float ss = max(uSS, 1.0);
     gAA = 1.0 / ss;
     gDrift = TAU * uOrbitSlow;
-    float resY = uResolution.y / ss;                                   // the height of the picture, in output pixels
-    vec2 p = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;
+    // Everything is measured in the frame's heights, and the frame is the picture, unless
+    // the picture is asked to go on round it (a window of another shape, filled): then the
+    // frame is in its middle, the same frame, and there is more sky and more orbit round it.
+    float widen = max(uWiden, 1.0);
+    float resY = uResolution.y / (ss * widen);                         // the height of the frame, in output pixels
+    vec2 p = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y * widen;
 
     // ---- the camera: an orrery's. It turns, tilts, rolls, zooms and slides; nothing it
     // does changes the shape of anything. ---------------------------------------------------
