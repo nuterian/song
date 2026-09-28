@@ -1567,3 +1567,20 @@ having on a telephone, and it had not been asked for. It is gone: the demo's fra
 screen's, and the address no longer keeps it (a link made on a telephone opened tall on a
 desk). `?shape=` still says which, for a link that means to.
 
+Jugal, of the picture over the page on his telephone: it could be "more fully, full
+screen"; it stopped where Safari's address bar and the island are; and is there a link
+that opens the demo like that. What a page can do about the first is not much, and none
+of it could be tried here (there is no telephone's Safari on this machine): the page says
+`viewport-fit=cover`; the picture over the page is as high as the window at its highest
+(`100lvh`) from the very top, not as high as what is left between the bars (`100dvh`);
+and on a screen held upright the tall picture fills it top to bottom, its sides a little
+outside a screen narrower than 9:16, where it had stood whole with black over and under
+it. A page cannot take Safari's bars away: only a page put on the home screen has the
+whole screen. The link is `video/?full=1` (`&track=` for the other song): the picture
+over the page from the first, a play button in its middle; the touch that starts it, with
+its sound, also asks for the browser's own full screen where there is one, since a
+browser gives that only to a touch. In headless Chrome at 393x852 without a full screen
+of its own, 412x915 with, and 1440x900: the picture is from -43 to 436 across a window
+of 393 and from 0 to 852 down it; a touch starts the song, not muted; the button at the
+corner leaves to the page.
+

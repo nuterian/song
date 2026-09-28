@@ -5,7 +5,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#000000">
 <title>song: a music video, drawn from the song</title>
@@ -104,14 +104,25 @@
   #stage:fullscreen { width: 100vw; height: 100vh; display: grid; place-items: center; background: #000; }
   #stage:fullscreen > #gl, #stage:fullscreen > #frame { width: min(100vw, 100vh * 16 / 9); }
   #stage:fullscreen #gl { border-radius: 0; }
-  /* where the browser has no full screen for anything but a video (a telephone's Safari):
-     the picture alone over the whole page, which is as near as a page can come */
+  /* where the browser has no full screen for anything but a video (a telephone's Safari),
+     or the address asks for the picture alone (?full=1): the picture over the whole page,
+     which is as near as a page can come. It is as high as the window is at its highest
+     (100lvh: with the browser's bars drawn in), from the very top, so that where the
+     browser lets a page show under its bars, it is the picture that shows. */
   body.filled { overflow: hidden; }
-  body.filled #stage { position: fixed; inset: 0; z-index: 50; width: 100vw; height: 100dvh; margin: 0; display: grid; place-items: center; background: #000; }
-  body.filled #stage > #gl, body.filled #stage > #frame { width: min(100vw, 100dvh * 16 / 9); }
-  body.filled.tall #stage > #gl, body.filled.tall #stage > #frame { width: min(100vw, 100dvh * 9 / 16); }
+  body.filled #stage { position: fixed; left: 0; top: 0; z-index: 50; width: 100vw; height: 100vh; height: 100lvh; margin: 0;
+    display: grid; place-items: center; place-content: center; overflow: hidden; background: #000; }
+  body.filled #stage > #gl, body.filled #stage > #frame { width: min(100vw, 100vh * 16 / 9); width: min(100vw, 100lvh * 16 / 9); }
+  body.filled.tall #stage > #gl, body.filled.tall #stage > #frame { width: min(100vw, 100vh * 9 / 16); width: min(100vw, 100lvh * 9 / 16); }
   body.filled #gl { border-radius: 0; }
-  #leave { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 14px; z-index: 2; width: 40px; height: 40px; border-radius: 50%;
+  /* on a screen held upright the tall picture fills it, top to bottom: a screen narrower
+     than 9:16 (a telephone's) has a little of the picture's sides outside it, where the
+     tall frame keeps nothing (the words are an eighth of the width in from each side) */
+  @media (max-aspect-ratio: 1/1) {
+    body.filled.tall #stage > #gl, body.filled.tall #stage > #frame { width: max(100vw, 100vh * 9 / 16); width: max(100vw, 100lvh * 9 / 16); }
+  }
+  #leave { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); right: calc(env(safe-area-inset-right, 0px) + 14px); z-index: 2;
+    width: 40px; height: 40px; border-radius: 50%;
     display: none; place-items: center; background: rgba(0, 0, 0, .6); box-shadow: 0 0 0 1px rgba(255, 255, 255, .25); color: var(--ink); }
   #leave svg { width: 18px; height: 18px; }
   body.filled #leave { display: grid; }
@@ -174,6 +185,10 @@
   body.tall { --w: min(100vw - 48px, (100dvh - var(--around)) * 9 / 16); }
   body.tall #gl, body.tall #frame { aspect-ratio: 9 / 16; }
   body.tall #stage:fullscreen > #gl, body.tall #stage:fullscreen > #frame { width: min(100vw, 100vh * 9 / 16); }
+  @media (max-aspect-ratio: 1/1) {         /* and fills a screen held upright, as it does over the page */
+    body.tall #stage:fullscreen { overflow: hidden; place-content: center; }
+    body.tall #stage:fullscreen > #gl, body.tall #stage:fullscreen > #frame { width: max(100vw, 100vh * 9 / 16); }
+  }
   /* the bar and the controls are as wide as the wide picture would be: the tall one is narrow */
   body.tall #top, body.tall #heard, body.tall #seek, body.tall #bar, body.tall #caption {
     width: min(100vw - 48px, max((100dvh - var(--around)) * 9 / 16, 640px)); }
@@ -287,7 +302,16 @@
     const now = songs.find((s) => s.slug === here);
     if (now) { $("title").textContent = now.title; document.title = `${now.title} · song`; }
 
-    const toggle = () => $("play").click();
+    // ?full=1: a link to the picture alone, over the whole page from the first; the first
+    // touch, which starts it with its sound, also asks the browser for its own full screen,
+    // where it has one (it gives it only to a touch)
+    const alone = Boolean(params.get("full"));
+    if (alone) document.body.classList.add("filled");
+    const toggle = () => {
+      if (alone && document.body.classList.contains("filled") && !document.fullscreenElement
+          && document.fullscreenEnabled && $("stage").requestFullscreen) $("stage").requestFullscreen().catch(() => {});
+      $("play").click();
+    };
     big.addEventListener("click", toggle);
     $("gl").addEventListener("click", toggle);
     audio.addEventListener("play", () => document.body.classList.add("played", "playing"));
@@ -373,7 +397,11 @@
       else if (own) stage.requestFullscreen().catch(() => fill(true));
       else fill(true);
     });
-    $("leave").addEventListener("click", (e) => { e.stopPropagation(); fill(false); });
+    $("leave").addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (document.fullscreenElement) document.exitFullscreen();
+      fill(false);
+    });
     addEventListener("keydown", (e) => {
       if (e.key === "f" && !e.metaKey && !e.ctrlKey) full.click();
       if (e.key === "Escape") fill(false);
