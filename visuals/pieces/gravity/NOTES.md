@@ -1841,3 +1841,25 @@ Left as they are: the first play drops from the strongest moment to the song's o
 which is the darkest (the song begins at its beginning, by Jugal's choice), and the
 share sheet on a telephone, which a browser without a window does not show.
 
+
+## On Jugal's telephone (2026-09-28, morning)
+
+- **It fills, and keeps up.** `?measure=1` on his iPhone, in Safari and in Chrome: the
+  stage is the window, the frame fills it, 60 a second. Asked to draw 2.6 million pixels
+  (`?maxpixels=2600000`, its own 1206x2142 at three to a point) it drew 2.58 million at 60 a
+  second, none slower than 18 ms. So a telephone draws up to 2.6 million now, on the demo
+  and the landing page, not 0.9 (the 0.9 was chosen when 2.07 was not smooth, before the
+  song's clock went by the frame's time); a telephone that cannot keep up still lowers its
+  own size (`adapt`).
+- **Under Safari's bar.** Safari's bar at the foot is glass over the page since iOS 26, and
+  the page stopped at its top: a black band behind it, which Jugal saw at once. The picture
+  now goes on under it: the demo's stage is as high as the window with its bars away
+  (`100lvh`, measured each time the window changes), what is over the picture is kept above
+  the bar (`--under`), and the Sun is set in the middle of what is seen (`setLift`); on the
+  landing page the pinned screen is `100lvh` and everything that was placed by its middle
+  or its foot is placed by what is seen (`--bar`). The shade under the bar is light:
+  nothing there is to be read. Where there is no such bar the two heights are one and
+  nothing moves (measured: the same places as before). Tried in a browser without a window
+  by making it think it had a 98-point bar; not yet in Safari.
+- Seen on his telephone and still open: the time read "0:00 / 0:00" while it played in
+  Safari (right in Chrome, and in Chrome here); not reproduced.

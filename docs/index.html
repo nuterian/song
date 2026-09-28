@@ -62,22 +62,25 @@ header .mark{padding:12px 8px 12px 0;margin-left:0}
    from the first paint. */
 .film{position:relative}
 /* where the Sun is: under the window's middle by --low in the first screen and --mid after it,
-   and to its right by --side (the poster, the video and the play button all go by these) */
-.screen{position:sticky;top:0;height:100svh;overflow:hidden;background:#000;z-index:0;--low:21svh;--mid:calc(var(--low) + 5svh);--side:0px}
+   and to its right by --side (the poster, the video and the play button all go by these).
+   The picture goes on under a telephone's browser bar, where the bar is glass (Safari's):
+   the screen is the window with its bars away (100lvh), and --bar is how much of it is
+   under them, which the middle of what is seen is above. */
+.screen{position:sticky;top:0;height:100lvh;overflow:hidden;background:#000;z-index:0;--low:21svh;--mid:calc(var(--low) + 5svh);--side:0px;--bar:calc(100lvh - 100svh)}
 /* The poster, which the video is drawn over: as wide as the window; it sits low, the Sun
    under what is said, on every screen of the film (a little lower after the first, where
    more is said). Its top and bottom go to black under two strips of its own, so it has no
    edge wherever it sits. (A mask did that first, and a mask over a canvas that is drawn
    sixty times a second is composited sixty times a second.) */
 .pic{position:absolute;left:50%;top:50%;width:min(100vw,calc(100svh * 16 / 9 * 1.12));aspect-ratio:16/9;
-  translate:calc(-50% + var(--side)) calc(-50% + var(--mid));scale:1.12;will-change:translate,scale;
+  translate:calc(-50% + var(--side)) calc(-50% + var(--mid) - var(--bar) / 2);scale:1.12;will-change:translate,scale;
   transition:scale 2.8s var(--ease),translate 1.6s var(--ease);
   background:#000 url(img/cosmos-still.webp) center/cover no-repeat}
 .pic::before,.pic::after{content:"";position:absolute;left:0;right:0;z-index:1;pointer-events:none}
 .pic::before{top:-1px;height:22%;background:linear-gradient(to bottom,#000,rgba(0,0,0,0))}
 .pic::after{bottom:-1px;height:18%;background:linear-gradient(to top,#000,rgba(0,0,0,0))}
 .film.live .pic{scale:1}
-.film[data-beat="0"] .pic{translate:calc(-50% + var(--side)) calc(-50% + var(--low))}
+.film[data-beat="0"] .pic{translate:calc(-50% + var(--side)) calc(-50% + var(--low) - var(--bar) / 2)}
 /* the video over it: the whole window, whatever its shape, the picture going on round its
    frame; where the poster sits is where the video's Sun is set (the script asks, a frame at a time) */
 .video{position:absolute;inset:0}
@@ -105,7 +108,7 @@ header .mark{padding:12px 8px 12px 0;margin-left:0}
 header.solid .hint{opacity:0}
 /* where the video has not started by itself (or is not to, with less motion asked for): on
    the Sun, as a video's play button is on its picture */
-.playbig{position:absolute;left:calc(50% + var(--side));top:calc(50% + var(--mid));margin:-36px 0 0 -36px;z-index:3;width:72px;height:72px;border-radius:50%;display:none;place-items:center;
+.playbig{position:absolute;left:calc(50% + var(--side));top:calc(50% + var(--mid) - var(--bar) / 2);margin:-36px 0 0 -36px;z-index:3;width:72px;height:72px;border-radius:50%;display:none;place-items:center;
   background:rgba(0,0,0,.6);box-shadow:0 0 0 1px rgba(255,255,255,.25);color:var(--ink)}
 .film.still .cue{visibility:hidden}      /* not its opacity: where the scroll moves that, the scroll has the last word */
 /* paused or played by a click on the picture: said once, in the middle, and gone */
@@ -117,10 +120,10 @@ header.solid .hint{opacity:0}
 .screen{cursor:pointer}
 .playbig svg{width:24px;height:24px;margin-left:3px}
 .film.still .playbig{display:grid}
-.film[data-beat="0"] .playbig{top:calc(50% + var(--low))}
+.film[data-beat="0"] .playbig{top:calc(50% + var(--low) - var(--bar) / 2)}
 
 /* What is said over it: one thing to a screen. */
-.beats{position:relative;z-index:1;margin-top:-100svh;pointer-events:none}
+.beats{position:relative;z-index:1;margin-top:-100lvh;pointer-events:none}
 .beat{min-height:100svh;display:grid;place-content:start center;justify-items:center;text-align:center;padding:clamp(80px,11svh,130px) 24px 64px}
 .beat a,.beat button{pointer-events:auto}
 .beat .lede{color:rgba(245,245,247,.88)}
@@ -136,7 +139,7 @@ html.js .beat.on > :nth-child(3){transition-delay:.24s}
 .more{color:var(--ink);display:inline-block;padding:10px 4px;margin:-10px -4px}
 .more::after{content:" \203A"}
 .more:hover{text-decoration:underline;text-underline-offset:4px}
-.cue{position:absolute;left:50%;bottom:26px;z-index:2;width:22px;height:34px;margin-left:-11px;border-radius:11px;box-shadow:0 0 0 1.5px rgba(245,245,247,.5);
+.cue{position:absolute;left:50%;bottom:calc(26px + var(--bar));z-index:2;width:22px;height:34px;margin-left:-11px;border-radius:11px;box-shadow:0 0 0 1.5px rgba(245,245,247,.5);
   transition:opacity .5s var(--ease)}
 .cue::after{content:"";position:absolute;left:50%;top:7px;width:3px;height:7px;margin-left:-1.5px;border-radius:2px;background:var(--ink);animation:cue 1.9s var(--ease) infinite}
 @keyframes cue{0%{transform:none;opacity:1}70%,100%{transform:translateY(11px);opacity:0}}
@@ -199,7 +202,7 @@ footer a:hover{color:var(--ink)}
     .shot{animation:grow linear both;animation-timeline:view();animation-range:entry 0% cover 38%}
   }
 }
-@keyframes seat{from{translate:calc(-50% + var(--side)) calc(-50% + var(--low))}to{translate:calc(-50% + var(--side)) calc(-50% + var(--mid))}}
+@keyframes seat{from{translate:calc(-50% + var(--side)) calc(-50% + var(--low) - var(--bar) / 2)}to{translate:calc(-50% + var(--side)) calc(-50% + var(--mid) - var(--bar) / 2)}}
 @keyframes dim{from{opacity:.12}to{opacity:.24}}
 @keyframes gone{to{opacity:0}}
 @keyframes leave{to{opacity:0;translate:0 -70px}}
@@ -228,7 +231,7 @@ footer a:hover{color:var(--ink)}
   .pic::after{height:12%}
   .fade{background:
     linear-gradient(to bottom,rgba(0,0,0,.86),rgba(0,0,0,.62) 240px,rgba(0,0,0,0) var(--shade)),
-    linear-gradient(to top,rgba(0,0,0,.86),rgba(0,0,0,.5) 90px,rgba(0,0,0,0) 190px)}
+    linear-gradient(to top,rgba(0,0,0,.35),rgba(0,0,0,.86) var(--bar),rgba(0,0,0,.5) calc(var(--bar) + 90px),rgba(0,0,0,0) calc(var(--bar) + 190px))}
   /* a screen in three: what is said at its head, the Sun in the middle, and what is done
      at its foot, where the thumb is (the page's buttons, what was heard, the cameras) */
   .beat{display:flex;flex-direction:column;justify-content:start;align-items:center;height:100svh;padding:76px 20px calc(34px + env(safe-area-inset-bottom))}
@@ -521,7 +524,7 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
     frame.title = "The music video, drawn live";
     frame.setAttribute("allow", "autoplay");
     frame.setAttribute("tabindex", "-1");
-    frame.src = "video/?bare=1&adapt=1&track=gravity-in-motion&camera=hybrid&lyrics=off&maxheight=1080&maxpixels=" + (phone ? 900000 : 1920 * 1080) +
+    frame.src = "video/?bare=1&adapt=1&track=gravity-in-motion&camera=hybrid&lyrics=off&maxheight=" + (phone ? 1440 : 1080) + "&maxpixels=" + (phone ? 2600000 : 1920 * 1080) +
       "&lift=" + lift() + "&aside=" + aside() + "&t=" + from + "&play=1" + (heard ? "" : "&muted=1") + (upright.matches ? "&shape=tall" : "");
     document.getElementById("video").appendChild(frame);
     var tries = 0, wait = setInterval(function () {

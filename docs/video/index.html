@@ -120,8 +120,8 @@
   #top .get:hover { transform: scale(1.04); }
   #top .ends { display: flex; align-items: center; gap: 6px; }
 
-  #foot { padding-top: 96px; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
-    background: linear-gradient(to top, rgba(0, 0, 0, .84), rgba(0, 0, 0, .7) 34%, rgba(0, 0, 0, .36) 68%, rgba(0, 0, 0, 0)); }
+  #foot { padding-top: 96px; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px + var(--under, 0px));
+    background: linear-gradient(to top, rgba(0, 0, 0, .35), rgba(0, 0, 0, .84) var(--under, 0px), rgba(0, 0, 0, .7) 34%, rgba(0, 0, 0, .36) 68%, rgba(0, 0, 0, 0)); }
   #foot > * { display: block; width: 100%; }
   #caption { margin: 0 0 14px; font-size: 13px; color: var(--dim); display: flex; align-items: baseline; gap: 10px; }
   #caption h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
@@ -183,7 +183,7 @@
 
   /* the way in, over the picture until it first plays, as the play button is; and the sign
      that a touch has stopped it or started it: glass, so the picture is still there behind */
-  #big, #blip { position: absolute; z-index: 3; left: 50%; top: 50%; width: 84px; height: 84px; margin: -42px 0 0 -42px; border-radius: 50%;
+  #big, #blip { position: absolute; z-index: 3; left: 50%; top: calc(50% - var(--under, 0px) / 2); width: 84px; height: 84px; margin: -42px 0 0 -42px; border-radius: 50%;
     display: grid; place-items: center; }
   #big { background: var(--ink); color: #000; }
   #blip { color: var(--ink); background: rgba(22, 22, 26, .46);
@@ -215,7 +215,7 @@
   #end .more > *::after { content: "\203A"; margin-left: .35em; }
   #end .more > *:hover { text-decoration: underline; text-underline-offset: 4px; }
 
-  #error, .said { position: absolute; left: 50%; top: 50%; translate: -50% -50%; max-width: min(80cqw, 30em); text-align: center; color: var(--ink); font-size: 17px;
+  #error, .said { position: absolute; left: 50%; top: calc(50% - var(--under, 0px) / 2); translate: -50% -50%; max-width: min(80cqw, 30em); text-align: center; color: var(--ink); font-size: 17px;
     padding: 14px 20px; border-radius: 14px; background: rgba(0, 0, 0, .7); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
   #error[hidden] { display: none; }
   body.failed #foot, body.failed #big { display: none; }
@@ -389,7 +389,7 @@
     // cannot (the player's ?maxpixels, ?maxheight, ?adapt).
     body.dataset.adapt = "1";
     if (!params.get("bare") && !params.get("play")) body.dataset.still = "1";        // until it plays, the song's strongest moment
-    if (phone) body.dataset.maxpixels = "900000";
+    if (phone) body.dataset.maxpixels = "2600000";         // an iPhone at its own 1206x2142: 60 a second, none over 18 ms (2026-09-28)
     else if (handheld) body.dataset.maxheight = "1080";
     else body.dataset.maxpixels = String(2560 * 1440);        // (a window wider than 16:9 is not more to draw)
 
@@ -565,9 +565,16 @@
     // turned, or says so before its window has its new size. The stage is as large as it
     // is, and the frame's shape is the window's: tall in one held upright (unless the
     // address says which, ?shape=).
+    // A telephone's browser whose bars are glass over the page (Safari's, since iOS 26) shows
+    // what is under them: the picture goes on under the bar at the foot, the window's height
+    // as the browser has it with its bars away (100lvh), and what is laid over it stays
+    // above the bar (--under), the Sun in the middle of what is seen.
     const follows = !["tall", "wide"].includes(params.get("shape"));
     const near = (a, b) => Math.abs(a - b) <= 0.15 * b;
-    let measured = "";
+    const tallest = document.createElement("div");
+    tallest.style.cssText = "position:fixed;left:0;top:0;width:0;height:100lvh;visibility:hidden;pointer-events:none";
+    body.appendChild(tallest);
+    let measured = "", under = 0, lifted = null;
     function sized() {
       let W = innerWidth, H = innerHeight;
       // From the home screen the page has the whole screen, and its window is said short of
@@ -579,10 +586,13 @@
       }
       if (!W || !H) return;
       if (follows && window.player) window.player.setShape(W > H ? "wide" : "tall");
+      if (window.player && !bare && lifted !== under) { window.player.setLift(-Math.round(under / 2)); lifted = under; }
       if (`${W} ${H}` === measured) return;
       measured = `${W} ${H}`;
+      under = home || document.fullscreenElement ? 0 : Math.max(0, Math.min(tallest.offsetHeight - H, 0.3 * H));
       body.style.setProperty("--fw", `${W}px`);
-      body.style.setProperty("--fh", `${H}px`);
+      body.style.setProperty("--fh", `${H + under}px`);
+      body.style.setProperty("--under", `${under}px`);
     }
     (function watch() { sized(); requestAnimationFrame(watch); })();
 
@@ -635,7 +645,7 @@
           `screen  ${screen.width} x ${screen.height}  x${devicePixelRatio}  ${screen.orientation ? screen.orientation.type : window.orientation}`,
           `safe    ${px(safe.paddingTop)} ${px(safe.paddingRight)} ${px(safe.paddingBottom)} ${px(safe.paddingLeft)}`,
           `home ${home ? "yes" : "no"}  finger ${handheld ? "yes" : "no"}  phone ${phone ? "yes" : "no"}  full ${document.fullscreenElement ? "yes" : own ? "no" : "none"}`,
-          `stage   ${Math.round(s.width)} x ${Math.round(s.height)}  at ${Math.round(s.left)},${Math.round(s.top)}`,
+          `stage   ${Math.round(s.width)} x ${Math.round(s.height)}  at ${Math.round(s.left)},${Math.round(s.top)}  under the bar ${under}`,
           `frame   ${Math.round(f.width)} x ${Math.round(f.height)}  ${window.player ? window.player.shape : ""}`,
           `drawn   ${gl.width} x ${gl.height}  ${(gl.width * gl.height / 1e6).toFixed(2)} MP`,
           `rate    ${audio.paused ? "paused" : $("fps").textContent}`,
