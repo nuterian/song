@@ -48,8 +48,12 @@ h2{font-size:clamp(2.5rem,7.2vw,6.5rem)}
 
 /* The bar: a name and two ways on, over the picture. */
 header{position:fixed;inset:0 0 auto;height:52px;display:flex;align-items:center;gap:26px;padding:0 max(22px,env(safe-area-inset-left));
-  z-index:10;font-size:0.875rem;color:rgba(245,245,247,.82);white-space:nowrap;transition:background .4s var(--ease)}
-header.solid{background:rgba(0,0,0,.72);backdrop-filter:saturate(1.6) blur(18px);-webkit-backdrop-filter:saturate(1.6) blur(18px)}
+  z-index:10;font-size:0.875rem;color:rgba(245,245,247,.82);white-space:nowrap}
+/* what scrolls goes under the bar, not through it: a shade, all but solid behind the bar's
+   words and gone a little under them (a blur would be drawn again with every frame of the
+   picture) */
+header::before{content:"";position:absolute;left:0;right:0;top:0;height:calc(100% + 20px);z-index:-1;pointer-events:none;
+  background:linear-gradient(to bottom,rgba(0,0,0,.97),rgba(0,0,0,.97) 40px,rgba(0,0,0,.5) 56px,rgba(0,0,0,0) 72px)}
 header .mark{display:flex;align-items:center;gap:9px;color:var(--ink);font-weight:600;letter-spacing:-.01em;margin-right:auto}
 header .mark svg{width:20px;height:20px}
 header a:hover{color:var(--ink)}
@@ -256,7 +260,7 @@ footer a:hover{color:var(--ink)}
   .fade{background:
     linear-gradient(to right,rgba(0,0,0,.86),rgba(0,0,0,.6) 44%,rgba(0,0,0,0) 64%),
     linear-gradient(to bottom,rgba(0,0,0,.8),rgba(0,0,0,.52) 60px,rgba(0,0,0,0) 110px)}
-  .beat{place-content:center start;justify-items:start;text-align:left;padding:60px 0 20px max(32px,calc(env(safe-area-inset-left) + 12px))}
+  .beat{place-content:center start;justify-items:start;text-align:left;padding:76px 0 20px max(32px,calc(env(safe-area-inset-left) + 12px))}
   .beat > *{max-width:min(46vw,440px)}
   h1,h2{font-size:clamp(1.875rem,min(12svh,5.4vw),3.25rem);text-wrap:pretty}
   .beat .lede{margin-left:0;font-size:1rem;text-wrap:pretty}

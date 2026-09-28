@@ -1880,3 +1880,10 @@ share sheet on a telephone, which a browser without a window does not show.
   no longer shrinks as the page is read, and tapping the clock may not bring the page back
   to its head. Everything was where it was, at six window sizes; the words, 4.5 to 1 or
   more; 60 a second, none over 20 ms.
+- **What scrolls goes under the bar at the head.** With the page scrolling in a box of its
+  own, what was read went up through the name and the links (in Safari most, where the
+  words do not fade with the scroll). The bar has a shade of its own now, all but solid
+  (0.97) behind its words and gone 20 px under them, always, in place of the shade and blur
+  it had only after the film (a blur there would be drawn again with every frame of the
+  picture). Measured, a line under the bar's words: 7 of 255 at the brightest. On a
+  telephone on its side the words begin 76 px down, below the shade.
