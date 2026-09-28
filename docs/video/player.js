@@ -398,7 +398,7 @@ async function main() {
     const dpr = Math.min(window.devicePixelRatio || 1, 3), aspect = ASPECT[shape];
     let w = Math.round(canvas.clientWidth * dpr * quality), h = Math.round(canvas.clientWidth * dpr * quality / aspect);
     // the cap is on the frame's short side: its height when it is wide, its width when tall
-    const cap = (Number(params.get("maxheight")) || 1440) * quality;
+    const cap = (Number(params.get("maxheight") || document.body.dataset.maxheight) || 1440) * quality;
     if (Math.min(w, h) > cap) {
       if (aspect > 1) { h = Math.round(cap); w = Math.round(h * aspect); }
       else { w = Math.round(cap); h = Math.round(w / aspect); }
@@ -570,7 +570,7 @@ async function main() {
 
   // ?adapt=1: a machine that cannot keep 60 frames a second at this size is given fewer
   // pixels, a step at a time, and never more again (a size that comes and goes is worse).
-  const adapt = Boolean(params.get("adapt"));
+  const adapt = Boolean(params.get("adapt") || document.body.dataset.adapt);        // or as the page says
   let slow = 0;
 
   function tick() {

@@ -1593,3 +1593,32 @@ home (`env(safe-area-inset-*)`). Tried only as far as a desk allows: with the br
 made to say it was opened from the home screen, at 393x852, the picture is over the
 whole window and a touch starts it. Not on a telephone.
 
+Jugal, with it on his telephone: in Safari, no change; from the home screen the top is
+filled and the foot is not; and on its side there is nothing at the left and the right.
+"Please fill the entire screen."
+
+- **The foot, from the home screen.** The picture was as high as CSS says the window is
+  (`100lvh`), from the top. On a telephone, opened from the home screen with the page
+  under the clock's bar, that height is short of the screen (by the bar, it is said; it
+  could not be measured here). The page's script now measures (`sized`): from the home
+  screen it takes the screen's own size, else the window's, and gives the picture's box
+  and the picture their sizes in pixels.
+- **On its side.** The picture was whole in the screen, which is wider than 16:9, so
+  with nothing at its sides. On a telephone it fills the screen either way up, and what
+  does not fit is outside: a tenth of its height at the top and the foot, on its side.
+  The words keep inside what shows (`--cut`), as large as they were. Not if more than a
+  third of the picture would be outside; and on a desk the picture is whole, as it was.
+- **In Safari.** A page has no say over Safari's bars, and the picture is as large as the
+  window Safari gives the page. That is as it was, and as it stays.
+- While it plays there is only the picture; the way out is there when it is stopped (a
+  line of the song at the top right was under it).
+- A telephone draws 1080 pixels on the picture's short side at most, and fewer if it
+  cannot keep sixty frames a second (the player's `?maxheight`, `?adapt`, which the page
+  may now say for it).
+
+Tried with the browser made to say what a telephone says: a window of 393x793 on a screen
+of 393x852 from the home screen, the picture's box is 393x852 and the picture is from -43
+to 436 across and 0 to 852 down; on its side, 852x393, it is 0 to 852 across and -43 to
+436 down; in a browser on its side with its bars up, 852x340, it fills that; a line of
+the song is inside the screen in each. Not on a telephone: that is Jugal's to say.
+

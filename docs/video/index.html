@@ -112,32 +112,29 @@
   #big:hover { transform: scale(1.06); }
   #big svg { width: 26px; height: 26px; margin-left: 4px; }
   #big[disabled], body.played #big { opacity: 0; pointer-events: none; }
-  /* full screen: the picture alone, as large as the screen has room for */
-  #stage:fullscreen { width: 100vw; height: 100vh; display: grid; place-items: center; background: #000; }
-  #stage:fullscreen > #gl, #stage:fullscreen > #frame { width: min(100vw, 100vh * 16 / 9); }
-  #stage:fullscreen #gl { border-radius: 0; }
-  /* where the browser has no full screen for anything but a video (a telephone's Safari),
-     or the address asks for the picture alone (?full=1): the picture over the whole page,
-     which is as near as a page can come. It is as high as the window is at its highest
-     (100lvh: with the browser's bars drawn in), from the very top, so that where the
-     browser lets a page show under its bars, it is the picture that shows. */
+  /* Full screen: the picture alone. The browser's own, where it has one for more than a
+     video; where it has not (a telephone's Safari), or the address asks for the picture
+     alone (?full=1), the picture over the whole page, which is as near as a page can come.
+     How large the screen is, and the picture in it, the page's script measures (`sized`):
+     what CSS is told of a window's height is short of it on a telephone, where the page
+     has the whole screen. On a telephone the picture fills the screen, either way up, and
+     what of it does not fit is outside; on a desk it is whole, in the middle. */
+  #stage:fullscreen, body.filled #stage { width: var(--fw, 100vw); height: var(--fh, 100vh); display: grid; place-items: center; place-content: center;
+    overflow: hidden; background: #000; }
   body.filled { overflow: hidden; }
-  body.filled #stage { position: fixed; left: 0; top: 0; z-index: 50; width: 100vw; height: 100vh; height: 100lvh; margin: 0;
-    display: grid; place-items: center; place-content: center; overflow: hidden; background: #000; }
-  body.filled #stage > #gl, body.filled #stage > #frame { width: min(100vw, 100vh * 16 / 9); width: min(100vw, 100lvh * 16 / 9); }
-  body.filled.tall #stage > #gl, body.filled.tall #stage > #frame { width: min(100vw, 100vh * 9 / 16); width: min(100vw, 100lvh * 9 / 16); }
-  body.filled #gl { border-radius: 0; }
-  /* on a screen held upright the tall picture fills it, top to bottom: a screen narrower
-     than 9:16 (a telephone's) has a little of the picture's sides outside it, where the
-     tall frame keeps nothing (the words are an eighth of the width in from each side) */
-  @media (max-aspect-ratio: 1/1) {
-    body.filled.tall #stage > #gl, body.filled.tall #stage > #frame { width: max(100vw, 100vh * 9 / 16); width: max(100vw, 100lvh * 9 / 16); }
-  }
+  body.filled #stage { position: fixed; left: 0; top: 0; z-index: 50; margin: 0; }
+  #stage:fullscreen > #gl, #stage:fullscreen > #frame, body.filled #stage > #gl, body.filled #stage > #frame { width: var(--pw, min(100vw, 100vh * 16 / 9)); }
+  #stage:fullscreen #gl, body.filled #gl { border-radius: 0; }
+  /* the words keep inside what of the picture is on the screen, as large as they were */
+  #stage:fullscreen #lyrics, body.filled #lyrics { inset: var(--cut, 0%) 0; }
+  #stage:fullscreen #lyrics .line, body.filled #lyrics .line { font-size: calc(var(--size) * 100cqh / var(--kept-share, 1)); }
   #leave { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); right: calc(env(safe-area-inset-right, 0px) + 14px); z-index: 2;
     width: 40px; height: 40px; border-radius: 50%;
     display: none; place-items: center; background: rgba(0, 0, 0, .6); box-shadow: 0 0 0 1px rgba(255, 255, 255, .25); color: var(--ink); }
   #leave svg { width: 18px; height: 18px; }
-  body.filled #leave { display: grid; }
+  body.filled #leave { display: grid; transition: opacity .4s var(--ease); }
+  /* while it plays there is only the picture: a touch stops it, and the way out is there */
+  body.filled.playing #leave { opacity: 0; pointer-events: none; }
 
   /* what was heard, under the picture: its room is kept when it is turned off, so nothing moves */
   #heard { display: block; height: 98px; margin-top: 16px; transition: opacity .6s var(--ease); }
@@ -196,11 +193,8 @@
   /* the tall frame, 9:16, as high as the page has room for */
   body.tall { --w: min(100vw - 48px, (100dvh - var(--around) - var(--kept)) * 9 / 16); }
   body.tall #gl, body.tall #frame { aspect-ratio: 9 / 16; }
-  body.tall #stage:fullscreen > #gl, body.tall #stage:fullscreen > #frame { width: min(100vw, 100vh * 9 / 16); }
-  @media (max-aspect-ratio: 1/1) {         /* and fills a screen held upright, as it does over the page */
-    body.tall #stage:fullscreen { overflow: hidden; place-content: center; }
-    body.tall #stage:fullscreen > #gl, body.tall #stage:fullscreen > #frame { width: max(100vw, 100vh * 9 / 16); }
-  }
+  body.tall #stage:fullscreen > #gl, body.tall #stage:fullscreen > #frame,
+  body.filled.tall #stage > #gl, body.filled.tall #stage > #frame { width: var(--pw, min(100vw, 100vh * 9 / 16)); }
   /* the bar and the controls are as wide as the wide picture would be: the tall one is narrow */
   body.tall #top, body.tall #heard, body.tall #seek, body.tall #bar, body.tall #caption {
     width: min(100vw - 48px, max((100dvh - var(--around) - var(--kept)) * 9 / 16, 640px)); }
@@ -321,6 +315,10 @@
     const home = navigator.standalone === true || matchMedia("(display-mode: standalone), (display-mode: fullscreen)").matches;
     const alone = Boolean(params.get("full")) || home;
     if (alone) document.body.classList.add("filled");
+    // a telephone draws fewer pixels, and fewer still if it cannot keep up (the player's ?adapt, ?maxheight)
+    const handheld = matchMedia("(hover: none) and (pointer: coarse)").matches;
+    document.body.dataset.adapt = "1";
+    if (handheld) document.body.dataset.maxheight = "1080";
     const toggle = () => {
       if (alone && document.body.classList.contains("filled") && !document.fullscreenElement
           && document.fullscreenEnabled && $("stage").requestFullscreen) $("stage").requestFullscreen().catch(() => {});
@@ -405,6 +403,35 @@
     const full = $("full"), stage = $("stage");
     const own = Boolean(document.fullscreenEnabled && stage.requestFullscreen);
     const fill = (on) => document.body.classList.toggle("filled", on);
+
+    // How large the screen is, and the picture in it, while it is the picture alone.
+    function sized() {
+      const body = document.body, on = body.classList.contains("filled") || document.fullscreenElement === stage;
+      for (const name of ["--fw", "--fh", "--pw", "--cut", "--kept-share"]) body.style.removeProperty(name);
+      if (!on) return;
+      // From the home screen the page has the whole screen, and the window's height is said
+      // short of it (by the clock's bar): the screen's own size is what is true there.
+      const upright = matchMedia("(orientation: portrait)").matches;
+      const long = Math.max(screen.width, screen.height), short = Math.min(screen.width, screen.height);
+      const whole = home && handheld && !document.fullscreenElement;
+      const W = whole ? (upright ? short : long) : Math.max(innerWidth, document.documentElement.clientWidth);
+      const H = whole ? (upright ? long : short) : Math.max(innerHeight, document.documentElement.clientHeight);
+      const aspect = body.classList.contains("tall") ? 9 / 16 : 16 / 9;
+      const inside = Math.min(W, H * aspect), over = Math.max(W, H * aspect);
+      // filled, on a telephone, unless that would leave out more than a third of the picture
+      // (on its side in a browser with its bars up, a telephone's window is 5:2: three tenths)
+      const width = handheld && over / inside <= 1.5 ? over : inside;
+      const share = Math.min(1, H / (width / aspect));          // how much of the picture's height is on the screen
+      body.style.setProperty("--fw", `${W}px`);
+      body.style.setProperty("--fh", `${H}px`);
+      body.style.setProperty("--pw", `${width.toFixed(1)}px`);
+      body.style.setProperty("--kept-share", share.toFixed(4));
+      body.style.setProperty("--cut", `${(50 * (1 - share)).toFixed(3)}%`);
+    }
+    for (const what of ["resize", "orientationchange"]) addEventListener(what, () => { sized(); setTimeout(sized, 350); });
+    document.addEventListener("fullscreenchange", sized);
+    new MutationObserver(sized).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    sized();
     full.addEventListener("click", () => {
       if (document.fullscreenElement) document.exitFullscreen();
       else if (document.body.classList.contains("filled")) fill(false);
