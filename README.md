@@ -44,7 +44,8 @@ song makes the same video every time.
   back as a proposal drawn on the timeline, to apply or discard. `gpt-oss:20b` edits
   best of the models measured, in about 7 s a request; it is its own download, through
   Ollama.
-- **Export an mp4**: 1080p at 60 fps, the camera you chose, the words burned in, the
+- **Export an mp4**: 1080p at 60 fps, wide (16:9) or tall (9:16, for a phone held
+  upright), the camera you chose, the words burned in, the
   song's audio under it.
 
 ## What it costs
@@ -224,6 +225,7 @@ python -m visuals studio song.wav          # ...with a song in it
 python -m visuals make song.wav            # prepare a song without opening the studio
 python -m visuals edit song.wav "fewer solar flares"   # change its video by asking
 python -m visuals render song.wav --theme cosmos --camera hybrid   # an mp4 from the command line
+python -m visuals render song.wav --theme cosmos --tall            # the same, 9:16, 1080 by 1920
 python -m visuals demo                     # the static demo, into docs/video/
 
 python -m song song.wav lyrics.txt         # time the words, and open the review app

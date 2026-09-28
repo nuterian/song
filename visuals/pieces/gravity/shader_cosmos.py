@@ -132,6 +132,7 @@ uniform float uTint, uTintR, uTintG, uTintB;
 uniform float uField, uExposure, uStars, uBeats, uRays;
 uniform float uDropT, uDropA, uCrashT, uCrashA;
 uniform float uCamTurn, uCamTilt, uCamRoll, uCamSpan, uCamX, uCamY;
+uniform float uTall;               // 1 in the tall frame, whose camera is the wide frame's turned and 16/9 as far off (unset = 0)
 {_palette_uniforms()}
 {_scalars("uRingT", N_RINGS)}
 {_scalars("uRingA", N_RINGS)}
@@ -392,6 +393,9 @@ void main() {{
     // does changes the shape of anything. ---------------------------------------------------
     float e = clamp(uCamTilt, 0.20, 0.98), c = sqrt(1.0 - e * e);
     float pxScene = uCamSpan / resY;                                   // scene units in an output pixel
+    // What is sized by how close the camera is, is sized by the wide frame's camera in both
+    // frames: so the tall picture is the wide one turned, and nothing in it is another size.
+    float spanWide = uCamSpan * mix(1.0, 9.0 / 16.0, uTall);
     vec2 q = rot2(-uCamRoll) * (p * uCamSpan + vec2(uCamX, uCamY));   // this pixel, in the scene, unrolled
     float r = length(q);
 
@@ -417,7 +421,7 @@ void main() {{
     vec3 sunlight = vec3(1.0, 0.96, 0.88);                            // sunlight
 
     // ---- the sky: the one thing seen through a lens, because it is infinitely far --------
-    float lens = SKY_LENS / pow(uCamSpan, 0.18);                      // it answers a zoom a little, as far things do
+    float lens = SKY_LENS / pow(spanWide, 0.18) * mix(1.0, 9.0 / 16.0, uTall);   // it answers a zoom a little, as far things do
     vec2 ps = rot2(-uCamRoll) * p;
     vec3 dPlane = fromView(normalize(vec3(ps, -lens)), e, c);         // (u, v, up), in the camera's turned frame
     vec2 uvW = rot2(-uCamTurn) * dPlane.xy;
@@ -644,7 +648,7 @@ void main() {{
     // it has hopped off the plane, are simulated - springs, driven by its notes, by the Sun's
     // pull (inverse-square, and it travels) and by its neighbours. In a close shot the
     // movement is scaled down, so it is the same small movement on screen.
-    float pullGain = clamp(uCamSpan, 0.0, 1.0);
+    float pullGain = clamp(spanWide, 0.0, 1.0);
     float pingT[N_PLANETS] = {_gather("uPingT", N_PLANETS)};
     float pingA[N_PLANETS] = {_gather("uPingA", N_PLANETS)};
     float pLean[N_PLANETS] = {_gather("uLean", N_PLANETS)};

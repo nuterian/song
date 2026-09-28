@@ -170,17 +170,25 @@ class Renderer:
             self.textures.append(tex)
         self.fbo.use()
 
-    def bind(self, names: list[str], feeds: dict[str, str] | None = None) -> None:
+    def bind(self, names: list[str], feeds: dict[str, str] | None = None, shape: str = "wide") -> None:
         """Look each uniform up once. One the compiler dropped is simply not set. `feeds`
         re-points uniforms to other channels, as the player's variants do: a camera is
-        {"uCamSpan": "uCamSpan.cinematic", ...}."""
+        {"uCamSpan": "uCamSpan.cinematic", ...}. In the tall frame the camera is the one
+        the channels give, turned (cosmos.turned)."""
         feeds = feeds or {}
         self.slots = [(names.index(feeds.get(n, n)), self.prog[n]) for n in names if n in self.prog]
+        self.turned = [names.index(feeds.get(n, n)) for n in cosmos.TURNED] if shape == "tall" else None
+        if "uTall" in self.prog:
+            self.prog["uTall"].value = 1.0 if shape == "tall" else 0.0
 
     def frame(self, t: float, row: np.ndarray) -> np.ndarray:
         self.prog["uTime"].value = float(t)
         for c, u in self.slots:
             u.value = float(row[c])
+        if self.turned:
+            for name, value in zip(cosmos.TURNED, cosmos.turned(*(float(row[c]) for c in self.turned))):
+                if name in self.prog:
+                    self.prog[name].value = float(value)
         self.vao.render(moderngl.TRIANGLES)
         buf = np.frombuffer(self.fbo.read(components=3), dtype=np.uint8)
         return buf.reshape(self.size[1], self.size[0], 3)[::-1]
@@ -195,18 +203,22 @@ def frame_times(start: float, duration: float, fps: int) -> np.ndarray:
 
 
 def mp4_name(track: Track, camera: str | None = "static", words: bool = True, clip: float | None = None,
-             solo: str | None = None) -> str:
-    """What an mp4 is called: the song and its camera in the cosmos style (and whether it
-    has the words), "piece" in the others; a clip or a solo says so, and where it starts."""
-    stem = "piece" if camera is None else f"{track.slug}-{camera}" + ("" if words else "-no-lyrics")
+             solo: str | None = None, shape: str = "wide") -> str:
+    """What an mp4 is called: the song and its camera in the cosmos style (whether it is
+    tall, and whether it has the words), "piece" in the others; a clip or a solo says so,
+    and where it starts."""
+    stem = "piece" if camera is None else (f"{track.slug}-{camera}" + ("-tall" if shape == "tall" else "")
+                                           + ("" if words else "-no-lyrics"))
     return f"{stem}.mp4" if clip is None and not solo else f"{stem}-{solo or 'clip'}-{clip or 0:.0f}s.mp4"
 
 
 def render(got: dict, track: Track, out_dir: str | Path, start: float = 0.0, duration: float | None = None,
            size: tuple[int, int] = (1920, 1080), fps: int = 60, crf: int = 17,
            solo: str | None = None, quiet: bool = False, camera: str = "static", words: bool = True,
-           ch: direct.Channels | None = None, progress=None) -> Path:
-    """The mp4: the picture frame by frame, with the song under it.
+           ch: direct.Channels | None = None, progress=None, shape: str = "wide") -> Path:
+    """The mp4: the picture frame by frame, with the song under it. `shape` "tall" is the
+    same picture for a screen held upright: `size` with its sides changed over (1080 x 1920
+    for 1920 x 1080), the camera turned, the words set for it.
 
     In the cosmos style it is what the player shows: baked from the song's direction sheet
     (`make.directed`), unless the channels are given (`ch`, the studio's own bake), seen
@@ -216,6 +228,10 @@ def render(got: dict, track: Track, out_dir: str | Path, start: float = 0.0, dur
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     cosmic = STYLE == "cosmos"
+    if shape not in cosmos.SHAPES or (shape == "tall" and not cosmic):
+        raise ValueError(f"no shape {shape!r}: the solar system is wide or tall")
+    if shape == "tall" and size[0] > size[1]:
+        size = (size[1], size[0])
     baked_here = ch is None
     if ch is None:
         if cosmic:
@@ -234,13 +250,13 @@ def render(got: dict, track: Track, out_dir: str | Path, start: float = 0.0, dur
         from . import lyrics
         from .burn import Words
         spec = lyrics.layout(track, ch, (getattr(ch, "sheet", None) or {}).get("lyrics"))
-        lines = Words(spec, camera, size) if spec else None
+        lines = Words(spec, camera, size, shape) if spec else None
     if solo:
         ch = solo_channels(ch, solo)
     total = ch.duration - start if duration is None else min(duration, ch.duration - start)
 
     whole = start == 0.0 and duration is None and not solo
-    out_path = out_dir / mp4_name(track, camera if cosmic else None, words or bool(solo), None if whole else start, solo)
+    out_path = out_dir / mp4_name(track, camera if cosmic else None, words or bool(solo), None if whole else start, solo, shape)
 
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
            "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{size[0]}x{size[1]}",
@@ -257,7 +273,7 @@ def render(got: dict, track: Track, out_dir: str | Path, start: float = 0.0, dur
     t0 = time.perf_counter()
     times = frame_times(start, total, fps)
     rows = ch.rows(times)
-    r.bind(ch.names, feeds)
+    r.bind(ch.names, feeds, shape)
     try:
         for k, (t, row) in enumerate(zip(times, rows)):
             frame = np.ascontiguousarray(r.frame(float(t), row))

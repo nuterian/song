@@ -60,6 +60,11 @@
   body.embed #stage { padding: 0; height: 100vh; }
   body.embed canvas, body.embed #frame { width: min(100vw, calc(100vh * 16 / 9)); max-width: none; border-radius: 0; }
   body.embed #frame canvas { width: 100%; }
+  /* the tall frame, 9:16: as high as there is room for */
+  body.tall canvas, body.tall #frame { aspect-ratio: 9 / 16; max-width: min(1280px, calc((100vh - 120px) * 9 / 16)); }
+  body.tall #frame canvas { max-width: none; }
+  body.embed.tall canvas, body.embed.tall #frame { width: min(100vw, calc(100vh * 9 / 16)); max-width: none; }
+  body.embed.tall #frame canvas { width: 100%; }
 </style>
 </head>
 <body>

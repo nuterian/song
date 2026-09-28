@@ -156,6 +156,10 @@
   #error { padding: 16px 24px; color: #e08a8a; white-space: pre-wrap; }
   #own { display: none; }                    /* what player.js keeps for itself: this page has its own */
 
+  /* ?shape=tall: the tall frame, 9:16, as high as the page has room for */
+  body.tall { --w: min(100vw - 48px, (100dvh - var(--around)) * 9 / 16); }
+  body.tall #gl, body.tall #frame { aspect-ratio: 9 / 16; }
+
   /* ?embed=1: in a page which has its own caption and links */
   body.embed #top, body.embed #caption, body.embed #heard { display: none; }
   body.embed main { padding-top: 16px; }

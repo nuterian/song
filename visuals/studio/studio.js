@@ -126,6 +126,23 @@ function drawTransport() {
     b.addEventListener("click", () => { p.choose("camera", name); syncTransport(); });
     cams.appendChild(b);
   }
+  // the frame: wide, or tall for a screen held upright; kept from one visit to the next
+  const shapes = $("shapes");
+  shapes.innerHTML = "";
+  for (const [name, title] of [["wide", "Wide, 16:9"], ["tall", "Tall, 9:16: for a screen held upright"]]) {
+    const b = document.createElement("button");
+    b.innerHTML = icon(`frame${name}`, 16);
+    b.dataset.name = name;
+    b.title = title;
+    b.setAttribute("aria-label", title);
+    b.addEventListener("click", () => {
+      p.setShape(name);
+      try { localStorage.setItem("studio.shape", name); } catch (e) { /* private window */ }
+      syncTransport();
+    });
+    shapes.appendChild(b);
+  }
+  try { if (localStorage.getItem("studio.shape") === "tall") p.setShape("tall"); } catch (e) { /* private window */ }
   $("lyr").hidden = p.lyrics === null;
   syncTransport();
 }
@@ -135,12 +152,13 @@ function syncTransport() {
   if (!p) return;
   const cam = p.chosen.camera;
   for (const b of $("cams").children) b.classList.toggle("on", b.dataset.name === cam);
+  for (const b of $("shapes").children) b.classList.toggle("on", b.dataset.name === p.shape);
   $("lyr").innerHTML = icon(p.lyrics ? "eye" : "eyeoff", 18);
   $("lyr").classList.toggle("on", !!p.lyrics);
 }
 
 // ---------------------------------------------------------------------------- the mp4
-// The whole song as it is shown now: this camera, the words on or off. Where it will be
+// The whole song as it is shown now: this camera, this frame, the words on or off. Where it will be
 // written is said before it starts; the server writes it in the background and says how far
 // it has got, and the finished file is offered in the status.
 
@@ -150,17 +168,18 @@ const exportUrl = (q = "") => `/api/export?track=${encodeURIComponent(song.slug)
 async function openExport() {
   const p = player(), box = $("exportpop");
   if (!p || !box.hidden) { box.hidden = true; return; }
-  const camera = p.chosen.camera || "static", lyrics = !!p.lyrics;
-  const q = await (await fetch(exportUrl(`&camera=${encodeURIComponent(camera)}&lyrics=${lyrics ? 1 : 0}`))).json();
+  const camera = p.chosen.camera || "static", lyrics = !!p.lyrics, shape = p.shape || "wide";
+  const q = await (await fetch(exportUrl(`&camera=${encodeURIComponent(camera)}&lyrics=${lyrics ? 1 : 0}&shape=${shape}`))).json();
   if (q.job && q.job.state === "running") { watchExport(q.job); return; }
-  box.innerHTML = `<div class="said">${icon("download", 14)}<span>The whole song, the ${esc(camera)} camera, ${lyrics ? "with" : "without"} the words, to</span></div>` +
+  const size = shape === "tall" ? "tall, 1080 by 1920" : "wide, 1920 by 1080";
+  box.innerHTML = `<div class="said">${icon("download", 14)}<span>The whole song, ${size}, the ${esc(camera)} camera, ${lyrics ? "with" : "without"} the words, to</span></div>` +
     `<div class="path">${esc(q.path)}</div>` +
     `<div class="acts"><button class="pill" id="exno">Cancel</button><button class="pill go" id="exgo">${icon("download", 14)}Export</button></div>`;
   box.hidden = false;
   $("exno").addEventListener("click", () => (box.hidden = true));
   $("exgo").addEventListener("click", async () => {
     box.hidden = true;
-    const r = await call("/api/export", { camera, lyrics });
+    const r = await call("/api/export", { camera, lyrics, shape });
     if (!r.ok) { status("Not exported", "bad"); toast(r.refused); return; }
     watchExport(r);
   });

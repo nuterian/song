@@ -46,36 +46,45 @@ class Word:
 
 
 class Words:
-    """The lines of `lyrics.layout` for one camera, set for frames of `size` (width, height)."""
+    """The lines of `lyrics.layout` for one camera, set for frames of `size` (width, height),
+    wide or tall: the tall frame has its own type, places and rows (the layout's `tall`)."""
 
-    def __init__(self, spec: dict, camera: str, size: tuple[int, int]) -> None:
+    def __init__(self, spec: dict, camera: str, size: tuple[int, int], shape: str = "wide") -> None:
         st = spec["style"]
         self.inks = {"unsung": st["unsung"], "peak": st["peak"], "sung": st["sung"]}
         self.size = size
-        px = st["size"] * size[1]                                   # the font size, in pixels: a share of the frame's height
+        tall = shape == "tall"
+        px = (spec["tall"]["size"] if tall else st["size"]) * size[1]   # the font size, in pixels: a share of the frame's height
         font = ImageFont.truetype(str(FONT), px * FINE)
         ascent, descent = (m / 1000 for m in ImageFont.truetype(str(FONT), 1000).getmetrics())
         self.lines: list[tuple[lyrics.Line, list[Word]]] = []
         for ln in spec["lines"]:
             line = lyrics.Line([tuple(w) for w in ln["words"]], *ln["in"], *ln["out"], place=ln["place"])
-            region = spec["regions"][ln["place"].get(camera, "low")]
-            self.lines.append((line, self._set(line, region, font, px, ascent, descent)))
+            regions, places = (spec["tall"]["regions"], ln["tall"]["place"]) if tall else (spec["regions"], ln["place"])
+            counts = (ln["tall"]["rows"] if tall else None) or [len(line.words)]
+            edges = np.cumsum([0, *counts])
+            words = []
+            for k, (a, b) in enumerate(zip(edges[:-1], edges[1:])):
+                words += self._set(line.words[a:b], regions[places.get(camera, "low")], font, px, ascent, descent, k, len(counts))
+            self.lines.append((line, words))
 
-    def _set(self, line: lyrics.Line, region: dict, font, px: float, ascent: float, descent: float) -> list[Word]:
-        """Each word of the line, drawn where the player's CSS puts it: the line's box centred
-        on the region's height, and its left, centre or right on the region's x."""
+    def _set(self, row: list[tuple[str, float, float]], region: dict, font, px: float, ascent: float, descent: float,
+             k: int = 0, of: int = 1) -> list[Word]:
+        """Each word of a row (the `k`th of the line's `of`), drawn where the player's CSS
+        puts it: the line's rows centred together on the region's height, and each row's
+        left, centre or right on the region's x."""
         w, h = self.size
-        text = line.text
+        text = " ".join(word for word, _, _ in row)
         spacing = SPACING * px
         # each character's pen position: the font's own advances and kerning, plus the spacing
         pen = [font.getlength(text[:i]) / FINE + i * spacing for i in range(len(text) + 1)]
         width = pen[-1]
-        cx = w * (0.5 + region["x"] * 9 / 16)                        # the player's left: 50% + x * 9/16 of the width
+        cx = w * 0.5 + region["x"] * h                               # the player's left: 50% + x frame heights
         left = {"center": cx - width / 2, "right": cx - width}.get(region["align"], cx)
-        # the line box centred on the region's height, the font's ascent and descent (in whole
-        # pixels) centred in it, and the baseline on the whole pixel above: as Chrome sets it,
-        # measured against its screenshots
-        box_top = h * (0.5 - region["y"]) - LINE_HEIGHT * px / 2
+        # the rows' box centred on the region's height, the font's ascent and descent (in whole
+        # pixels) centred in each row, and the baseline on the whole pixel above: as Chrome sets
+        # it, measured against its screenshots
+        box_top = h * (0.5 - region["y"]) - of * LINE_HEIGHT * px / 2 + k * LINE_HEIGHT * px
         up, down = round(ascent * px), round(descent * px)
         baseline = math.floor(box_top + (LINE_HEIGHT * px - up - down) / 2 + up)
         sigma = SHADOW_BLUR / 2 * px
@@ -83,7 +92,7 @@ class Words:
         top = math.floor(baseline - ascent * px) - pad
         bottom = math.ceil(baseline + descent * px) + pad
         words, i = [], 0
-        for text_w, start, end in line.words:
+        for text_w, start, end in row:
             x0 = math.floor(left + pen[i]) - pad
             x1 = math.ceil(left + pen[i + len(text_w)]) + pad
             fine = Image.new("L", ((x1 - x0) * FINE, (bottom - top) * FINE), 0)

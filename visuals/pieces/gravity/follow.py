@@ -31,9 +31,10 @@ ASK = {"kick": ("limb", 0.5), "bass_note": ("corona", 0.30), "syllable": ("heart
        "snare": ("plane", 0.30), "note": ("planets", 0.25), "hat": ("sky", 0.25), "crash": ("sky", 0.30)}
 
 
-def geometry(ch: direct.Channels, rows: np.ndarray, camera: str | None = None) -> dict[str, np.ndarray]:
+def geometry(ch: direct.Channels, rows: np.ndarray, camera: str | None = None, shape: str = "wide") -> dict[str, np.ndarray]:
     """Where things are, in frame heights from the middle of the frame (x right, y up),
-    for each of `rows` (indices into the channels). The shader's own arithmetic."""
+    for each of `rows` (indices into the channels), in a frame of this shape. The shader's
+    own arithmetic."""
     def col(name):
         return ch.data[rows, ch.index(name)].astype(np.float64)
 
@@ -41,6 +42,9 @@ def geometry(ch: direct.Channels, rows: np.ndarray, camera: str | None = None) -
         return col(f"{name}.{camera}" if camera else name)
 
     turn, tilt, roll, span, cx, cy = (cam(n) for n in cosmos.CAMERA_UNIFORMS)
+    wide = span                              # what is sized by the camera's distance is sized by the wide frame's
+    if shape == "tall":
+        roll, span, cx, cy = cosmos.turned(roll, span, cx, cy)
     e = np.clip(tilt, 0.20, 0.98)
     c = np.sqrt(1.0 - e * e)
     cr, sr = np.cos(roll), np.sin(roll)
@@ -55,7 +59,7 @@ def geometry(ch: direct.Channels, rows: np.ndarray, camera: str | None = None) -
     rest = 0.078 * (0.50 + 0.80 * col("uMass"))
     px, py, pr = [], [], []
     for i in range(sc.N_PLANETS):
-        gain = np.clip(span, 0.0, 1.0)                           # a body's movement is scaled to the frame in a close shot
+        gain = np.clip(wide, 0.0, 1.0)                           # a body's movement is scaled to the frame in a close shot
         a = (a0 + col(f"uPd{i}")) * tug + gain * col(f"uLean{i}")    # it leans toward the Sun and away (`dance`)
         th = 2 * np.pi * col(f"uPh{i}") + turn
         up = a * col(f"uPz{i}") + gain * col(f"uHop{i}")         # its orbit is tipped; and it hops

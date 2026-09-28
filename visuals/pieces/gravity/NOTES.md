@@ -1396,3 +1396,78 @@ through a change of camera, the worst frame 17.7-17.8 ms, in eight runs of nine;
 had five frames over 20 ms (the worst 33.7 ms), which did not come back and whose cause is
 not known. Not looked at: Safari, Firefox, a phone in the hand.
 
+# The tall frame (2026-09-27)
+
+A video for a telephone held upright: 9:16, 1080 by 1920. Jugal chose how (of three, shown
+as stills of three moments beside the wide frame) and what first: the quarter turn; the
+words kept clear of what the apps lay over a tall video; the mp4 and the studio first, the
+site's own pages on a telephone after.
+
+**What was tried.** The wide picture is wide because the system is: the plane is seen
+tipped, so it is an oval lying down.
+
+| | what it is | what the stills showed |
+|---|---|---|
+| quarter turn | the camera rolled 90 degrees about its line of sight, 16/9 as far off | all of every shot in the frame: the row of planets runs down it, the two-shots hold |
+| level, the same distance | the wide frame's middle | the row and the two-shots cut at the sides |
+| level, 1.7 times as far off | | the row still cut, and everything small |
+
+**What it is** (`cosmos.turned`). The tall frame's camera is the wide frame's: `uCamRoll`
+a quarter turn on, `uCamSpan` times 16/9, `uCamX, uCamY` become `uCamY, -uCamX`. A point
+at (x, y) of the wide frame, in its heights, is at (9/16 y, -9/16 x) of the tall one: the
+wide frame's width is the tall frame's height. So nothing is decided twice and nothing is
+baked for it: the renderer (`Renderer.bind(..., shape)`), the geometry (`follow.geometry`)
+and the player (`player.setShape`, `?shape=tall`) turn whichever camera is chosen, moves
+between cameras included. The bundle is the same bundle.
+
+Two things in the shader were sized by the camera's distance: the planets' dance (a lean
+or a hop is scaled down in a close shot, to be the same movement on screen) and the sky's
+lens. With the camera 16/9 as far off they came out another size, and the planets stood up
+to 0.006 of the frame's height from where the wide frame has them. The shader takes
+`uTall` now, and sizes both by the wide frame's distance. Measured, drawn at 540 by 960
+against the wide frame at 960 by 540 turned, five moments over the three cameras: of the
+pixels on and beside the bodies, none more than 24 of 255 apart; of the sky's, 1.0 %, its
+stars being sized in pixels. The wide picture with the shader as it was deployed and as it
+is: not a pixel different, four moments. A frame's time, 1080p, read back: 7.97 ms before,
+7.96 after, 8.09 tall (the best of three rounds; the fanless machine, once warm, gives 17
+to 18 ms for any of them, so only the best are compared). In the player, 1080 by 1920
+drawn: 60 frames a second, the worst frame 17.6 to 17.8 ms, none over 20 ms, four runs.
+
+**The words** (`lyrics.TALL`, `lyrics.wrapped`). Smaller, 0.022 of the height (42 px of
+1920; the sheet's size, times 0.733), in the middle of the width, in two rows where a line
+is longer than there is room for (15 of Gravity's 34), rows of a length. Kept inside what
+the apps leave clear: an eighth of the height at the top, a fifth at the foot, an eighth
+of the width at each side. Those are their published advice as remembered; they were not
+looked up or measured. A line that dissolves out of the one before it is in its place or
+clear of it (two lines 3 % apart in height overlapped, the first time).
+
+The wide frame's rule, that a line comes no nearer a body than its corona or its rings
+reach, cannot be kept: there is no sky beside the system in a frame this narrow. By that
+rule a line is near a body in 25 to 38 % of its frames on Gravity, from 6 places or from 21,
+in one row or two. So in the tall frame a line keeps off the bodies themselves first (the
+Sun's corona as it stands, 1.7 radii; a planet and its rings, 1.3), and as far from them
+as the wide rule asks where it can, choosing among 21 heights:
+
+| Gravity, of the frames a line is up | static | hybrid | cinematic |
+|---|---|---|---|
+| wide: within a body's reach | 0.0 % | 0.1 % | 2.6 % |
+| tall: on or against a body | 2.9 % | 2.8 % | 5.8 % |
+| tall: within the wide frame's reach of one | 36.3 % | 24.9 % | 37.9 % |
+| changes of place, wide / tall | 5 / 11 | 10 / 17 | 11 / 14 |
+
+The target, none, is not met, and the tall frame is worse than the wide by this measure:
+it is worst in the planets' row, where the frame is full from top to bottom. The words are
+over orbits and beside bodies there, with their shadow under them.
+
+**The mp4** (`render.render(..., shape="tall")`, `--tall`, the studio's frame control).
+1080 by 1920, 60 frames a second, the words burned in by rows (`burn.Words`); named
+`<song>-<camera>-tall.mp4`. A clip of 20 s from 3:42, cinematic, was rendered and looked
+at: 1200 frames in 34 s. A whole song was not.
+
+**The studio.** Two frames beside the cameras, wide and tall; the choice is kept from one
+visit to the next, and the export is of the frame shown and says so before it starts.
+
+Not done: the site's pages on a telephone (the demo page takes `?shape=tall`, and nothing
+offers it); the loop for Spotify's Canvas. Not looked at: Safari, Firefox, a telephone in
+the hand; a tall video inside any of the apps it is for.
+

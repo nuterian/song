@@ -30,6 +30,9 @@ const P = {
   right: '<path d="m9.5 6 6 6-6 6"/>',
   out: '<path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 16v2.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V16"/>',
+  // the frame's two shapes
+  framewide: '<rect x="3" y="6.5" width="18" height="11" rx="2"/>',
+  frametall: '<rect x="7" y="3" width="10" height="18" rx="2"/>',
   // the six shots, as pictures of what the camera does
   approach: '<path d="M3 12h11M10.5 8.5 14 12l-3.5 3.5"/><circle cx="19" cy="12" r="2.5"/>',
   wide: '<ellipse cx="12" cy="12" rx="9.5" ry="4.5"/><circle cx="12" cy="12" r="2"/><circle cx="20" cy="10.3" r="1" fill="currentColor"/>',

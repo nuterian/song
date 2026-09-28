@@ -79,6 +79,8 @@
   .seg button { border: 0; background: transparent; color: var(--muted); padding: 4px 10px; cursor: pointer; }
   .seg button + button { border-left: 1px solid var(--line2); }
   .seg button.on { background: var(--line2); color: var(--text); }
+  .seg + .seg { margin-left: 0; }
+  #shapes button { padding: 3px 8px; display: grid; place-items: center; }
 
   #side { display: grid; grid-template-columns: minmax(0, 1fr) 40px; border-left: 1px solid var(--line); background: var(--panel); min-height: 0; }
   #pane { overflow-y: auto; overflow-x: hidden; padding: 14px 14px 20px; min-height: 0; min-width: 0; }
@@ -237,6 +239,7 @@
         <button class="ib" id="play" aria-label="Play" title="Play  space"></button>
         <span id="clock">0:00.0</span>
         <span class="seg" id="cams" title="Camera"></span>
+        <span class="seg" id="shapes" role="group" aria-label="Frame"></span>
         <button class="ib" id="click" aria-label="Click track" title="A click on every beat: hear whether the grid is right"></button>
         <button class="ib" id="lyr" aria-label="Words on or off" title="Words on the picture"></button>
         <span class="anchor">

@@ -15,6 +15,12 @@ import { lyricInk, lyricOpacity, seating } from "./lyrics.js";
 const params = new URLSearchParams(location.search);
 if (params.get("embed")) document.body.classList.add("embed");
 if (params.get("bare")) document.body.classList.add("bare");
+// The frame's shape: wide, 16:9, or tall, 9:16, for a screen held upright. The tall frame is
+// the wide one with the camera turned a quarter turn (cosmos.py, `turned`): nothing is baked
+// for it, and every shot and every edit is the same in both.
+let shape = params.get("shape") === "tall" ? "tall" : "wide";
+document.body.classList.toggle("tall", shape === "tall");
+const ASPECT = { wide: 16 / 9, tall: 9 / 16 };
 const canvas = document.getElementById("gl");
 const audio = document.getElementById("audio");
 const playBtn = document.getElementById("play");
@@ -173,6 +179,13 @@ class Grid {
 
 function makeLyrics(spec, canvas, bar, camera) {
   let st = spec.style;
+  // what the frame's shape changes: the type's size, the places, each line's place and rows
+  let tall = null, lines = spec.lines;
+  const shaped = () => {
+    tall = shape === "tall" && spec.tall ? spec.tall : null;
+    lines = tall ? spec.lines.map((l) => (l.tall ? { ...l, place: l.tall.place, rows: l.tall.rows } : l)) : spec.lines;
+  };
+  shaped();
   // The canvas and the words share one frame, so they cannot come apart: the words are
   // placed in percentages of it and sized in its height (container units), by CSS alone.
   const frame = document.createElement("div");
@@ -181,7 +194,7 @@ function makeLyrics(spec, canvas, bar, camera) {
   frame.appendChild(canvas);
   const layer = document.createElement("div");
   layer.id = "lyrics";
-  layer.style.setProperty("--size", String(st.size));
+  layer.style.setProperty("--size", String(tall ? tall.size : st.size));
   frame.appendChild(layer);
   const els = new Map();                           // line index -> its element, made when first needed
   let on = params.get("lyrics") !== "off";
@@ -213,15 +226,21 @@ function makeLyrics(spec, canvas, bar, camera) {
 
   function element(k) {
     if (!els.has(k)) {
-      const line = spec.lines[k];
+      const line = lines[k];
       const el = document.createElement("div");
       el.className = "line";
-      for (const [text] of line.words) {
+      el.words = [];
+      // in rows, where the frame is too narrow for the line: `rows` says how many words to each
+      const ends = new Set();
+      let at = 0;
+      for (const n of (line.rows || []).slice(0, -1)) ends.add((at += n));
+      line.words.forEach(([text], i) => {
         const w = document.createElement("span");
         w.textContent = text;
         el.appendChild(w);
-        el.appendChild(document.createTextNode(" "));
-      }
+        el.words.push(w);
+        el.appendChild(ends.has(i + 1) ? document.createElement("br") : document.createTextNode(" "));
+      });
       layer.appendChild(el);
       els.set(k, el);
     }
@@ -229,8 +248,8 @@ function makeLyrics(spec, canvas, bar, camera) {
   }
 
   function put(el, region) {
-    const r = spec.regions[region];                  // frame heights from the middle, y up
-    el.style.left = `${50 + (100 * r.x * 9) / 16}%`;
+    const r = (tall ? tall.regions : spec.regions)[region];      // frame heights from the middle, y up
+    el.style.left = `${50 + (100 * r.x) / ASPECT[shape]}%`;
     el.style.top = `${50 - 100 * r.y}%`;
     el.style.transform = `translate(${r.align === "center" ? "-50%" : r.align === "right" ? "-100%" : "0"}, -50%)`;
     el.style.textAlign = r.align;
@@ -245,10 +264,12 @@ function makeLyrics(spec, canvas, bar, camera) {
     get on() { return on; },
     setOn(v) { turn(v ? "on" : "off"); },
     // a new bake's words (the studio's edits): set afresh, where the new layout puts them
-    respec(next) {
+    // and the frame's new shape: the same words, set afresh for it
+    respec(next = spec) {
       spec = next || { ...spec, lines: [] };
       st = spec.style;
-      layer.style.setProperty("--size", String(st.size));
+      shaped();
+      layer.style.setProperty("--size", String(tall ? tall.size : st.size));
       for (const el of els.values()) el.remove();
       els.clear(); placed.clear();
       seat = seating();
@@ -256,7 +277,7 @@ function makeLyrics(spec, canvas, bar, camera) {
     show(t) {
       if (layer.hidden) return;
       const cam = camera() || "static";
-      spec.lines.forEach((line, k) => {
+      lines.forEach((line, k) => {
         const region = seat(k, line, t, cam);
         if (region === null) {
           if (els.has(k)) els.get(k).style.opacity = "0";
@@ -267,7 +288,7 @@ function makeLyrics(spec, canvas, bar, camera) {
         if (placed.get(k) !== region) { put(el, region); placed.set(k, region); }
         el.style.opacity = String(lyricOpacity(t, line));
         line.words.forEach(([, start, end], i) => {
-          el.children[i].style.opacity = String(lyricInk(t, start, end, st));
+          el.words[i].style.opacity = String(lyricInk(t, start, end, st));
         });
       });
     },
@@ -374,10 +395,14 @@ async function main() {
   // shader can look sharp through that. Capped, so a 5K window does not ask for 5K.
   let W = 0, H = 0, targets = [], front = 0, quality = 1;
   function fit() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 3);
-    let w = Math.round(canvas.clientWidth * dpr * quality), h = Math.round(canvas.clientWidth * dpr * quality * 9 / 16);
-    const cap = Number(params.get("maxheight")) || 1440;
-    if (h > cap * quality) { h = Math.round(cap * quality); w = Math.round(h * 16 / 9); }
+    const dpr = Math.min(window.devicePixelRatio || 1, 3), aspect = ASPECT[shape];
+    let w = Math.round(canvas.clientWidth * dpr * quality), h = Math.round(canvas.clientWidth * dpr * quality / aspect);
+    // the cap is on the frame's short side: its height when it is wide, its width when tall
+    const cap = (Number(params.get("maxheight")) || 1440) * quality;
+    if (Math.min(w, h) > cap) {
+      if (aspect > 1) { h = Math.round(cap); w = Math.round(h * aspect); }
+      else { w = Math.round(cap); h = Math.round(w / aspect); }
+    }
     if (!w || (w === W && h === H)) return;
     for (const old of targets) { gl.deleteFramebuffer(old.fbo); gl.deleteTexture(old.tex); }
     W = canvas.width = w; H = canvas.height = h;
@@ -483,6 +508,15 @@ async function main() {
       const name = grid.names[c];
       const loc = uniforms[name];
       if (loc) gl.uniform1f(loc, fed(name, c));
+    }
+    if (uniforms.uTall) gl.uniform1f(uniforms.uTall, shape === "tall" ? 1 : 0);
+    if (shape === "tall") {                          // the camera, turned: cosmos.py's `turned`
+      const at = (name) => fed(name, grid.names.indexOf(name));
+      const roll = at("uCamRoll"), span = at("uCamSpan"), x = at("uCamX"), y = at("uCamY");
+      if (uniforms.uCamRoll) gl.uniform1f(uniforms.uCamRoll, roll + Math.PI / 2);
+      if (uniforms.uCamSpan) gl.uniform1f(uniforms.uCamSpan, span * 16 / 9);
+      if (uniforms.uCamX) gl.uniform1f(uniforms.uCamX, y);
+      if (uniforms.uCamY) gl.uniform1f(uniforms.uCamY, -x);
     }
     for (const d of dataTextures) {
       gl.activeTexture(gl.TEXTURE0 + d.unit);
@@ -607,6 +641,18 @@ async function main() {
     get heard() { return plan.heard || null; },
     get drops() { return (plan.drops || []).map((d) => d.t); },
     get duration() { return plan.duration; },
+    get shape() { return shape; },
+    setShape(next) {
+      next = next === "tall" ? "tall" : "wide";
+      if (next === shape) return;
+      shape = next;
+      document.body.classList.toggle("tall", shape === "tall");
+      const url = new URL(location.href); url.searchParams.set("shape", shape); history.replaceState(null, "", url);
+      fit();
+      if (words) words.respec();
+      clearFeedback();
+      lastDrawn = -1;
+    },
     get lyrics() { return words ? words.on : null; },
     setLyrics(v) { if (words) words.setOn(v); },
     async reload() {

@@ -294,8 +294,10 @@ def words(track: Track, ch: direct.Channels) -> list[Line]:
                 f"{100 * lay['largest_share_of_frame']:.1f} % of the frame", "<= 3 %",
                 _check(lay["largest_share_of_frame"] <= 0.03, WARN))]
     for c in lay["cost"]:
-        out.append(Line("lyrics", f"over a body, {c['camera']}", f"{100 * c['crossed']:.1f} % of the frames a line is up; "
-                        f"{c['moves']} changes of place", "0 %", _check(c["crossed"] <= 0.0, WARN), c))
+        out.append(Line("lyrics", f"over a body, {c['camera']}" + (", tall" if c.get("shape") == "tall" else ""),
+                        f"{100 * c['crossed']:.1f} % of the frames a line is up"
+                        + (f" (within the wide frame's reach of one: {100 * c['near']:.1f} %)" if c.get("shape") == "tall" else "")
+                        + f"; {c['moves']} changes of place", "0 %", _check(c["crossed"] <= 0.0, WARN), c))
     return out
 
 

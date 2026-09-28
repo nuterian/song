@@ -494,6 +494,21 @@ def bake(got: dict, mod: tuple[dict, dict] | None, sheet: dict | None = None) ->
     return out
 
 
+# The frame's shape. Everything is decided for the wide frame, 16:9. The tall one, 9:16, is
+# the same picture with the camera turned a quarter turn about its own line of sight, the
+# long side of the frame now its height: so every shot, every move and every edit is the
+# same in both, and the tall frame needs nothing baked for it. (The alternatives cut the
+# planets' row and the two-shots at the frame's sides: NOTES, "The tall frame".)
+SHAPES = {"wide": 16 / 9, "tall": 9 / 16}           # width over height
+TURNED = ("uCamRoll", "uCamSpan", "uCamX", "uCamY")  # what `turned` takes and gives, in this order
+
+
+def turned(roll, span, x, y):
+    """The camera of the tall frame, from the wide frame's: rolled a quarter turn, as far
+    off as makes the frame's height what its width was, looking at the same place."""
+    return roll + np.pi / 2, span * 16 / 9, y, -x
+
+
 CAMERA_UNIFORMS = ("uCamTurn", "uCamTilt", "uCamRoll", "uCamSpan", "uCamX", "uCamY")
 PER_CAMERA = CAMERA_UNIFORMS + ("uSpreadSlow",)      # what changes when the player changes camera
 MODES = ("static", "hybrid", "cinematic")
