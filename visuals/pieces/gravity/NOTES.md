@@ -1360,6 +1360,16 @@ kick pulls the orbits" is said over a passage with none. `?t=` on the landing pa
 it elsewhere, to try: 1:32 puts the re-entry at 1:36, the song's strongest after its
 first, four seconds after the page opens.
 
+Jugal took the later start: the page opens at 1:32. The Sun is larger there (the kick is
+in), so the picture sits lower in the hero (21 % of the height under the middle, 28 % in
+a window wider than 19:10), and the headline is sized by the window's height as well as
+its width; the Sun is clear of the two links at 1440x900, 977x758, 1440x700, 1920x1000
+and 390x844, as the re-entry lands. The play button of a browser that will not start the
+video unasked was in the middle, over the links; it is at the foot of the picture, where
+the cue to scroll is, and clear of what is said by 29 px or more at those sizes, in the
+hero and on each statement. Not changed: in a window wider than about 2:1 the picture is
+narrower than the window and its sides show.
+
 A browser holding the old `player.js` and fetching the new plan fails (it has no
 `frames_file`); GitHub Pages keeps files for ten minutes, so that is a visitor who was
 there in the ten minutes before a deploy. Not measured: Safari, Firefox, a phone.

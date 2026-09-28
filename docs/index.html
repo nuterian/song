@@ -40,7 +40,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 img{display:block;max-width:100%;height:auto}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
 h1,h2{margin:0;font-weight:700;letter-spacing:-.045em;line-height:1.02;text-wrap:balance}
-h1{font-size:clamp(44px,8.4vw,124px)}
+h1{font-size:clamp(44px,min(8.4vw,13.4svh),124px)}     /* by the height too: a wide, short window keeps the Sun under the words */
 h2{font-size:clamp(40px,7.2vw,104px)}
 .lede{margin:.9em auto 0;max-width:30em;color:var(--dim);font-size:clamp(17px,1.75vw,24px);line-height:1.35;text-wrap:balance}
 
@@ -63,7 +63,7 @@ header a:hover{color:var(--ink)}
    sits. (A mask did that first, and a mask over a canvas that is drawn sixty times a second
    is composited sixty times a second.) */
 .pic{position:absolute;left:50%;top:50%;width:min(100vw,calc(100svh * 16 / 9 * 1.12));aspect-ratio:16/9;
-  --low:15svh;--mid:0svh;
+  --low:21svh;--mid:0svh;
   translate:-50% calc(-50% + var(--mid));scale:1.12;will-change:translate,scale;
   transition:scale 2.8s var(--ease),translate 1.6s var(--ease);
   background:#000 url(img/cosmos-still.webp) center/cover no-repeat}
@@ -91,8 +91,11 @@ header.solid .ctl{visibility:hidden;opacity:0}
   opacity:0;transition:opacity .7s var(--ease),translate .7s var(--ease)}
 .hint.on{opacity:1;translate:-50% 0}
 header.solid .hint{opacity:0}
-.playbig{position:absolute;inset:0;margin:auto;z-index:3;width:84px;height:84px;border-radius:50%;display:none;place-items:center;
+/* where the video has not started by itself: under everything that is said, at the foot of
+   the picture, where the cue to scroll would be (the middle is the words') */
+.playbig{position:absolute;left:50%;bottom:64px;margin-left:-36px;z-index:3;width:72px;height:72px;border-radius:50%;display:none;place-items:center;
   background:rgba(0,0,0,.6);box-shadow:0 0 0 1px rgba(255,255,255,.25);color:var(--ink)}
+.film.still .cue{opacity:0}
 /* paused or played by a click on the picture: said once, in the middle, and gone */
 .blip{position:absolute;inset:0;margin:auto;z-index:3;width:72px;height:72px;border-radius:50%;display:grid;place-items:center;pointer-events:none;
   background:rgba(0,0,0,.55);color:var(--ink);opacity:0;scale:.8}
@@ -100,7 +103,7 @@ header.solid .hint{opacity:0}
 .blip.go{animation:blip .7s var(--ease)}
 @keyframes blip{0%{opacity:0;scale:.8}25%{opacity:1;scale:1}100%{opacity:0;scale:1.12}}
 .screen{cursor:pointer}
-.playbig svg{width:28px;height:28px;margin-left:4px}
+.playbig svg{width:24px;height:24px;margin-left:3px}
 .film.still .playbig{display:grid}
 
 /* What is said over it: one thing to a screen. */
@@ -176,6 +179,10 @@ footer a:hover{color:var(--ink)}
 @keyframes rise{from{opacity:0;transform:translateY(48px)}}
 @keyframes grow{from{opacity:.2;transform:scale(.86)}}
 
+/* wide and short: the words take more of the height, so the picture sits lower still */
+@media (min-aspect-ratio:19/10){
+  .pic{--low:28svh}
+}
 /* upright: the picture whole, across the width, and the words in the dark under it */
 @media (max-aspect-ratio:1/1){
   .pic{width:100vw;--low:12svh;--mid:-8svh}
@@ -187,6 +194,7 @@ footer a:hover{color:var(--ink)}
   .three{grid-template-columns:1fr;text-align:center}
   header{gap:20px}
   .ctl span{display:none}
+  .playbig{bottom:40px;width:60px;height:60px;margin-left:-30px}
   .code{font-size:12px;padding-left:16px}
 }
 @media (prefers-reduced-motion:reduce){
@@ -296,8 +304,9 @@ python -m visuals studio<button class="copy" id="copy" aria-label="Copy the comm
     pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>'
   };
   var frame = null, player = null, beat = null, away = false, was = false, stopped = false, fader = 0;
-  // where in the song it begins: the first chorus, unless the address says otherwise (?t=)
-  var from = Number(new URLSearchParams(location.search).get("t")) || 61;
+  // where in the song it begins: four seconds before its strongest re-entry, so that the
+  // page opens into it; unless the address says otherwise (?t=)
+  var from = Number(new URLSearchParams(location.search).get("t")) || 92;
 
   // the song's loudness, eased to where it is wanted: nothing starts or stops at full
   function fade(to, ms, then) {
