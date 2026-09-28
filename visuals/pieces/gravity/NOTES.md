@@ -1561,3 +1561,9 @@ its corner. Pressed and read back in headless Chrome at 390x844 with the browser
 screen taken away, with it, and at 1440x900: the picture goes from 281 by 500 to 390 by
 693 and back, the song playing on. Not on a telephone.
 
+The demo had a control for the tall frame, beside the full screen. Jugal: "what's the
+point of it?" It was for seeing the tall video on a wide screen, it did nothing worth
+having on a telephone, and it had not been asked for. It is gone: the demo's frame is the
+screen's, and the address no longer keeps it (a link made on a telephone opened tall on a
+desk). `?shape=` still says which, for a link that means to.
+

@@ -646,8 +646,7 @@ async function main() {
       next = next === "tall" ? "tall" : "wide";
       if (next === shape) return;
       shape = next;
-      document.body.classList.toggle("tall", shape === "tall");
-      const url = new URL(location.href); url.searchParams.set("shape", shape); history.replaceState(null, "", url);
+      document.body.classList.toggle("tall", shape === "tall");       // (not kept in the address: it is the screen's, not a choice)
       fit();
       if (words) words.respec();
       clearFeedback();

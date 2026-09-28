@@ -244,9 +244,6 @@
         <button class="icon" id="hears" aria-pressed="true" aria-label="What was heard" title="What was heard">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4.5 14v-4M8.25 17V7M12 19.5v-15M15.75 16.5v-9M19.5 13.5v-3"/></svg>
         </button>
-        <button class="icon" id="tall" aria-pressed="false" aria-label="Tall frame, for a phone held upright" title="Tall frame, for a phone held upright">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/></svg>
-        </button>
         <button class="icon" id="full" aria-label="Full screen" title="Full screen">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 9V6a1.5 1.5 0 0 1 1.5-1.5h3M15 4.5h3A1.5 1.5 0 0 1 19.500 6v3M19.5 15v3a1.5 1.5 0 0 1-1.500 1.500h-3M9 19.500H6A1.5 1.5 0 0 1 4.500 18v-3"/></svg>
         </button>
@@ -331,13 +328,13 @@
       words.addEventListener("click", () => { player.setLyrics(!player.lyrics); worded(); });
       worded();
 
-      // the frame: tall on a screen held upright, unless the address says (?shape=); and as asked
-      const tall = $("tall"), upright = matchMedia("(max-aspect-ratio: 1/1)");
-      const framed = () => tall.setAttribute("aria-pressed", String(player.shape === "tall"));
-      if (!params.get("shape") && upright.matches) player.setShape("tall");
-      tall.addEventListener("click", () => { player.setShape(player.shape === "tall" ? "wide" : "tall"); framed(); });
-      upright.addEventListener("change", () => { player.setShape(upright.matches ? "tall" : "wide"); framed(); });
-      framed();
+      // the frame is the screen's: tall on one held upright, and changed with it if it is
+      // turned; unless the address says which (?shape=)
+      const upright = matchMedia("(max-aspect-ratio: 1/1)");
+      if (!params.get("shape")) {
+        if (upright.matches) player.setShape("tall");
+        upright.addEventListener("change", () => player.setShape(upright.matches ? "tall" : "wide"));
+      }
 
       // the time, and how far along the line the song has come
       let said = "", copied = 0;
