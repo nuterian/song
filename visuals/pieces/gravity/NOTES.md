@@ -1860,6 +1860,10 @@ share sheet on a telephone, which a browser without a window does not show.
   or its foot is placed by what is seen (`--bar`). The shade under the bar is light:
   nothing there is to be read. Where there is no such bar the two heights are one and
   nothing moves (measured: the same places as before). Tried in a browser without a window
-  by making it think it had a 98-point bar; not yet in Safari.
+  by making it think it had a 98-point bar. On his telephone it went 40 points under the
+  bar, not 98: Safari's 100lvh is 754 where the bar reaches 812. So on a telephone the
+  picture goes as far as the screen's own foot (`screen.height`, this way up), which the
+  telephone says exactly; what is past the foot is not seen. Measured with a 402x714 window
+  on a 402x874 screen: the picture 874 high, every control and the Sun where they were.
 - Seen on his telephone and still open: the time read "0:00 / 0:00" while it played in
   Safari (right in Chrome, and in Chrome here); not reproduced.

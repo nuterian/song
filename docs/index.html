@@ -60,13 +60,14 @@ header .mark{padding:12px 8px 12px 0;margin-left:0}
 /* The film: one picture, pinned, the whole height of what is said over it. It is the
    video itself, drawn live and silent in a frame of its own; the poster is under it
    from the first paint. */
-.film{position:relative}
+.film{position:relative;--bar:calc(100lvh - 100svh)}
 /* where the Sun is: under the window's middle by --low in the first screen and --mid after it,
    and to its right by --side (the poster, the video and the play button all go by these).
    The picture goes on under a telephone's browser bar, where the bar is glass (Safari's):
-   the screen is the window with its bars away (100lvh), and --bar is how much of it is
-   under them, which the middle of what is seen is above. */
-.screen{position:sticky;top:0;height:100lvh;overflow:hidden;background:#000;z-index:0;--low:21svh;--mid:calc(var(--low) + 5svh);--side:0px;--bar:calc(100lvh - 100svh)}
+   --bar is how far past the window it goes (on the film, set by the script to the screen's
+   own foot on a telephone, since Safari's 100lvh stops short of it), and the middle of what
+   is seen is above it. */
+.screen{position:sticky;top:0;height:calc(100svh + var(--bar));overflow:hidden;background:#000;z-index:0;--low:21svh;--mid:calc(var(--low) + 5svh);--side:0px}
 /* The poster, which the video is drawn over: as wide as the window; it sits low, the Sun
    under what is said, on every screen of the film (a little lower after the first, where
    more is said). Its top and bottom go to black under two strips of its own, so it has no
@@ -123,7 +124,7 @@ header.solid .hint{opacity:0}
 .film[data-beat="0"] .playbig{top:calc(50% + var(--low) - var(--bar) / 2)}
 
 /* What is said over it: one thing to a screen. */
-.beats{position:relative;z-index:1;margin-top:-100lvh;pointer-events:none}
+.beats{position:relative;z-index:1;margin-top:calc(-100svh - var(--bar));pointer-events:none}
 .beat{min-height:100svh;display:grid;place-content:start center;justify-items:center;text-align:center;padding:clamp(80px,11svh,130px) 24px 64px}
 .beat a,.beat button{pointer-events:auto}
 .beat .lede{color:rgba(245,245,247,.88)}
@@ -562,6 +563,17 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
       } else if (++tries > 750) clearInterval(wait);       // 30 s: the poster stays, which is a page
     }, 40);
   }
+
+  // on a telephone, the picture as far down as the screen goes, under a glass bar (the
+  // film's --bar, from the window's height, asked every frame as the demo's page asks it)
+  if (matchMedia("(hover: none) and (pointer: coarse)").matches) (function under(was) {
+    var H = innerHeight, W = innerWidth, now = W + " " + H;
+    if (now !== was) {
+      var foot = W > H ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
+      film.style.setProperty("--bar", Math.max(0, Math.min(foot - H, 0.3 * H)) + "px");
+    }
+    requestAnimationFrame(function () { under(now); });
+  })("");
 
   var turned = function () { if (player && player.setShape) player.setShape(upright.matches ? "tall" : "wide"); };
   if (upright.addEventListener) upright.addEventListener("change", turned); else if (upright.addListener) upright.addListener(turned);

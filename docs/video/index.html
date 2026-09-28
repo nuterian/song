@@ -566,9 +566,11 @@
     // is, and the frame's shape is the window's: tall in one held upright (unless the
     // address says which, ?shape=).
     // A telephone's browser whose bars are glass over the page (Safari's, since iOS 26) shows
-    // what is under them: the picture goes on under the bar at the foot, the window's height
-    // as the browser has it with its bars away (100lvh), and what is laid over it stays
-    // above the bar (--under), the Sun in the middle of what is seen.
+    // what is under them: the picture goes on under the bar at the foot, as far as the
+    // screen's own foot (Safari says its window with the bars away, 100lvh, is less than
+    // that: 754 of 812 points on Jugal's iPhone), and what is laid over it stays above the
+    // bar (--under), the Sun in the middle of what is seen. What goes past the screen's foot
+    // is not seen, and costs nothing but pixels.
     const follows = !["tall", "wide"].includes(params.get("shape"));
     const near = (a, b) => Math.abs(a - b) <= 0.15 * b;
     const tallest = document.createElement("div");
@@ -589,7 +591,9 @@
       if (window.player && !bare && lifted !== under) { window.player.setLift(-Math.round(under / 2)); lifted = under; }
       if (`${W} ${H}` === measured) return;
       measured = `${W} ${H}`;
-      under = home || document.fullscreenElement ? 0 : Math.max(0, Math.min(tallest.offsetHeight - H, 0.3 * H));
+      const long = Math.max(screen.width, screen.height), short = Math.min(screen.width, screen.height);
+      const foot = handheld ? (W > H ? short : long) : 0;          // the screen's own height, this way up
+      under = home || bare || document.fullscreenElement ? 0 : Math.max(0, Math.min(Math.max(tallest.offsetHeight, foot) - H, 0.3 * H));
       body.style.setProperty("--fw", `${W}px`);
       body.style.setProperty("--fh", `${H + under}px`);
       body.style.setProperty("--under", `${under}px`);
