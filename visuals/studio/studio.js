@@ -165,21 +165,32 @@ function syncTransport() {
 let exportTimer = 0;
 const exportUrl = (q = "") => `/api/export?track=${encodeURIComponent(song.slug)}${q}`;
 
-async function openExport() {
+// Or a loop of a few of its bars, for Spotify's Canvas: tall, without sound or words.
+let exportLoop = false;
+
+async function openExport(again) {
   const p = player(), box = $("exportpop");
-  if (!p || !box.hidden) { box.hidden = true; return; }
-  const camera = p.chosen.camera || "static", lyrics = !!p.lyrics, shape = p.shape || "wide";
-  const q = await (await fetch(exportUrl(`&camera=${encodeURIComponent(camera)}&lyrics=${lyrics ? 1 : 0}&shape=${shape}`))).json();
+  if (!p || (!box.hidden && again !== true)) { box.hidden = true; return; }
+  const camera = p.chosen.camera || "static", lyrics = !!p.lyrics, shape = p.shape || "wide", loop = exportLoop;
+  const q = await (await fetch(exportUrl(`&camera=${encodeURIComponent(camera)}&lyrics=${lyrics ? 1 : 0}&shape=${shape}&loop=${loop ? 1 : 0}`))).json();
   if (q.job && q.job.state === "running") { watchExport(q.job); return; }
   const size = shape === "tall" ? "tall, 1080 by 1920" : "wide, 1920 by 1080";
-  box.innerHTML = `<div class="said">${icon("download", 14)}<span>The whole song, ${size}, the ${esc(camera)} camera, ${lyrics ? "with" : "without"} the words, to</span></div>` +
+  const said = loop
+    ? `A loop for Spotify's Canvas: the song's liveliest bars, 8 seconds at most, tall, 1080 by 1920, the ${esc(camera)} camera, no sound, no words, to`
+    : `The whole song, ${size}, the ${esc(camera)} camera, ${lyrics ? "with" : "without"} the words, to`;
+  box.innerHTML = `<div class="kinds"><span class="seg"><button data-loop="0" class="${loop ? "" : "on"}">Whole song</button>` +
+    `<button data-loop="1" class="${loop ? "on" : ""}">Canvas loop</button></span></div>` +
+    `<div class="said">${icon("download", 14)}<span>${said}</span></div>` +
     `<div class="path">${esc(q.path)}</div>` +
     `<div class="acts"><button class="pill" id="exno">Cancel</button><button class="pill go" id="exgo">${icon("download", 14)}Export</button></div>`;
   box.hidden = false;
+  for (const b of box.querySelectorAll(".kinds button")) {
+    b.addEventListener("click", () => { exportLoop = b.dataset.loop === "1"; openExport(true); });
+  }
   $("exno").addEventListener("click", () => (box.hidden = true));
   $("exgo").addEventListener("click", async () => {
     box.hidden = true;
-    const r = await call("/api/export", { camera, lyrics, shape });
+    const r = await call("/api/export", { camera, lyrics, shape, loop });
     if (!r.ok) { status("Not exported", "bad"); toast(r.refused); return; }
     watchExport(r);
   });
@@ -199,7 +210,9 @@ function watchExport(job) {
     }, 1000);
   } else if (job.state === "done") {
     $("status").className = "";
-    $("status").innerHTML = `<a href="${esc(job.url)}" download="${esc(name)}">${icon("download", 14)}${esc(name)}</a>`;
+    // a loop says which bars it is of
+    const of = job.window ? ` <span class="of">${job.window.length.toFixed(1)} s from ${mmss(job.window.start)}</span>` : "";
+    $("status").innerHTML = `<a href="${esc(job.url)}" download="${esc(name)}">${icon("download", 14)}${esc(name)}</a>${of}`;
   } else {
     status("Export failed", "bad");
     toast([job.error]);
@@ -1036,7 +1049,7 @@ async function main() {
   $("play").addEventListener("click", playPause);
   $("lyr").addEventListener("click", () => { const p = player(); if (p) { p.setLyrics(!p.lyrics); syncTransport(); } });
   $("export").innerHTML = icon("download", 18);
-  $("export").addEventListener("click", openExport);
+  $("export").addEventListener("click", () => openExport());
   $("click").innerHTML = icon("metronome", 18);
   $("click").addEventListener("click", () => {
     audioCtx = audioCtx || new AudioContext();

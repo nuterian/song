@@ -300,6 +300,53 @@ def render(got: dict, track: Track, out_dir: str | Path, start: float = 0.0, dur
     return out_path
 
 
+def canvas_name(track: Track, camera: str = "static") -> str:
+    return f"{track.slug}-{camera}-canvas.mp4"
+
+
+def canvas(got: dict, track: Track, out_dir: str | Path, camera: str = "static", ch: direct.Channels | None = None,
+           size: tuple[int, int] = (1080, 1920), fps: int = 60, crf: int = 17, progress=None):
+    """A loop for Spotify's Canvas (loop.py): a few bars of the song where the most is
+    played, tall, made to run round without a seam; no sound and no words. Returns the mp4
+    and the bars it is of."""
+    from . import loop
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if ch is None:
+        from .make import directed
+        ch = directed(track, got)[0]
+    choices = ch.variants["camera"]["choices"]
+    if camera not in choices:
+        raise ValueError(f"no camera {camera!r}: the cameras are {', '.join(choices)}")
+    w = loop.window(ch, got, camera)
+    times, rows = loop.rows(ch, w, fps)
+    out_path = out_dir / canvas_name(track, camera)
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+           "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{size[0]}x{size[1]}", "-r", str(fps), "-i", "-",
+           "-an", "-c:v", "libx264", "-preset", "medium", "-crf", str(crf),
+           "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out_path)]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    assert proc.stdin is not None
+    r = Renderer(*size)
+    r.bind(ch.names, choices[camera], "tall")
+    try:
+        for k, (t, row) in enumerate(zip(times, rows)):
+            proc.stdin.write(np.ascontiguousarray(r.frame(float(t), row)).tobytes())
+            if progress is not None and (k % 30 == 29 or k == len(times) - 1):
+                progress(k + 1, len(times))
+    except BrokenPipeError:
+        proc.wait()
+        raise RuntimeError(f"ffmpeg failed: {proc.stderr.read().decode()[:800]}") from None
+    finally:
+        r.release()
+    proc.stdin.close()
+    err = proc.stderr.read().decode()
+    if proc.wait() != 0:
+        raise RuntimeError(f"ffmpeg exited {proc.returncode}: {err[:800]}")
+    return out_path, w
+
+
 def stage(got: dict, track: Track, out_dir: str | Path, ch: direct.Channels | None = None) -> Path:
     """Only what the browser player needs - the shader and the baked channels - and
     no mp4. Seconds rather than minutes, which is what trying a look wants."""

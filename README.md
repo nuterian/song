@@ -47,6 +47,8 @@ song makes the same video every time.
 - **Export an mp4**: 1080p at 60 fps, wide (16:9) or tall (9:16, for a phone held
   upright), the camera you chose, the words burned in, the
   song's audio under it.
+- **Export a loop for Spotify's Canvas**: a few of the song's liveliest bars, 8 seconds at
+  most, 9:16, made to run round without a seam; no sound and no words.
 
 ## What it costs
 
@@ -226,6 +228,7 @@ python -m visuals make song.wav            # prepare a song without opening the 
 python -m visuals edit song.wav "fewer solar flares"   # change its video by asking
 python -m visuals render song.wav --theme cosmos --camera hybrid   # an mp4 from the command line
 python -m visuals render song.wav --theme cosmos --tall            # the same, 9:16, 1080 by 1920
+python -m visuals render song.wav --theme cosmos --canvas          # a loop for Spotify's Canvas: its liveliest bars, 8 s at most
 python -m visuals demo                     # the static demo, into docs/video/
 
 python -m song song.wav lyrics.txt         # time the words, and open the review app

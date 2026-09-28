@@ -255,22 +255,26 @@ class Session:
 
     # ------------------------------------------------------------------ the mp4
 
-    def export(self, camera: str, words: bool = True, jobs: "Jobs | None" = None, shape: str = "wide") -> dict:
+    def export(self, camera: str, words: bool = True, jobs: "Jobs | None" = None, shape: str = "wide",
+               loop: bool = False) -> dict:
         """The whole song to an mp4, as the studio shows it now: this sheet, this camera, the
-        frame wide or tall, the words burned in or not. One job of the studio's runner
-        (`Jobs`: after any song being added, and never beside another export); `exporting`
-        says how far it has got."""
+        frame wide or tall, the words burned in or not. Or, with `loop`, a loop of a few of
+        its bars for Spotify's Canvas (loop.py): tall, without sound or words. One job of the
+        studio's runner (`Jobs`: after any song being added, and never beside another
+        export); `exporting` says how far it has got."""
         if camera not in cosmos.MODES:
             return {"ok": False, "refused": [f"no camera {camera!r}: the cameras are {', '.join(cosmos.MODES)}"]}
         if shape not in cosmos.SHAPES:
             return {"ok": False, "refused": [f"no shape {shape!r}: the frame is {' or '.join(cosmos.SHAPES)}"]}
         if self.exporting and not self.exporting.finished:
             return {"ok": False, "refused": ["an mp4 of this song is already being written: one at a time"]}
-        self.exporting = Export(self, camera, bool(words), shape)
+        self.exporting = Export(self, camera, bool(words), shape, bool(loop))
         (jobs or Jobs()).start("export", self.track.slug, self.exporting.run)
         return {"ok": True} | self.exporting.view()
 
-    def export_path(self, camera: str, words: bool = True, shape: str = "wide") -> Path:
+    def export_path(self, camera: str, words: bool = True, shape: str = "wide", loop: bool = False) -> Path:
+        if loop:
+            return self.out / render.canvas_name(self.track, camera)
         return self.out / render.mp4_name(self.track, camera, words, shape=shape)
 
 
@@ -279,9 +283,10 @@ class Export:
     the studio's runner, so two never share the GPU and the encoder (each would take twice
     as long), and it waits behind a song being added."""
 
-    def __init__(self, session: Session, camera: str, words: bool, shape: str = "wide") -> None:
-        self.session, self.camera, self.words, self.shape = session, camera, words, shape
-        self.path = session.export_path(camera, words, shape)
+    def __init__(self, session: Session, camera: str, words: bool, shape: str = "wide", loop: bool = False) -> None:
+        self.session, self.camera, self.words, self.shape = session, camera, words and not loop, "tall" if loop else shape
+        self.loop, self.window = loop, None                  # a loop's bars are known once it is baked
+        self.path = session.export_path(camera, words, shape, loop)
         self.done, self.total, self.error, self.finished = 0, 0, None, False
         self.t0, self.t1, self.first = time.time(), None, None
         with session.lock:                                   # the sheet as it is at the click
@@ -293,8 +298,14 @@ class Export:
             step("baking")
             ch = render.bake(self.got, self.session.track, self.sheet)
             step("rendering")
-            render.render(self.got, self.session.track, self.session.out, camera=self.camera, words=self.words,
-                          ch=ch, quiet=True, progress=self._progress, shape=self.shape)
+            if self.loop:
+                from . import loop
+                w = loop.window(ch, self.got, self.camera)
+                self.window = {"start": round(w.start, 3), "length": round(w.length, 3), "bars": w.bars, "bar": w.bar}
+                render.canvas(self.got, self.session.track, self.session.out, camera=self.camera, ch=ch, progress=self._progress)
+            else:
+                render.render(self.got, self.session.track, self.session.out, camera=self.camera, words=self.words,
+                              ch=ch, quiet=True, progress=self._progress, shape=self.shape)
         except Exception as e:                               # said to the page
             self.error = f"{type(e).__name__}: {e}"
             raise
@@ -313,7 +324,8 @@ class Export:
             rate = (self.done - self.first[1]) / max(now - self.first[0], 1e-6)
             remaining = round((self.total - self.done) / rate, 1)
         state = "failed" if self.error else "done" if self.finished else "running"
-        return {"state": state, "camera": self.camera, "lyrics": self.words, "shape": self.shape, "done": self.done, "total": self.total,
+        return {"state": state, "camera": self.camera, "lyrics": self.words, "shape": self.shape, "loop": self.loop,
+                "window": self.window, "done": self.done, "total": self.total,
                 "elapsed": round((self.t1 or now) - self.t0, 1), "remaining": 0.0 if self.finished else remaining, "error": self.error,
                 "path": _shown(self.path), "url": f"/out/{self.path.parent.name}/{self.path.name}"}
 
@@ -652,10 +664,10 @@ def handler(sessions: dict[str, Session | Track], jobs: Jobs | None = None):
                     return None
                 q = parse_qs(url.query)
                 camera, words = q.get("camera", ["static"])[0], q.get("lyrics", ["1"])[0] != "0"
-                shape = q.get("shape", ["wide"])[0]
+                shape, loop = q.get("shape", ["wide"])[0], q.get("loop", ["0"])[0] == "1"
                 known = camera in cosmos.MODES and shape in cosmos.SHAPES
                 return self._reply({"job": s.exporting.view() if s.exporting else None,
-                                    "path": _shown(s.export_path(camera, words, shape)) if known else None})
+                                    "path": _shown(s.export_path(camera, words, shape, loop)) if known else None})
             if url.path in ("/", "/studio"):
                 self.send_response(302)
                 self.send_header("Location", "/studio/")
@@ -691,7 +703,7 @@ def handler(sessions: dict[str, Session | Track], jobs: Jobs | None = None):
                     out = s.refresh()
                 elif url.path == "/api/export":
                     out = s.export(str(body.get("camera", "static")), bool(body.get("lyrics", True)), jobs,
-                                   str(body.get("shape", "wide")))
+                                   str(body.get("shape", "wide")), bool(body.get("loop", False)))
                 else:
                     return self._reply({"ok": False, "refused": [f"no such question: {url.path}"]}, 404)
             except Exception as e:                            # said to the page, not swallowed

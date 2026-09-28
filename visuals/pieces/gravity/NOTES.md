@@ -1471,3 +1471,57 @@ Not done: the site's pages on a telephone (the demo page takes `?shape=tall`, an
 offers it); the loop for Spotify's Canvas. Not looked at: Safari, Firefox, a telephone in
 the hand; a tall video inside any of the apps it is for.
 
+# A loop for Spotify's Canvas (2026-09-27, `loop.py`)
+
+    python -m visuals render <song> --theme cosmos --canvas [--camera ...]
+    the studio: Export, "Canvas loop"
+
+What Spotify asks, read on its own pages that day (support.spotify.com/us/artists/article/
+canvas-guidelines): "3-8 seconds long, Vertical 9:16 ratio, Between 720px - 1080px tall, An
+MP4 or JPG file"; no talking or singing to camera, no rapid cuts or intense flashing, the
+song's and the artist's names better left out; "the edges may get cut off on some phones".
+It gives no limit on the file's size. A Canvas is the app's to start and is not in step
+with the song, so the loop is the picture for its own sake, and has no words.
+
+"720px - 1080px tall" read to the letter is a frame at most 608 by 1080. It is taken here
+to mean 720p to 1080p, and the loop is 1080 by 1920, which is what is commonly sent. That
+is a reading, not a thing tried: no loop has been given to Spotify.
+
+**Which bars.** Whole bars, as many as fit in eight seconds (four of Gravity's, 7.68 s;
+of a bar longer than eight seconds, as many of its beats), starting on a bar line, where
+the most is played: the kicks, the bass line's notes and the planets' notes of
+`render.heard`, by their sizes. Not bars a re-entry falls in or just before (its flash,
+every few seconds, is what Spotify asks not to be sent), and not bars in which the camera
+chosen is on its way somewhere (its distance changing by more than 5 %). Gravity: static,
+bar 140, 4:28; hybrid and cinematic, bar 106, 3:23, the last bars being their pull back.
+
+**How it runs round.** The picture is drawn from the channels and from the time, and the
+shader asks the time only how long ago a hit was. So the channels are made to come back:
+a level or a clock loses over the loop what it gained in it, a little each frame (a level
+at a bar line had gained next to nothing; a clock had gained its run, and stands: the
+planets keep their places on their orbits for these seconds, and dance there); a slot's
+hits are the loop's own, its first frames holding its last hit a loop's length ago; a slot
+with no hit in the loop holds none. The loop is a whole number of frames, 461 for 7.68 s.
+What was not done, and why: joining the song's own bars end to beginning (the clocks have
+moved on: the join is five times a usual step between frames), a dissolve over the join (a
+planet that has moved is two planets for as long as it lasts), playing it forward and then
+back (Spotify's "rebound": a ring thrown would be a ring drawn in).
+
+Measured on the mp4s, 1080 by 1920, read back at 270 by 480: the mean change of a pixel
+across the join against the median from one frame to the next in the loop.
+
+| Gravity | across the join | a usual step | the largest step | the join, in usual steps |
+|---|---|---|---|---|
+| static | 1.28 | 1.20 | 2.44 | 1.07 |
+| hybrid | 1.42 | 1.15 | 2.79 | 1.24 |
+| cinematic | 1.65 | 1.14 | 2.94 | 1.45 |
+| the song's own bars, static, not looped | 12.3 | 2.40 | 4.09 | 5.13 |
+
+And no part of the picture changes more across the join than parts do between frames: the
+most any 24-pixel block changes is 21 across it, against a median of 40 elsewhere. Each
+is 461 frames, 7.683 s, h264 with no sound, 5.9 to 9.5 MB; the studio writes one in 11 s.
+
+Not done: choosing the bars by hand (the studio takes the liveliest; the playhead's bars
+would be the natural second choice). Not tried: sending one to Spotify; how it looks
+under the app's own controls.
+

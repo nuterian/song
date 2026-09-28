@@ -6,6 +6,7 @@
     python -m visuals edit   <audio file | song-workdir> "what to change"
     python -m visuals render <song-workdir> [--preview START] [--seed N]
     python -m visuals render <song> --theme cosmos [--camera static|hybrid|cinematic] [--no-lyrics] [--tall]
+    python -m visuals render <song> --theme cosmos --canvas [--camera ...]     a loop for Spotify's Canvas
     python -m visuals score  <song-workdir> [--seed N]
     python -m visuals serve  [--port 8765]
     python -m visuals demo                 the video demo, as a static page, into docs/video/
@@ -72,8 +73,8 @@ def _score_for(track: Track, seed: int | None, quiet: bool = False) -> schema.Sc
 def cmd_render(args) -> int:
     if args.theme == "cosmos":
         return _render_cosmos(args)
-    if args.camera or args.no_lyrics or args.tall:
-        raise SystemExit("--camera, --no-lyrics and --tall are for --theme cosmos")
+    if args.camera or args.no_lyrics or args.tall or args.canvas:
+        raise SystemExit("--camera, --no-lyrics, --tall and --canvas are for --theme cosmos")
     track = _track(args.workdir)
     score = _score_for(track, args.seed)
     if not score.is_complete():
@@ -121,6 +122,13 @@ def _render_cosmos(args) -> int:
     width, height = (int(v) for v in (args.size or "1920x1080").split("x"))
     camera = args.camera or "static"
     out_dir = track.out("cosmos")
+    if args.canvas:
+        mp4, w = render.canvas(got, track, out_dir, camera=camera, fps=args.fps)
+        if args.out:
+            mp4 = Path(shutil.move(mp4, args.out))
+        print(f"loop:   {w.bars:g} bars from bar {w.bar} ({int(w.start // 60)}:{w.start % 60:04.1f}), {w.length:.2f} s")
+        print(f"mp4:    {mp4}")
+        return 0
     shape = "tall" if args.tall else "wide"
     print(f"player: http://127.0.0.1:8765/player/?track={out_dir.name}&camera={camera}&shape={shape}  (python -m visuals serve)")
     mp4 = render.render(got, track, out_dir, start=start, duration=duration, size=(width, height),
@@ -325,6 +333,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="cosmos: which of the three cameras (default static)")
     r.add_argument("--no-lyrics", action="store_true", help="cosmos: leave the words out")
     r.add_argument("--tall", action="store_true", help="cosmos: 9:16, for a screen held upright (1080x1920)")
+    r.add_argument("--canvas", action="store_true",
+                   help="cosmos: a loop of the song's liveliest bars for Spotify's Canvas: 3 to 8 s, 9:16, no sound, no words")
     r.add_argument("--preview", type=float, metavar="START", default=None,
                    help=f"render {PREVIEW_SECONDS:.0f}s from START seconds instead of the whole song")
     r.add_argument("--duration", type=float, default=None, help="override the length in seconds")
