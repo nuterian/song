@@ -34,8 +34,9 @@ def build(dest: Path = DEST, songs=SONGS) -> Path:
     for slug, _ in songs:
         render.pack(ROOT / "visuals" / "out" / f"{slug}-cosmos", dest / slug)
     shared = share(dest, [slug for slug, _ in songs])
-    for name in ("player.js", "bundle.js", "bundle-worker.js", "lyrics.js", "heard.js"):
+    for name in ("player.js", "bundle.js", "bundle-worker.js", "lyrics.js", "heard.js", "manifest.webmanifest"):
         shutil.copyfile(PLAYER / name, dest / name)
+    shutil.copytree(PLAYER / "icons", dest / "icons", dirs_exist_ok=True)      # for a telephone's home screen
     # the words' face, if the player has it; without it they are set in Helvetica Neue
     fonts = ""
     if (PLAYER / FONT).exists():

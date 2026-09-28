@@ -1584,3 +1584,12 @@ of its own, 412x915 with, and 1440x900: the picture is from -43 to 436 across a 
 of 393 and from 0 to 852 down it; a touch starts the song, not muted; the button at the
 corner leaves to the page.
 
+And from a telephone's home screen (Jugal: yes): the demo page says it may be opened
+without the browser round it (`apple-mobile-web-app-capable`, its bar over the page and
+see-through; a manifest, `display: fullscreen`, for Android; the mark on black as its
+icon, 180, 192 and 512 px). Opened so, it is the picture alone from the first, as with
+`?full=1`, and the page under it keeps clear of the clock, the island and the bar to go
+home (`env(safe-area-inset-*)`). Tried only as far as a desk allows: with the browser
+made to say it was opened from the home screen, at 393x852, the picture is over the
+whole window and a touch starts it. Not on a telephone.
+

@@ -7,6 +7,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<!-- Put on a telephone's home screen, it opens without the browser round it: the picture
+     alone, over the whole screen, under the clock and the island too. -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="song">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#000000">
 <title>song: a music video, drawn from the song</title>
 <meta name="description" content="A music video drawn live in the browser from the song itself: the solar system, moved by the kick, the bass, the notes and the voice.">
@@ -50,7 +58,11 @@
      still fits. The page is the height of the window, and nothing in it moves. */
   body {
     --around: 300px;
-    --w: min(100vw - 48px, (100dvh - var(--around)) * 16 / 9);
+    /* what the screen keeps for itself, where the page has the whole of it (from the home
+       screen): the clock and the island over it, the bar to go home under it */
+    --kept: calc(env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px));
+    --w: min(100vw - 48px, (100dvh - var(--around) - var(--kept)) * 16 / 9);
+    padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
     min-height: 100dvh; display: flex; flex-direction: column;
     font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -182,7 +194,7 @@
   #own { display: none; }                    /* what player.js keeps for itself: this page has its own */
 
   /* the tall frame, 9:16, as high as the page has room for */
-  body.tall { --w: min(100vw - 48px, (100dvh - var(--around)) * 9 / 16); }
+  body.tall { --w: min(100vw - 48px, (100dvh - var(--around) - var(--kept)) * 9 / 16); }
   body.tall #gl, body.tall #frame { aspect-ratio: 9 / 16; }
   body.tall #stage:fullscreen > #gl, body.tall #stage:fullscreen > #frame { width: min(100vw, 100vh * 9 / 16); }
   @media (max-aspect-ratio: 1/1) {         /* and fills a screen held upright, as it does over the page */
@@ -191,7 +203,7 @@
   }
   /* the bar and the controls are as wide as the wide picture would be: the tall one is narrow */
   body.tall #top, body.tall #heard, body.tall #seek, body.tall #bar, body.tall #caption {
-    width: min(100vw - 48px, max((100dvh - var(--around)) * 9 / 16, 640px)); }
+    width: min(100vw - 48px, max((100dvh - var(--around) - var(--kept)) * 9 / 16, 640px)); }
 
   /* ?embed=1: in a page which has its own caption and links */
   body.embed #top, body.embed #caption, body.embed #heard { display: none; }
@@ -200,7 +212,7 @@
 
   /* ?bare=1: the picture alone, filling its frame: the landing page's hero, which has the
      controls it wants of its own and reaches the player through window.player */
-  body.bare { --w: min(100vw, 100dvh * 16 / 9); min-height: 0; height: 100dvh; }
+  body.bare { --w: min(100vw, 100dvh * 16 / 9); min-height: 0; height: 100dvh; padding: 0; }
   body.bare.tall { --w: min(100vw, 100dvh * 9 / 16); }
   body.bare main { padding: 0; }
   body.bare #gl { border-radius: 0; cursor: default; }
@@ -210,7 +222,7 @@
      songs another */
   @media (max-width: 720px) {
     body { --w: calc(100vw - 32px); }
-    body.tall { --around: 344px; --w: min(100vw - 32px, (100dvh - var(--around)) * 9 / 16); }
+    body.tall { --around: 344px; --w: min(100vw - 32px, (100dvh - var(--around) - var(--kept)) * 9 / 16); }
     body.tall #top, body.tall #heard, body.tall #seek, body.tall #bar, body.tall #caption { width: calc(100vw - 32px); }
     body.tall #caption { display: none; }
     main { justify-content: flex-start; padding-top: 4px; }
@@ -304,8 +316,10 @@
 
     // ?full=1: a link to the picture alone, over the whole page from the first; the first
     // touch, which starts it with its sound, also asks the browser for its own full screen,
-    // where it has one (it gives it only to a touch)
-    const alone = Boolean(params.get("full"));
+    // where it has one (it gives it only to a touch). Opened from a telephone's home
+    // screen, where there is no browser round it, it is the picture alone too.
+    const home = navigator.standalone === true || matchMedia("(display-mode: standalone), (display-mode: fullscreen)").matches;
+    const alone = Boolean(params.get("full")) || home;
     if (alone) document.body.classList.add("filled");
     const toggle = () => {
       if (alone && document.body.classList.contains("filled") && !document.fullscreenElement
