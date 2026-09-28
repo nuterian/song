@@ -59,6 +59,7 @@
   button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
   svg { display: block; }
+  [hidden] { display: none !important; }     /* whatever else says how a thing is laid out */
 
   /* The bar: the name, the songs, and the way to a video of one's own. */
   #top { height: 52px; flex: none; display: flex; align-items: center; gap: 28px; width: var(--w); margin: 0 auto; color: rgba(245, 245, 247, .72); }
@@ -103,6 +104,17 @@
   #stage:fullscreen { width: 100vw; height: 100vh; display: grid; place-items: center; background: #000; }
   #stage:fullscreen > #gl, #stage:fullscreen > #frame { width: min(100vw, 100vh * 16 / 9); }
   #stage:fullscreen #gl { border-radius: 0; }
+  /* where the browser has no full screen for anything but a video (a telephone's Safari):
+     the picture alone over the whole page, which is as near as a page can come */
+  body.filled { overflow: hidden; }
+  body.filled #stage { position: fixed; inset: 0; z-index: 50; width: 100vw; height: 100dvh; margin: 0; display: grid; place-items: center; background: #000; }
+  body.filled #stage > #gl, body.filled #stage > #frame { width: min(100vw, 100dvh * 16 / 9); }
+  body.filled.tall #stage > #gl, body.filled.tall #stage > #frame { width: min(100vw, 100dvh * 9 / 16); }
+  body.filled #gl { border-radius: 0; }
+  #leave { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 14px; z-index: 2; width: 40px; height: 40px; border-radius: 50%;
+    display: none; place-items: center; background: rgba(0, 0, 0, .6); box-shadow: 0 0 0 1px rgba(255, 255, 255, .25); color: var(--ink); }
+  #leave svg { width: 18px; height: 18px; }
+  body.filled #leave { display: grid; }
 
   /* what was heard, under the picture: its room is kept when it is turned off, so nothing moves */
   #heard { display: block; height: 98px; margin-top: 16px; transition: opacity .6s var(--ease); }
@@ -217,6 +229,7 @@
     <div id="stage">
       <canvas id="gl" width="1280" height="720" aria-label="The music video"></canvas>
       <button id="big" aria-label="Play" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg></button>
+      <button id="leave" aria-label="Leave full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
     <canvas id="heard" role="img" aria-label="The kick, the bass, the notes and the voice, as they were heard"></canvas>
     <input id="seek" type="range" min="0" max="1" step="0.001" value="0" aria-label="Position in the song">
@@ -352,11 +365,22 @@
       hear();
     }
 
-    // full screen, where the browser has it for more than a video
+    // Full screen: the browser's, where it has one for more than a video; where it has not,
+    // or will not give it, the picture over the whole page, and a way out of that.
     const full = $("full"), stage = $("stage");
-    if (!document.fullscreenEnabled || !stage.requestFullscreen) full.hidden = true;
-    full.addEventListener("click", () => { if (document.fullscreenElement) document.exitFullscreen(); else stage.requestFullscreen().catch(() => {}); });
-    addEventListener("keydown", (e) => { if (e.key === "f" && !e.metaKey && !e.ctrlKey && !full.hidden) full.click(); });
+    const own = Boolean(document.fullscreenEnabled && stage.requestFullscreen);
+    const fill = (on) => document.body.classList.toggle("filled", on);
+    full.addEventListener("click", () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (document.body.classList.contains("filled")) fill(false);
+      else if (own) stage.requestFullscreen().catch(() => fill(true));
+      else fill(true);
+    });
+    $("leave").addEventListener("click", (e) => { e.stopPropagation(); fill(false); });
+    addEventListener("keydown", (e) => {
+      if (e.key === "f" && !e.metaKey && !e.ctrlKey) full.click();
+      if (e.key === "Escape") fill(false);
+    });
 
     // the big button is only offered once the picture can play
     new MutationObserver((_, watch) => {

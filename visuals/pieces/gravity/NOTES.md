@@ -1551,3 +1551,13 @@ telephone's: 60 frames a second, the worst 17.5 to 17.8 ms, in four runs of five
 its first seconds had 8 frames over 20 ms (the worst 34 ms) and the player drew 54 that
 second. Not looked at: a telephone.
 
+Jugal, on his telephone, the day it went out: "the full screen button doesn't work". Two
+faults. The page hid the button where the browser has no full screen but for a video (a
+telephone's Safari), by its `hidden` attribute, and the button's own `display: grid`
+undid that: it was shown and did nothing. And nothing was offered in its place. Now
+`[hidden]` hides whatever else is said, and where the browser has no full screen, or
+refuses it, the picture is laid over the whole page (`body.filled`) with a way out at
+its corner. Pressed and read back in headless Chrome at 390x844 with the browser's full
+screen taken away, with it, and at 1440x900: the picture goes from 281 by 500 to 390 by
+693 and back, the song playing on. Not on a telephone.
+
