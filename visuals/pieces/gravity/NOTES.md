@@ -1742,3 +1742,102 @@ and a first sight that is not the song's darkest moment.
   or that it is to play at once.
 - **The demo's end.** The song stopped, on its last picture. Now, over it: "Play again",
   the other song, "Make your own".
+
+## A screen in three (2026-09-28, night)
+
+Jugal, of the landing page on his telephone: what is said and the buttons are at the top,
+over the Sun and what is round it, and the lower half is empty; and every screen of it the
+same. Then, going to bed: keep at the landing page and the demo until they are ready. What
+follows was done without him, measured here, in a browser without a window; none of it is
+pushed, and all of it is his to keep or send back.
+
+- **Upright, a screen is in three.** What is said at its head, what is done at its foot,
+  where a thumb is (the two ways on, what was heard, the three cameras), and the Sun in the
+  room between them: the words end about 220 px down on every telephone tried, the foot
+  begins about 120 px from the bottom, so the Sun is set by a height in pixels
+  (`--low: calc(20px + 3.5svh)`), not a share of the window. Measured, the Sun's middle
+  against the middle of that room: within 26 px on all four screens at 320x568, 375x667,
+  393x760, 393x852, 430x850 and 820x1180 (it was 55 to 140 px low). The shade at the head
+  is measured in pixels too, so it covers the words however tall the window is.
+- **On its side, the words beside the Sun.** A telephone on its side has no height for words
+  over a Sun: they were over it, and the buttons on it. Below 500 px of height the words are
+  a column on the left and the Sun is set to the right, by as much as the page asks
+  (`setLift(down, right)`, the player's camera slid sideways as it was slid down; `aside` in
+  the address). The shade runs from the left.
+- **After the film, the picture goes on.** The two sections after it were on black. Now the
+  picture is pinned under them too: as the film ends the Sun sinks out of the window, the
+  dark deepens by half again (the dusk layer, by how far past the film the page is, full by
+  the time the next words are half up), and the orbits and the sky go on behind what is
+  read. What is read there is nearly white, which is what lets the dark be that light (at
+  three quarters, the first try, a reader found the picture black). The song no longer stops there; it cannot, and keep the picture moving, since the
+  picture is the song's clock. The song's words go as soon as the film begins to go.
+- **Words against the picture, measured.** Every text over the film and after it, against
+  every pixel behind it, at nine window sizes and four screens: none under 4.6 to 1 over
+  the film, and none under 5.1 after it (207 and 63 texts). Before, at the same sizes, 4 texts of 69 were under 4.5 on a
+  telephone and the hero's line was at 1.5 on a short wide window. The hero's line is
+  nearly white now, as the others are; the small print is `--dim`, and `--faint` is `#86868b`.
+- **What is true.** "live" is gone from the hero (only the page's player is live); the
+  first screen says every kick, note and sung word is heard in the song itself, not that
+  every syllable is timed to the millisecond (the words are 76 ms at the median); the
+  small print has the README's numbers (2.1 GB, about 8 GB of models, about 12 minutes for
+  a 5-minute song on an M4 Air) and that the lyric model is non-commercial; "By asking"
+  names Ollama; "To keep" has the tall frame and the Canvas loop. "Get it" and "Make your
+  own" were two names for one place: it is "Make your own".
+- **A finger's size.** Every control on the landing page is 44 px or more at every width
+  from 320 (the header's by padding that takes no room). The sound control's name is what
+  it says it does, on every screen. The install fits at 320 px, a line going on to the next
+  rather than out of sight, and a telephone is offered "Send to my Mac" (its own way of
+  sending, or the link copied) with "It runs on a Mac with Apple Silicon." The cue to
+  scroll is a plain line where there is no mouse.
+- **The studio's picture** is shot again at twice the pixels, at the planets' row with the
+  Alignment shot chosen (a selection, not an edit: undo stayed as it was), at two sizes
+  (59 KB and 128 KB; the one before was 56 KB and soft).
+- **The demo, on a telephone.** A line that would be moved further than half again its own
+  height to clear the controls was moved onto the Sun; it now waits unseen where it is
+  until they go (`held`). Opened silent (`?muted=1`), there is a sound button. The song's
+  big moments are marks on the line, and the time under the pointer or finger is shown
+  over it. Sharing the moment is a button (the telephone's own sheet, or copied), not a
+  click on the time. Another song fades out and in, not a cut. A song that cannot be had
+  says so. The address keeps only what is not the default. The words are never under 12 px.
+  The cameras say what each is, to a pointer.
+- **Less to fetch.** The frames come a piece at a time, two pieces ahead of the one being
+  drawn (and at once, one the song has been moved to); a page that plays silent fetches the
+  song as it plays. A silent landing page had fetched 9.4 MB eight seconds in; it fetches
+  4.9 MB (the frames 1.5 MB of 4.3; the song 3.0 MB of 4.8, as much as the browser chooses
+  to keep ahead).
+- **Round the site.** `404.html` sends the old `/song/demo/` on to `/song/video/`, and
+  says plainly that a page is not there otherwise (tried by answering jugalm.com's address
+  with it in a browser without a window; not on GitHub's servers). The demo has its
+  canonical address and its image's words; the home-screen app its `id` and `start_url`;
+  the landing page a touch icon; its description of itself a licence and a price, and no
+  property that is not one. Space pages down on the landing page again; K stops and starts
+  it. The song's words are not read out line after line. Sizes are in rem, so a larger
+  text setting is larger. The camera a visitor chose on the last screen is still theirs
+  when they come back to it.
+
+Not done, and why: per-song pages for previews (a build step, and a card for each); the
+galaxy texture in eight bits and a smaller font (a download of fonttools, and frames to
+compare); moving the lyric tool's manual out of the README; a stranger's first song end to
+end. And none of it is seen on a telephone, or in Safari: Jugal's to say.
+
+A reader sent over it afterwards, with fresh eyes, found ten things; tried again here, and
+eight mended:
+- The rule that a line waits unseen had also caught the lines a page sets below the window
+  and moves up into it (the landing page on a desk): no words showed on "The words arrive
+  as they are sung". It holds only a line that is in the window.
+- Upright, the head's shade reached where the song's words were moved to, and they were
+  dark (their brightest at a quarter). The shade ends at one height, `--shade`, which the
+  style draws to and the script keeps the words below; the foot's shade is as deep as
+  what is done there.
+- On a telephone on its side the lines after the film were set to the left of their
+  headings (the film's rule, too wide). A short wide window's headline is sized by the
+  height too, so its buttons are clear of the Sun.
+- The demo: the sound button is at the head, beside "Make your own", since the row at the
+  foot of a telephone has no room for one more; the row is closer on a telephone so every
+  button it may have fits; the line is on the same edges as the rest; the end is lighter
+  (a quarter dark, not half) and what to do next is in the sky above the Sun, with the
+  controls below it; a small telephone upright keeps the song's name.
+Left as they are: the first play drops from the strongest moment to the song's opening,
+which is the darkest (the song begins at its beginning, by Jugal's choice), and the
+share sheet on a telephone, which a browser without a window does not show.
+
