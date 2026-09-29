@@ -80,6 +80,11 @@ FEEL = {
     "planets_sway": (0.0, 0.0, 2.0, "how far they surge along their orbits as they come in and fall back as they go out, against how far they breathe"),
     "kick_pull": (1.0, 0.0, 1.5, "how hard a kick pulls the planets toward the Sun"),
     "accents": (0.0, 0.0, 1.0, "0: a planet answers every note; 1: only the note that stands out in each bar, and more"),
+    "planets_arc": (0.0, 0.0, 1.0, "how far the planets rise and fall together off the plane, once in a phrase, as a share of the gap to the next orbit"),
+    "near_dance": (0.0, 0.0, 1.0, "0: in a close shot a planet dances as small on screen as from afar; 1: as large as the planet is seen"),
+    "belts_breathe": (0.0, 0.0, 1.0, "how far the belts go out and in with the bars, as planets_breathe says for the planet just inside each; and how much larger a kick makes their rocks as it passes"),
+    "sky_breathes": (0.0, 0.0, 1.0, "how far the stars move out and in with the phrase, the nearest furthest: at 1, 1.2 percent of the way from the middle of the frame"),
+    "wave": (0.0, 0.0, 1.0, "how high a wave of hops runs out through the planets on a re-entry, and more lightly at every other phrase"),
 }
 LYRICS = {
     "show": (True, None, None, "whether the words are shown"),

@@ -1996,3 +1996,56 @@ Voices agrees), then built as dials on the sheet whose defaults are the old pict
   58 channels the shader never reads, which would pay for the sway; the studio showing
   more than one sheet of a song at once (it cannot; the plain player can, from
   `visuals/out/<slug>-cosmos-<name>`).
+
+## The whole system dances (2026-09-28, night)
+
+Jugal chose the sway (B) and asked for the rest to be decided here, by what is seen and
+measured. Seen on beat strobes: the frames that fall on the beats of two bars, laid one
+over another, so that a body stands once for each beat and its steps can be counted. (Every
+frame of two bars laid over each other says nothing at a drop: the spread and the shock
+rings cover it.) On them B's travel read from afar, and close on Saturn it did not: before
+and after were one picture. Five more dials, each 0 by default, all set in both songs'
+sheets.
+
+- **They rise together** (`planets_arc` 0.35). Once in a phrase of four bars, lowest at its
+  start and highest at the downbeat of its third bar, a glide, fed to the hop's spring as a
+  target so that an accent rides on it. Neighbours' hops went together 0.17 to 0.60, now
+  0.87 to 0.99, in order outward. Mercury takes a tenth of it: at the whole it crossed
+  the Sun's limb by 12.7 pixels in the hybrid. A trail rises with its planet (`uTrailRise`),
+  or the planet stands off the end of its trail.
+- **Close, the dance is the body's size** (`near_dance` 1). The dance was made small with
+  the frame, which is right for the whole system heaving and wrong for a planet's own
+  dance: Saturn, 116 pixels in radius, moved 13. The gain goes to its square root: 40. The
+  spread of the orbits keeps its rule. Planets' speed on screen stays inside the old
+  bounds (peak 0.51 of 1.0, the cinematic camera).
+- **The belts are the heaviest dancers** (`belts_breathe` 0.5). Each follows the score
+  through a spring heavier than Jupiter's (0.81 Hz, damping 0.96), by the room of the
+  planet inside it, Pluto with the Kuiper belt; and a kick passing makes its rocks stand
+  larger for a moment, in size only. The ripple is baked for each belt (`uBeltSwell`): the
+  last kick's time is replaced by the next before the front has reached the Kuiper belt.
+  Mars had been 26 pixels inside the asteroid belt at its widest, under B; the belt going
+  with the planets, it is 5 clear.
+- **The sky breathes with the phrase** (`sky_breathes` 1): the stars of the catalogue by
+  1.2 in a hundred from the frame's middle, the faint field by a third of that, the Milky
+  Way and the deep sky not at all. Three planes. First built with a depth for every star
+  and a second look for each; that was most of what the round cost, and was taken out.
+- **A wave runs outward** (`wave` 1). On a re-entry each planet hops as the shock front
+  reaches it, Mercury first; more lightly on every other phrase and every section's start,
+  travelling at the pull's speed. Tops land within 8 ms of their moments (17 at worst). Not
+  on the song's first downbeat: its run-up would begin before the song.
+- **What it costs.** The round as first built: 1.2 ms a frame more at 1080p, an eighth.
+  As it is: 0.02 ms (+0.4 in a hundred), wide and tall, measured against the shader of
+  8a9e72f on a cool machine; in the plain player at 2560x1440 both songs hold 60 a second
+  with no frame over 20 ms, before and after alike. Gravity's frames: 3.59 MB (B: 3.40).
+- **How it was timed** (`bench_ab.py`, kept with the session's tools): this machine's GPU
+  goes between a cool state (6 to 9 ms a frame) and a throttled one (17 to 23), in the
+  middle of a run; so old and new are drawn in turns, twenty frames each, the same frames
+  of the song, and what is reported is the difference between neighbours. Against itself
+  it reads 0.00 to 0.04 ms. Pieces of a shader swapped one at a time do not add up (it
+  seems to stand near a limit of its size), so whole shaders were measured.
+- Tried and left: the belts' room as the gap to the planets either side, or the belt's own
+  width (Mars stayed inside); one loop for both of the sky's looks (slower); the deep sky
+  moving with the stars (no cheaper).
+- Not yet: on a telephone, or in a browser other than a headless one; the wave's moments
+  in the hybrid and cinematic cameras (they are reckoned for the static one's tilt); the
+  comet, which answers nothing; the 58 channels the shader never reads.

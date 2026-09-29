@@ -42,6 +42,11 @@ settle, and each started early by as much as it lags, so that they arrive togeth
 `planets_sway` a planet also surges ahead along its orbit as it comes in and falls back
 as it goes out (`uSway`), never so far that it goes backward. With `accents` a planet
 answers not every note but the one that stands out in each bar, and more.
+
+With `planets_arc` they also rise and fall together, once in a phrase (`arc`), and the
+notes' hops ride on that. With `wave`, on an important moment a hop runs out through them
+one after another, Mercury first (`simulate`'s `fronts`). And the belts dance as the
+heaviest bodies of all (`belts`).
 """
 
 from __future__ import annotations
@@ -63,6 +68,10 @@ ACCENT_PUSH = 0.24               # ...and slower, pushed over this long
 GAP = np.convolve(np.pad(np.diff(orrery.MEAN_STEP), 1, mode="edge"), [0.5, 0.5], mode="valid")   # the room each planet has: the mean gap either side
 AHEAD = 0.8                      # sway never takes back more than this share of a planet's own speed along its orbit
 MERCURY_IN = 0.5                 # the deepest Mercury is drawn in, in full kicks' pulls (orrery.PULL): less than the kicks alone drew it (0.75)
+MERCURY_UP = 0.1                 # and it rises and falls with the others (`arc`) a tenth as far: any further, and it came nearer the Sun's limb than it ever had
+R_MEAN = 0.255 + orrery.MEAN_STEP               # each planet's mean distance from the Sun, as drawn from the home distance
+WAVE_HOP = 1.2                   # the top of a re-entry's wave, in the planet's own radii, at full strength...
+WAVE_LIGHT = 0.5                 # ...and of the lighter one at a phrase's or a section's start
 
 
 def time_to_peak(freq: np.ndarray, damp: np.ndarray) -> np.ndarray:
@@ -173,14 +182,15 @@ PHRASE_BARS = 4
 STEP = 0.55                      # a step takes this share of its beat, and ends on it
 
 
-def phrase_bars(downbeats: np.ndarray, anchors) -> np.ndarray:
+def phrase_bars(downbeats: np.ndarray, anchors, bars: int = PHRASE_BARS) -> np.ndarray:
     """Each bar's place in its phrase, 0 to 3: counted in fours from every anchor (a bar
-    line nearest a re-entry or a section's start), afresh at the next."""
+    line nearest a re-entry or a section's start), afresh at the next. (In `bars`, for
+    other counts: in eights, every other phrase.)"""
     k = np.arange(len(downbeats))
     anchors = np.asarray(anchors, dtype=np.float64)
     at = np.unique(np.abs(downbeats[:, None] - anchors[None, :]).argmin(0)) if len(anchors) else np.zeros(0, int)
     start = np.concatenate([[0], at])[np.searchsorted(at, k, side="right")]
-    return (k - start) % PHRASE_BARS
+    return (k - start) % bars
 
 
 def score(downbeats: np.ndarray, beats: np.ndarray, anchors, stepping: np.ndarray, level: np.ndarray, bar: float):
@@ -213,20 +223,92 @@ def score(downbeats: np.ndarray, beats: np.ndarray, anchors, stepping: np.ndarra
     return at
 
 
+def arc(downbeats: np.ndarray, anchors, level: np.ndarray):
+    """The slow rise and fall they make together off the plane, as a function of time: -1
+    on a phrase's first downbeat, 1 on its third bar's, one glide from each to the next
+    (a phrase cut short holds where it is), as large as the song is full (`level`, at RATE).
+    Its cycle is a phrase, the breath's is two bars, so the figure a planet draws does not
+    come round every two bars."""
+    d = np.asarray(downbeats, dtype=np.float64)
+    place = phrase_bars(d, anchors)
+    kt, kv = d[place % 2 == 0], np.where(place[place % 2 == 0] == 0, -1.0, 1.0)
+    frames = np.arange(len(level), dtype=np.float64)
+
+    def at(t):
+        t = np.asarray(t, dtype=np.float64)
+        if len(kt) < 2:
+            return np.zeros_like(t)
+        k = np.clip(np.searchsorted(kt, t, side="right") - 1, 0, len(kt) - 2)
+        u = np.clip((t - kt[k]) / (kt[k + 1] - kt[k]), 0.0, 1.0)
+        return np.interp(t * RATE, frames, level) * (kv[k] + (kv[k + 1] - kv[k]) * ease.EASE_IN(u))
+    return at
+
+
+# ---- the belts ----------------------------------------------------------------------------------
+# The asteroid belt and the Kuiper belt dance the score as a planet does, out and in, as the
+# heaviest bodies there are: each is taken to weigh half as much again as Jupiter, and given
+# the temperament that size would give a planet. Each goes as far as the planet just inside
+# it does (that planet's GAP), so at the same dial it keeps its distance from it: Mars does
+# not lean into the asteroid belt, nor Neptune into the Kuiper belt. (The belt's own room -
+# its width, or the mean of its distances to the orbits either side - left Mars a thousandth
+# of the frame inside it.)
+BELT_MID = np.array([orrery.displayed(lo) + orrery.displayed(hi) for lo, hi in orrery.BELTS]) / 2   # beyond Mercury's orbit
+BELT_ROOM = np.array([GAP[np.flatnonzero(orrery.MEAN_STEP < m)[-1]] for m in BELT_MID])  # Mars's and Neptune's
+BELT_SIZE = 1.5 * orrery.SIZE.max()
+BELT_FREQ = 3.0 * (orrery.SIZE.min() / BELT_SIZE) ** 0.75                                # 0.81 Hz, as FREQ has it
+BELT_DAMP = 0.52 + 0.26 * (BELT_SIZE - orrery.SIZE.min()) / (orrery.SIZE.max() - orrery.SIZE.min())   # 0.96, as DAMP has it
+BELT_SWELL = 0.5                 # how much larger a rock stands as a full kick's pull passes it
+
+
+def belts(gesture, n: int, breathe: float) -> np.ndarray:
+    """How far each belt leans out (+) or in, every rock of it together, in scene units at
+    the home distance (n x 2): the score, read as late as the pull reaches the belt's middle
+    and as early as its spring lags, followed through its spring, as far as `breathe` of its room."""
+    out = np.zeros((n, len(BELT_MID)))
+    if gesture is None or not breathe:
+        return out
+    dt, w = 1.0 / RATE, 2 * np.pi * BELT_FREQ
+    read = np.arange(n) * dt
+    for b, mid in enumerate(BELT_MID):
+        target = breathe * BELT_ROOM[b] * gesture(read - (0.255 + mid - R_MEAN[0]) / orrery.PULL_SPEED + 2 * BELT_DAMP / w)[0]
+        x, v = 0.0, 0.0
+        for k in range(n):
+            v += dt * (-2 * BELT_DAMP * w * v - w ** 2 * (x - target[k]))
+            x += dt * v
+            out[k, b] = x
+    return out
+
+
+def _hops(push: np.ndarray, high: np.ndarray) -> np.ndarray:
+    """Every planet off the plane: a damped spring tied to its neighbours (semi-implicit Euler),
+    pushed by `push` (velocity per sample) and drawn toward `high` (both n x N)."""
+    dt, w = 1.0 / RATE, 2 * np.pi * FREQ
+    hop, y, vy = np.zeros_like(push), np.zeros(N), np.zeros(N)
+    for k in range(len(push)):
+        ny = np.concatenate([[y[0]], y, [y[-1]]])
+        cy = COUPLING * w ** 2 * (ny[:-2] + ny[2:] - 2 * y)
+        vy += dt * (-2 * DAMP * w * vy - w ** 2 * (y - high[k]) + cy) + push[k]
+        y += dt * vy
+        hop[k] = y
+    return hop
+
+
 def simulate(notes: list[tuple[np.ndarray, np.ndarray]], kicks: tuple[np.ndarray, np.ndarray],
              strikes: list[tuple[float, int, float]], downbeats: np.ndarray, grid: np.ndarray,
              n: int, bar: float, find_threshold, rings_every_bars: float = 1.5, gesture=None,
              breathe: float = 0.0, sway: float = 0.0, kick_pull: float = 1.0, accents: float = 0.0,
-             orbit_speed: np.ndarray | None = None) -> dict:
+             orbit_speed: np.ndarray | None = None, arc=None, rise: float = 0.0, fronts=None) -> dict:
     """Run the eight bodies through the song. `notes[i]` are planet i's (times, sizes);
     `strikes` are (arrival time, planet, size) of flares; `grid` is the lattice a ring may
     be thrown on. `gesture` is the score (`score`), danced as far as `breathe` and `sway`
     say; `orbit_speed` (scene units a second, each planet's slowest along its orbit) is what
-    sway may not take back. Returns the channels, and what was decided (rings, restless
-    moments)."""
+    sway may not take back. `arc` (`arc`) is how high they stand off the plane together, as
+    far as `rise` says. `fronts`, given how far each planet leans (n x N), says when a wave
+    reaches each and how high it throws it: for each planet (times, tops in its radii).
+    Returns the channels, and what was decided (rings, restless moments)."""
     dt = 1.0 / RATE
     w = 2 * np.pi * FREQ
-    r_mean = 0.255 + orrery.MEAN_STEP
+    r_mean = R_MEAN
     radius = orrery.SIZE
     stand_out = [accented(t, a, downbeats) for t, a in notes]
 
@@ -274,26 +356,29 @@ def simulate(notes: list[tuple[np.ndarray, np.ndarray]], kicks: tuple[np.ndarray
     # the score: each planet reads it as late as it travels out from the Sun, and as early as
     # its own spring lags a slow gesture, so that it arrives on time
     along = np.zeros((n, N))
-    if gesture is not None and breathe > 0:
-        read = np.arange(n) * dt
-        for i in range(N):
-            out_i, along_i = gesture(read - (r_mean[i] - r_mean[0]) / orrery.PULL_SPEED + 2 * DAMP[i] / w[i])
+    high = np.zeros((n, N))                     # where each would stand off the plane, left to the arc alone
+    read = np.arange(n) * dt
+    for i in range(N):
+        early = read - (r_mean[i] - r_mean[0]) / orrery.PULL_SPEED + 2 * DAMP[i] / w[i]
+        if gesture is not None and breathe > 0:
+            out_i, along_i = gesture(early)
             pull[:, i] += breathe * GAP[i] * out_i
             along[:, i] = sway * breathe * GAP[i] * along_i
+        if arc is not None and rise > 0:
+            high[:, i] = rise * GAP[i] * arc(early) * (MERCURY_UP if i == 0 else 1.0)
 
     # ---- the bodies: two damped springs each, coupled along the chain (semi-implicit Euler), --------
-    # and a third for the sway along the orbit, on its own
-    lean, hop, ahead = np.zeros((n, N)), np.zeros((n, N)), np.zeros((n, N))
-    x, vx, y, vy, z, vz = np.zeros(N), np.zeros(N), np.zeros(N), np.zeros(N), np.zeros(N), np.zeros(N)
+    # and a third for the sway along the orbit, on its own. In the plane first, since where a
+    # planet leans says when a wave reaches it; then off it.
+    lean, ahead = np.zeros((n, N)), np.zeros((n, N))
+    x, vx, z, vz = np.zeros(N), np.zeros(N), np.zeros(N), np.zeros(N)
     swayed = along.any()
     for k in range(n):
-        nx = np.concatenate([[x[0]], x, [x[-1]]]); ny = np.concatenate([[y[0]], y, [y[-1]]])
+        nx = np.concatenate([[x[0]], x, [x[-1]]])
         cx = COUPLING * w ** 2 * (nx[:-2] + nx[2:] - 2 * x)
-        cy = COUPLING * w ** 2 * (ny[:-2] + ny[2:] - 2 * y)
         vx += dt * (-2 * DAMP * w * vx - w ** 2 * (x - pull[k]) + cx) + throw[k]
-        vy += dt * (-2 * DAMP * w * vy - w ** 2 * y + cy) + push[k]
-        x += dt * vx; y += dt * vy
-        lean[k], hop[k] = x, y
+        x += dt * vx
+        lean[k] = x
         if swayed:
             vz += dt * (-2 * DAMP * w * vz - w ** 2 * (z - along[k]))
             z += dt * vz
@@ -303,6 +388,16 @@ def simulate(notes: list[tuple[np.ndarray, np.ndarray]], kicks: tuple[np.ndarray
         # it: softly, with no corner
         room = MERCURY_IN * orrery.PULL
         lean[:, 0] = np.where(lean[:, 0] < 0, -room * np.tanh(-lean[:, 0] / room), lean[:, 0])
+    if fronts is not None:
+        # a wave: pushed as an accent is, early by as long as the planet takes to top out - tied
+        # to its neighbours, which stiffen it, so sooner than `_answer` says
+        for i, (ft, fa) in enumerate(fronts(lean)):
+            one = np.zeros((int(3 * RATE), N))
+            one[:, i] = _impulses([1.0], [1.0], len(one), ACCENT_PUSH)
+            alone = _hops(one, np.zeros_like(one))[:, i]
+            top = int(np.argmax(alone))
+            push[:, i] += radius[i] / alone[top] * _impulses(np.asarray(ft) - (top / RATE - 1.0), fa, n, ACCENT_PUSH)
+    hop = _hops(push, high)
     if swayed and orbit_speed is not None:
         # it slows and it surges, and never goes back: where sway would take back more than
         # AHEAD of a planet's own speed along its orbit, the whole of its sway is made smaller

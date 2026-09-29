@@ -87,8 +87,8 @@ N_FLARE = 2           # flares in flight: the corona's discharges
 # (inner edge beyond Mercury's orbit, lane width, lanes). The asteroids lie from 2.1 to 3.3 AU
 # in three lanes - the gaps between them are Kirkwood's, swept clear by Jupiter; the Kuiper
 # belt from 39 to 48 AU.
-BELTS = ((float(orrery.displayed(2.1)), float(orrery.displayed(3.3) - orrery.displayed(2.1)) / 3, 3),
-         (float(orrery.displayed(39.0)), float(orrery.displayed(48.0) - orrery.displayed(39.0)) / 2, 2))
+BELTS = tuple((float(orrery.displayed(lo)), float(orrery.displayed(hi) - orrery.displayed(lo)) / lanes, lanes)
+              for (lo, hi), lanes in zip(orrery.BELTS, (3, 2)))
 
 
 def _scalars(prefix: str, count: int, suffix: str = "") -> str:
@@ -169,6 +169,11 @@ uniform float uPlutoPh, uPlutoD, uPlutoZ;
 {_scalars("uFlareK", N_FLARE)}
 uniform float uCharge;             // the corona's charge, 0..1: at 1 the next bass note on a beat discharges it
 uniform float uBrace;              // the bar before a re-entry: 0 -> 1, and gone on the downbeat
+uniform float uNearDance;          // 0: in a close shot a body's dance is scaled to the frame; 1: to the body as it is seen
+uniform float uBeltLean0, uBeltLean1;      // how far each belt leans out (+) or in, scene units (`dance.belts`)
+uniform float uBeltSwell0, uBeltSwell1;    // how much larger its rocks stand as a kick's pull passes through it
+uniform float uSky;                // the sky's breath with the phrase, -1..1: how far the stars stand out from the middle of the frame
+uniform float uTrailRise;          // 1 where the planets rise and fall together: a planet's trail rises with it
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
@@ -286,6 +291,13 @@ vec2 lensed(vec2 at, vec2 sun, float a1, float r1, float a2, float r2) {{
 // toward the viewer; e and c are the sine and cosine of the camera's height over the plane.
 vec3 toView(vec3 w, float e, float c) {{ return vec3(w.x, w.y * e + w.z * c, -w.y * c + w.z * e); }}
 vec3 fromView(vec3 v, float e, float c) {{ return vec3(v.x, v.y * e - v.z * c, v.y * c + v.z * e); }}
+// The direction in the sky a point of the (unrolled) frame looks along, through the sky's lens:
+// world, x the vernal equinox, y ecliptic north
+vec3 skyDir(vec2 ps, float lens, float e, float c) {{
+    vec3 d = fromView(normalize(vec3(ps, -lens)), e, c);             // (u, v, up), in the camera's turned frame
+    vec2 w = rot2(-uCamTurn) * d.xy;
+    return vec3(w.x, d.z, w.y);
+}}
 
 // A circle of radius R lying in the plane, about a point whose screen offset from this
 // pixel is dq: coverage of a line `halfPx` pixels wide along it. The plane is
@@ -375,6 +387,50 @@ vec3 surface(int i, float lat, vec3 q, float w) {{
     return mix(c, vec3(0.10, 0.20, 0.60), 1.0 - edge(0.90, length(vec2(atan(q.z, q.x) / 0.45, (lat + 0.32) / 0.12)), 7.0 * w));
 }}
 
+// A texel of the star texture, unpacked (see sky.build_deep): what it is, and how bright
+void unpack(float w, out float grp, out float nearD, out float cls, out float mag) {{
+    grp = floor(w / 10000.0); w -= 10000.0 * grp;
+    nearD = floor(w / 1000.0); w -= 1000.0 * nearD;
+    cls = floor(w / 100.0);
+    mag = w - 100.0 * cls - 2.0;
+}}
+
+// ---- the deep sky: clusters, nebulae, galaxies, remnants - flat, hard-edged, each at its true
+// size on the sky (nothing under three and a half pixels), the faintest things there are. `d` is
+// this pixel's offset from the object in output pixels; `h` the object's own hash.
+vec3 deepSky(vec3 col, vec2 d, float h, float grp, float nearD, float mag, float lens, float resY, float starGain) {{
+    float rp = max(DEEP_SIZE[int(grp)] * lens * resY, 3.5);
+    if (abs(d.x) > rp + 2.0 || abs(d.y) > rp + 2.0) return col;
+    vec2 dr = rot2(TAU * h) * d;
+    float bright = (0.45 + 0.055 * (mag + 2.0)) * starGain;
+    int kind = int(nearD);
+    if (kind == 0) {{                                        // a galaxy: a tilted oval of far light, and its core
+        float el = length(vec2(dr.x, dr.y / (0.34 + 0.4 * fract(h * 7.0))));
+        col = mix(col, vec3(0.62, 0.66, 0.86), disc(el, rp) * 0.26 * bright);
+        col = mix(col, vec3(0.90, 0.88, 0.92), disc(el, 0.30 * rp) * 0.55 * bright);
+    }} else if (kind == 1) {{                                 // an open cluster: a handful of young blue stars
+        for (int j = 0; j < 7; j++) {{
+            vec2 at = (hash22(vec2(h * 91.0, float(j) * 3.7)) - 0.5) * 1.5 * rp;
+            col = mix(col, vec3(0.78, 0.86, 1.0), disc(length(dr - at), 0.95 + 0.7 * hash11(float(j) + h * 9.0)) * 0.80 * bright);
+        }}
+    }} else if (kind == 2) {{                                 // a globular cluster: old light, packed to a core
+        col = mix(col, vec3(0.98, 0.90, 0.72), disc(length(d), rp) * 0.22 * bright);
+        col = mix(col, vec3(1.0, 0.94, 0.80), disc(length(d), 0.42 * rp) * 0.70 * bright);
+    }} else if (kind == 3) {{                                 // a nebula: a cloud of glowing hydrogen, ragged-edged
+        float cloud = soft(vec3(dr / rp * 1.6, h * 9.0)) - 0.55 * length(dr) / rp;
+        col = mix(col, vec3(0.70, 0.26, 0.38), edge(0.10, cloud, 0.06) * 0.42 * bright);
+        col = mix(col, vec3(0.92, 0.50, 0.58), edge(0.34, cloud, 0.06) * 0.50 * bright);
+    }} else if (kind == 4) {{                                 // a planetary nebula: a small ring, and the star that threw it
+        col = mix(col, vec3(0.42, 0.88, 0.80), disc(abs(length(d) - rp), 1.0) * 0.85 * bright);
+        col = mix(col, vec3(1.0, 0.985, 0.95), disc(length(d), 0.9) * 0.8 * bright);
+    }} else {{                                                // a supernova remnant: what is left of the shell, in pieces
+        float gap = step(0.42, soft(vec3(normalize(dr + 1e-5) * 2.3, h * 5.0)));
+        col = mix(col, vec3(0.70, 0.90, 1.0), disc(abs(length(d) - rp), 1.0) * gap * 0.80 * bright);
+        col = mix(col, vec3(0.95, 0.60, 0.50), disc(abs(length(d) - 0.62 * rp), 0.8) * (1.0 - gap) * 0.50 * bright);
+    }}
+    return col;
+}}
+
 // Cel shading: a lit tone, a half tone, and a shadow that keeps its colour. `w` is a
 // pixel's worth of N.L, so the terminator is a pixel soft whatever the planet's size.
 vec3 cel(vec3 day, float ndl, float rimness, vec3 shade, float w) {{
@@ -429,9 +485,7 @@ void main() {{
     // ---- the sky: the one thing seen through a lens, because it is infinitely far --------
     float lens = SKY_LENS / pow(spanWide, 0.18) * mix(1.0, 9.0 / 16.0, uTall);   // it answers a zoom a little, as far things do
     vec2 ps = rot2(-uCamRoll) * p;
-    vec3 dPlane = fromView(normalize(vec3(ps, -lens)), e, c);         // (u, v, up), in the camera's turned frame
-    vec2 uvW = rot2(-uCamTurn) * dPlane.xy;
-    vec3 rd = vec3(uvW.x, dPlane.z, uvW.y);                           // world: x vernal equinox, y ecliptic north
+    vec3 rd = skyDir(ps, lens, e, c);
 
     // The sky answers two things. A kick is mass, and mass bends light: a ripple leaves
     // the Sun and every star it passes is pushed outward a few pixels and let back - the
@@ -466,15 +520,23 @@ void main() {{
 
     float starGain = min((0.50 + 0.50 * uStars) * skyGain, 1.0);
     vec2 uvO = octEncode(rd);
+    // The sky breathes with the phrase (`uSky`), in layers: the catalogue's stars stand further
+    // out from the middle of the frame, or nearer it, by up to 1.2 percent of where they are;
+    // the faint field, further off, by a third of that. The Milky Way and the deep sky stay
+    // where they are. A layer is looked up once, where this pixel was before it moved, and
+    // drawn where it has moved to: so each star keeps its size and its hard edge.
+    float growC = 1.0 + 0.012 * uSky, growF = 1.0 + 0.004 * uSky;
+    vec2 uvC = uvO, uvF = uvO;                                        // where this pixel was, for each layer, before it moved
+    if (uSky != 0.0) {{ uvC = octEncode(skyDir(ps / growC, lens, e, c)); uvF = octEncode(skyDir(ps / growF, lens, e, c)); }}
     {{
         // the stars too faint for the catalogue: a hashed field, crowded where the galaxy
         // is - each one's existence decided where *it* is, not where the pixel is
         const float FAINT = 300.0;
-        vec2 cell = floor(uvO * FAINT);
+        vec2 cell = floor(uvF * FAINT);
         vec3 fd = octDecode((cell + 0.25 + 0.5 * hash22(cell + 0.37)) / FAINT);
         if (hash12(cell + 4.1) < 0.80 * galaxy(fd) - 0.06) {{                    // (only in the Milky Way: its unresolved stars. Everywhere else the stars are the catalogue's.)
             vec3 fv = toView(vec3(rot2(uCamTurn) * fd.xz, fd.y), e, c);
-            vec2 at = lensed(rot2(uCamRoll) * fv.xy / max(-fv.z, 1e-3) * lens, sunP, 0.7 * lensKA, lensKR, 0.5 * lensDA, lensDR);
+            vec2 at = lensed(rot2(uCamRoll) * fv.xy / max(-fv.z, 1e-3) * lens * growF, sunP, 0.7 * lensKA, lensKR, 0.5 * lensDA, lensDR);
             float dPx = length(p - at) * resY;
             col = mix(col, vec3(0.82, 0.86, 0.96), disc(dPx, 1.05) * min((0.22 + 0.26 * hash12(cell + 2.2)) * (1.0 + 0.6 * opened), 1.0) * starGain * step(fv.z, 0.0));
         }}
@@ -486,54 +548,28 @@ void main() {{
         // star is a little larger and crisper, takes its glints at a fainter magnitude, and
         // shifts against the far ones as the camera goes round (slightly - this is art).
         // A constellation breathes together: its stars take the same turn of the hats.
+        // A star is listed in every cell of the sky its drawing can reach. The stars are looked
+        // for in the cell this pixel was in before they moved (sb); the deep sky, which has not
+        // moved, in this pixel's own (sc). Where the two differ - near a cell's edge, as the sky
+        // breathes - sc is looked in again, for the deep sky alone: it is listed ahead of every
+        // star fainter than magnitude 3.5, so that look is a short one.
         ivec2 sc = min(ivec2(uvO * float(STAR_GRID)), ivec2(STAR_GRID - 1));
+        ivec2 sb = min(ivec2(uvC * float(STAR_GRID)), ivec2(STAR_GRID - 1));
         vec3 eye = vec3(0.0, -c, e);                                   // where the camera stands, in its own turned frame
         for (int k = 0; k < STAR_PER_CELL; k++) {{
-            vec4 s = texelFetch(uStarTex, ivec2(sc.x * STAR_PER_CELL + k, sc.y), 0);
+            vec4 s = texelFetch(uStarTex, ivec2(sb.x * STAR_PER_CELL + k, sb.y), 0);
             if (dot(s.xyz, s.xyz) < 0.5) break;
-            float w_ = s.w;
-            float grp = floor(w_ / 10000.0); w_ -= 10000.0 * grp;
-            float nearD = floor(w_ / 1000.0); w_ -= 1000.0 * nearD;
-            float cls = floor(w_ / 100.0);
-            float mag = w_ - 100.0 * cls - 2.0;
+            float grp, nearD, cls, mag;
+            unpack(s.w, grp, nearD, cls, mag);
             vec3 dT = vec3(rot2(uCamTurn) * s.xz, s.y);
             if (cls < 8.5) dT = normalize(dT - PARALLAX * (nearD / 9.0) * eye);
+            else if (sb != sc) continue;
             vec3 sv = toView(dT, e, c);
             if (sv.z > -0.2) continue;
-            vec2 d = (p - lensed(rot2(uCamRoll) * sv.xy / (-sv.z) * lens, sunP, lensKA, lensKR, lensDA, lensDR)) * resY;   // output pixels from it
+            vec2 d = (p - lensed(rot2(uCamRoll) * sv.xy / (-sv.z) * lens * (cls > 8.5 ? 1.0 : growC), sunP, lensKA, lensKR, lensDA, lensDR)) * resY;   // output pixels from it
             float h = hash12(s.xz * 91.7 + s.y * 13.1);
             if (cls > 8.5) {{
-                // ---- the deep sky: clusters, nebulae, galaxies, remnants - flat, hard-edged, each at
-                // its true size on the sky (nothing under three and a half pixels), the faintest things there are
-                float rp = max(DEEP_SIZE[int(grp)] * lens * resY, 3.5);
-                if (abs(d.x) > rp + 2.0 || abs(d.y) > rp + 2.0) continue;
-                vec2 dr = rot2(TAU * h) * d;
-                float bright = (0.45 + 0.055 * (mag + 2.0)) * starGain;
-                int kind = int(nearD);
-                if (kind == 0) {{                                        // a galaxy: a tilted oval of far light, and its core
-                    float el = length(vec2(dr.x, dr.y / (0.34 + 0.4 * fract(h * 7.0))));
-                    col = mix(col, vec3(0.62, 0.66, 0.86), disc(el, rp) * 0.26 * bright);
-                    col = mix(col, vec3(0.90, 0.88, 0.92), disc(el, 0.30 * rp) * 0.55 * bright);
-                }} else if (kind == 1) {{                                 // an open cluster: a handful of young blue stars
-                    for (int j = 0; j < 7; j++) {{
-                        vec2 at = (hash22(vec2(h * 91.0, float(j) * 3.7)) - 0.5) * 1.5 * rp;
-                        col = mix(col, vec3(0.78, 0.86, 1.0), disc(length(dr - at), 0.95 + 0.7 * hash11(float(j) + h * 9.0)) * 0.80 * bright);
-                    }}
-                }} else if (kind == 2) {{                                 // a globular cluster: old light, packed to a core
-                    col = mix(col, vec3(0.98, 0.90, 0.72), disc(length(d), rp) * 0.22 * bright);
-                    col = mix(col, vec3(1.0, 0.94, 0.80), disc(length(d), 0.42 * rp) * 0.70 * bright);
-                }} else if (kind == 3) {{                                 // a nebula: a cloud of glowing hydrogen, ragged-edged
-                    float cloud = soft(vec3(dr / rp * 1.6, h * 9.0)) - 0.55 * length(dr) / rp;
-                    col = mix(col, vec3(0.70, 0.26, 0.38), edge(0.10, cloud, 0.06) * 0.42 * bright);
-                    col = mix(col, vec3(0.92, 0.50, 0.58), edge(0.34, cloud, 0.06) * 0.50 * bright);
-                }} else if (kind == 4) {{                                 // a planetary nebula: a small ring, and the star that threw it
-                    col = mix(col, vec3(0.42, 0.88, 0.80), disc(abs(length(d) - rp), 1.0) * 0.85 * bright);
-                    col = mix(col, white, disc(length(d), 0.9) * 0.8 * bright);
-                }} else {{                                                // a supernova remnant: what is left of the shell, in pieces
-                    float gap = step(0.42, soft(vec3(normalize(dr + 1e-5) * 2.3, h * 5.0)));
-                    col = mix(col, vec3(0.70, 0.90, 1.0), disc(abs(length(d) - rp), 1.0) * gap * 0.80 * bright);
-                    col = mix(col, vec3(0.95, 0.60, 0.50), disc(abs(length(d) - 0.62 * rp), 0.8) * (1.0 - gap) * 0.50 * bright);
-                }}
+                col = deepSky(col, d, h, grp, nearD, mag, lens, resY, starGain);
                 continue;
             }}
             if (abs(d.x) > 26.0 || abs(d.y) > 26.0) continue;
@@ -550,6 +586,20 @@ void main() {{
                 a = max(a, max(disc(abs(d.y), 0.85) * disc(abs(d.x), reach), disc(abs(d.x), 0.85) * disc(abs(d.y), reach)));
             }}
             col = mix(col, starColour(cls), a * clamp(1.12 - 0.125 * mag + 0.10 * close + 0.3 * lift, 0.26, 1.0) * starGain);
+        }}
+        for (int k = 0; k < STAR_PER_CELL && sb != sc; k++) {{
+            vec4 s = texelFetch(uStarTex, ivec2(sc.x * STAR_PER_CELL + k, sc.y), 0);
+            if (dot(s.xyz, s.xyz) < 0.5) break;
+            float grp, nearD, cls, mag;
+            unpack(s.w, grp, nearD, cls, mag);
+            if (cls < 8.5) {{
+                if (mag > 3.6) break;
+                continue;
+            }}
+            vec3 sv = toView(vec3(rot2(uCamTurn) * s.xz, s.y), e, c);
+            if (sv.z > -0.2) continue;
+            vec2 d = (p - lensed(rot2(uCamRoll) * sv.xy / (-sv.z) * lens, sunP, lensKA, lensKR, lensDA, lensDR)) * resY;
+            col = deepSky(col, d, hash12(s.xz * 91.7 + s.y * 13.1), grp, nearD, mag, lens, resY, starGain);
         }}
     }}
 
@@ -653,8 +703,10 @@ void main() {{
     // The planets are bodies (`dance`): how far each leans toward the Sun or away, and how far
     // it has hopped off the plane, are simulated - springs, driven by its notes, by the Sun's
     // pull (inverse-square, and it travels) and by its neighbours. In a close shot the
-    // movement is scaled down, so it is the same small movement on screen.
-    float pullGain = clamp(spanWide, 0.0, 1.0);
+    // movement is scaled down, so it is the same small movement on screen - or, with
+    // `uNearDance`, less so: by the square root of the zoom, so that close to it a planet
+    // dances as large as it is seen. (The belts' lean, and Pluto's with them, the same.)
+    float pullGain = mix(clamp(spanWide, 0.0, 1.0), sqrt(clamp(spanWide, 0.0, 1.0)), uNearDance);
     float pingT[N_PLANETS] = {_gather("uPingT", N_PLANETS)};
     float pingA[N_PLANETS] = {_gather("uPingA", N_PLANETS)};
     float pLean[N_PLANETS] = {_gather("uLean", N_PLANETS)};
@@ -672,32 +724,49 @@ void main() {{
     float underA = 0.0, overA = 0.0;
 
     // ---- belts: the asteroids between Mars and Jupiter, and the Kuiper belt ---------------------
+    // They dance too, as the heaviest bodies there are: each leans out and in with the score,
+    // every rock of it together (uBeltLean0 and 1, sized for the frame as a planet's lean is);
+    // and as a kick's pull passes through a belt its rocks stand larger for a moment (uBeltSwell0
+    // and 1). A rock is looked for in the lane this pixel is in; one that stands larger can
+    // reach over its lane's edge, and near the edge the lane beside is looked in too.
+    float beltLean[2] = float[2](uBeltLean0, uBeltLean1);
+    float beltSwell[2] = float[2](uBeltSwell0, uBeltSwell1);
     for (int bI = 0; bI < 2; bI++) {{
         float inner = a0 + (bI == 0 ? BELT0.x : BELT1.x), laneW = bI == 0 ? BELT0.y : BELT1.y;
-        float li = floor((rhoW / tug - inner) / laneW);
-        if (li < 0.0 || li >= (bI == 0 ? BELT0.z : BELT1.z)) continue;
-        float lr = inner + (li + 0.5) * laneW;
-        float count = floor((bI == 0 ? 40.0 : 44.0) + 9.0 * li);
-        float turn = uOrbitSlow * pow(0.250 / (lr - a0 + 0.250), 1.5) + uCamTurn / TAU;
-        float ci = floor(fract(thW / TAU - turn) * count);
-        vec2 id = vec2(ci, li + 11.0 + 26.0 * float(bI));
-        if (hash12(id) < (bI == 0 ? 0.34 : 0.50)) continue;
-        vec2 jit = hash22(id + 2.3) - 0.5;
-        float ang = TAU * ((ci + 0.5 + 0.5 * jit.x) / count + turn);
-        vec2 cp = (lr + 0.30 * laneW * jit.y) * tug * vec2(cos(ang), sin(ang));
-        vec2 dd = (q - vec2(cp.x, cp.y * e)) / pxScene;                // pixels from the rock
-        float glint = 0.6 * hatE[int(floor(hash12(id + 9.1) * 3.0))];   // a rock catches the light with its turn of the hats - eased
-        float sizePx = min(mix(bI == 0 ? 0.0022 : 0.0016, bI == 0 ? 0.0050 : 0.0032, hash12(id + 4.4)) * (1.0 + 0.9 * glint),
-                           0.30 * laneW * e * tug) / pxScene;
-        sizePx = max(sizePx, 1.15);
-        float spin = uBeats * (0.04 + 0.10 * hash12(id + 6.1)) * (hash12(id + 8.8) < 0.5 ? -1.0 : 1.0);
-        float lump = 0.80 + 0.20 * cos(3.0 * atan(dd.y, dd.x) + spin + TAU * hash12(id + 7.7));
-        float rock = disc(length(dd), sizePx * lump);
-        float lit = edge(-0.10, dot(normalize(dd + 1e-5), normalize(-vec2(cp.x, cp.y * e))), 1.2 / sizePx);
-        vec3 tone = vec3(0.62, 0.59, 0.57) * (0.80 + 0.25 * hash12(id + 3.3)) * sunlight * lum;
-        vec3 rk = mix(mix(tone * 0.26 + shade, white, 0.35 * glint), mix(tone, white, glint), lit);
-        if (cp.y > 0.0) {{ under = mix(under, rk, step(underA, rock)); underA = max(underA, rock); }}
-        else {{ over = mix(over, rk, step(overA, rock)); overA = max(overA, rock); }}
+        float leaned = pullGain * beltLean[bI], grow = 1.0 + beltSwell[bI];
+        float pos = ((rhoW - leaned) / tug - inner) / laneW;             // this pixel, in lanes
+        // A rock can reach past its lane's edge by 0.30 * grow - 0.35 of a lane (see sizePx): that near
+        // the edge, the lane beside is looked in too (only the nearer one: `dance.BELT_SWELL` is 0.5)
+        float f = fract(pos) - 0.5;
+        int lanes = abs(f) < 0.5 - max(0.30 * grow - 0.35, 0.0) ? 1 : 2;
+        for (int n = 0; n < lanes; n++) {{
+            float li = floor(pos) + (lanes == 2 && f < 0.0 ? -1.0 : 0.0) + float(n);   // (inner lane first)
+            if (li < 0.0 || li >= (bI == 0 ? BELT0.z : BELT1.z)) continue;
+            float lr = inner + (li + 0.5) * laneW;
+            float count = floor((bI == 0 ? 40.0 : 44.0) + 9.0 * li);
+            float turn = uOrbitSlow * pow(0.250 / (lr - a0 + 0.250), 1.5) + uCamTurn / TAU;
+            float ci = floor(fract(thW / TAU - turn) * count);
+            vec2 id = vec2(ci, li + 11.0 + 26.0 * float(bI));
+            if (hash12(id) < (bI == 0 ? 0.34 : 0.50)) continue;
+            vec2 jit = hash22(id + 2.3) - 0.5;
+            float ang = TAU * ((ci + 0.5 + 0.5 * jit.x) / count + turn);
+            vec2 cp = ((lr + 0.30 * laneW * jit.y) * tug + leaned) * vec2(cos(ang), sin(ang));
+            vec2 dd = (q - vec2(cp.x, cp.y * e)) / pxScene;                // pixels from the rock
+            float glint = 0.6 * hatE[int(floor(hash12(id + 9.1) * 3.0))];   // a rock catches the light with its turn of the hats - eased
+            // (never more than 0.30 of a lane, as the plane is foreshortened: with its offset of up
+            // to 0.15, it stays inside its lane, until it stands larger)
+            float sizePx = min(mix(bI == 0 ? 0.0022 : 0.0016, bI == 0 ? 0.0050 : 0.0032, hash12(id + 4.4)) * (1.0 + 0.9 * glint),
+                               0.30 * laneW * e * tug) / pxScene;
+            sizePx = max(sizePx, 1.15) * grow;
+            float spin = uBeats * (0.04 + 0.10 * hash12(id + 6.1)) * (hash12(id + 8.8) < 0.5 ? -1.0 : 1.0);
+            float lump = 0.80 + 0.20 * cos(3.0 * atan(dd.y, dd.x) + spin + TAU * hash12(id + 7.7));
+            float rock = disc(length(dd), sizePx * lump);
+            float lit = edge(-0.10, dot(normalize(dd + 1e-5), normalize(-vec2(cp.x, cp.y * e))), 1.2 / sizePx);
+            vec3 tone = vec3(0.62, 0.59, 0.57) * (0.80 + 0.25 * hash12(id + 3.3)) * sunlight * lum;
+            vec3 rk = mix(mix(tone * 0.26 + shade, white, 0.35 * glint), mix(tone, white, glint), lit);
+            if (cp.y > 0.0) {{ under = mix(under, rk, step(underA, rock)); underA = max(underA, rock); }}
+            else {{ over = mix(over, rk, step(overA, rock)); overA = max(overA, rock); }}
+        }}
     }}
 
     // ---- a comet, on a long ellipse: Kepler's equation, five Newton steps. Small and far off.
@@ -754,16 +823,20 @@ void main() {{
         // of height, and of how far it leans. Eight ovals' worth of trigonometry at every pixel was
         // a third of the frame.)
         float meanR = (a0 + ORBIT_STEP[i]) * tug;
-        float band = (1.2 * K_MAP * ORB_ECC[i] + (a0 + ORBIT_STEP[i]) * ORB_SINI[i] * c / e) * tug + max(PULL, abs(pulled)) + 4.0 * pxScene / e;
+        // When the planets rise and fall together (`uTrailRise`), a wake rises with its planet,
+        // most where it is newest: it bends up to the planet from the orbit it has left.
+        float lift = pullGain * pHop[i] * uTrailRise;
+        float band = (1.2 * K_MAP * ORB_ECC[i] + (a0 + ORBIT_STEP[i]) * ORB_SINI[i] * c / e) * tug + max(PULL, abs(pulled)) + 4.0 * pxScene / e + abs(lift) * c / e;
         if (abs(rhoW - meanR) < band) {{
             float lonPix = thW - uCamTurn;
             float rise = ORB_SINI[i] * sin(lonPix - ORB_NODE[i]);
             float rOrb = (a0 + K_MAP * (ORB_LOGP[i] - log(1.0 + ORB_ECC[i] * cos(lonPix - ORB_PERI[i])))) * tug - pulled;
             vec2 plT = vec2(plW.x, plW.y - rOrb * rise * c / e);
-            float rhoT = length(plT);
-            float behind = mod(th - atan(plT.y, plT.x), TAU);
+            float behind = mod(th - atan(plT.y - lift * c / e, plT.x), TAU);   // (how far behind the planet, where it has risen to)
             float reach = (0.32 + 0.95 * pow(0.250 / (ORBIT_STEP[i] + 0.250), 1.5)) * (0.60 + 0.40 * uHold);
             float fade = behind < reach ? pow(1.0 - behind / reach, 1.25) : 0.0;
+            plT.y -= lift * fade * c / e;
+            float rhoT = length(plT);
             float grad = length(vec2(plT.x, plT.y / e)) / max(rhoT, 1e-6);
             // it thins as it fades, as an inked line does: near the planet it is solid enough
             // to be the planet's colour and not the sky's seen through it
@@ -937,8 +1010,9 @@ void main() {{
 
     // ---- Pluto: small, far, and on an orbit like no planet's - tipped seventeen degrees and so
     // lopsided that at perihelion it is inside Neptune's. With Charon, half its size and close by.
+    // It leans out and in with the Kuiper belt.
     {{
-        float a = (a0 + uPlutoD) * tug;
+        float a = (a0 + uPlutoD) * tug + pullGain * uBeltLean1;
         float th = TAU * uPlutoPh + uCamTurn;
         vec3 sv = toView(vec3(a * cos(th), a * sin(th), a * uPlutoZ), e, c);
         vec2 dq = q - sv.xy;

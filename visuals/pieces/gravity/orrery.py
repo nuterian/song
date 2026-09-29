@@ -62,6 +62,7 @@ def rate(year: float | np.ndarray = YEAR) -> np.ndarray:
 
 SIZE = JUPITER_SIZE * (RADIUS / RADIUS[4]) ** 0.40
 MEAN_STEP = displayed(A)          # each planet's mean orbit, beyond Mercury's
+BELTS = ((2.1, 3.3), (39.0, 48.0))   # the asteroid belt and the Kuiper belt, from and to (AU)
 
 
 def kepler(mean: np.ndarray, ecc: float) -> np.ndarray:

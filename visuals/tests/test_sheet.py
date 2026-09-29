@@ -107,8 +107,26 @@ def test_the_dance_dials_at_their_defaults_change_nothing(gravity):
     assert all(not col(ch, f"uSway{i}").any() for i in range(8))
 
 
+WHOLE = {"planets_arc": 0.35, "near_dance": 1.0, "belts_breathe": 0.5, "sky_breathes": 1.0, "wave": 1.0}
+
+
+def test_the_whole_system_dials_at_their_defaults_change_nothing(gravity):
+    tr, got, ch, sh = gravity
+    danced = dict(sh, feel=dict(sh["feel"], **DANCE))
+    out = render.bake(got, tr, danced)
+    edit = copy.deepcopy(danced)
+    for k in WHOLE:
+        del edit["feel"][k]                                            # a sheet written before them
+    again = render.bake(got, tr, edit)
+    assert again.names == out.names and np.array_equal(again.data, out.data)
+    for c in (ch, out):                                                # the belts, the sky and the close shot are as they were
+        assert all(not col(c, name).any() for name in ("uBeltLean0", "uBeltLean1", "uBeltSwell0", "uBeltSwell1", "uSky", "uNearDance", "uTrailRise"))
+
+
 @pytest.mark.parametrize("dial,inside,outside", [("planets_breathe", 1.0, 1.2), ("planets_sway", 2.0, -0.1),
-                                                 ("kick_pull", 0.0, 1.6), ("accents", 0.5, 2.0)])
+                                                 ("kick_pull", 0.0, 1.6), ("accents", 0.5, 2.0),
+                                                 ("planets_arc", 1.0, 1.1), ("near_dance", 0.5, -0.1),
+                                                 ("belts_breathe", 0.0, 1.5), ("sky_breathes", 1.0, 2.0), ("wave", 0.3, -1.0)])
 def test_the_dance_dials_are_taken_in_their_range_and_refused_outside_it(gravity, dial, inside, outside):
     tr, got, ch, sh = gravity
     assert sheet_.validate(dict(sh, feel=dict(sh["feel"], **{dial: inside})), got) == []
@@ -166,6 +184,64 @@ def test_the_planets_dance_together_smoothly_clear_of_the_sun_and_never_backward
         assert abs(int(np.argmax(score[i - h:i + h] * np.sign(v[1] - v[0]))) - h) <= 0.030 * 120, downs[k]
         turns += 1
     assert turns > 0.8 * len(downs)
+
+
+def test_the_whole_system_dances_smoothly_clear_of_itself_and_the_wave_runs_outward(gravity):
+    from visuals.pieces.gravity import cosmos, dance, follow, orrery
+    from visuals.pieces.gravity import shader_cosmos as sc
+
+    tr, got, ch, sh = gravity
+    whole = dict(sh, feel=dict(sh["feel"], **DANCE, **WHOLE))
+    out = render.bake(got, tr, whole)
+    for name in [f"{k}{i}" for k in ("uLean", "uHop", "uSway") for i in range(8)] + ["uBeltLean0", "uBeltLean1", "uBeltSwell0", "uBeltSwell1", "uSky"]:
+        x = col(out, name)
+        assert np.ptp(x) > 0, name                                                       # it moves
+        assert np.abs(np.diff(x)).max() < 0.25 * np.ptp(x), name                          # nothing jumps
+        assert np.abs(np.diff(x, 2)).max() < 0.09 * np.ptp(x), name                       # and nothing has a corner in it
+    near = col(out, "uNearDance")
+    for mode in cosmos.MODES:
+        j = follow.jolt(out, mode)
+        assert j["planet_speed_peak"] < 1.0 and j["planet_speed_p99"] < 0.30, (mode, j)  # the bounds of test_no_camera_jolts
+        assert _clearance(out, mode) >= _clearance(ch, mode), mode                       # Mercury is no nearer the Sun than it was
+        e = np.clip(col(out, f"uCamTilt.{mode}"), 0.20, 0.98)
+        a0, tug, g = np.maximum(0.255, 0.156 / e), col(out, f"uSpreadSlow.{mode}"), np.clip(col(out, f"uCamSpan.{mode}"), 0.0, 1.0)
+        gain = g * (1.0 - near) + np.sqrt(g) * near                                      # the shader's pullGain
+        for i in range(8):                                                               # each planet goes on round, never back
+            a = (a0 + col(out, f"uPd{i}")) * tug + gain * col(out, f"uLean{i}")
+            th = 2 * np.pi * col(out, f"uPh{i}") + gain * col(out, f"uSway{i}") / np.maximum(a, 0.05)
+            assert np.diff(th).min() > 0, (mode, i)
+        # Mars's disc stays out of the asteroid belt, in the plane
+        mars = (a0 + col(out, "uPd3")) * tug + gain * col(out, "uLean3") + sc.PLANET_SIZE[3] * (1.0 + 0.22 * col(out, "uBig3"))
+        assert ((a0 + sc.BELTS[0][0]) * tug + gain * col(out, "uBeltLean0") - mars).min() > 0, mode
+    # The wave, alone (the hops are springs: less the same without it): on a re-entry each
+    # planet tops out as the shock's front reaches it where the shader draws the two of them,
+    # from the home camera; at every other phrase's start, and every section's, as a kick's
+    # pull would - one after another outward, on time.
+    calm = render.bake(got, tr, dict(whole, feel=dict(whole["feel"], wave=0.0)))
+    n, bar = len(out.data), 4 * float(got["meta"]["period"])
+    t = np.arange(n) / 120.0
+    e = np.clip(col(out, "uCamTilt.static"), 0.20, 0.98)
+    a0, tug, gain = np.maximum(0.255, 0.156 / e), col(out, "uSpreadSlow.static"), np.sqrt(np.clip(col(out, "uCamSpan.static"), 0.0, 1.0))
+    sun = 0.078 * (0.5 + 0.8 * col(out, "uMass")) * (1.0 + 0.22 * col(out, "uSunPulse"))
+    downs = got["arrays"]["downbeats"].astype(np.float64)
+    drops = np.array([d["t"] for d in out.drops])
+    anchors = list(drops) + [s.start for s in out.sections]
+    silent = [(s.start, s.end) for s in out.sections if s.state == "silent"]
+    light = [d for d, k in zip(downs, dance.phrase_bars(downs, anchors, 8)) if k == 0 and np.abs(drops - d).min() > bar / 2
+             and not any(s0 <= d < s1 for s0, s1 in silent) and 1.0 < d < t[-1] - 2.0]     # (with room for its run-up and its fall)
+    assert len(light) > 5
+    wave = [col(out, f"uHop{i}") - col(calm, f"uHop{i}") for i in range(8)]
+    for d, shock in [(d, True) for d in drops] + [(d, False) for d in light]:
+        moments = []
+        for i in range(8):
+            if shock:
+                takes = (np.maximum((a0 + col(out, f"uPd{i}")) * tug + gain * col(out, f"uLean{i}") - sun, 0.0) / 0.60) ** (1 / 0.70)
+                k = np.arange(int(np.ceil(d * 120)), n)
+                moments.append(t[k[t[k] - d >= takes[k]][0]])
+            else:
+                moments.append(d + (dance.R_MEAN[i] - dance.R_MEAN[0]) / orrery.PULL_SPEED)
+        tops = np.array([(int((m - 0.4) * 120) + np.argmax(w[int((m - 0.4) * 120):int((m + 0.4) * 120)])) / 120 for m, w in zip(moments, wave)])
+        assert np.all(np.diff(tops) > 0) and np.abs(tops - moments).max() <= 0.030, (d, tops - moments)
 
 
 def test_lyrics_follow_the_sheet(gravity, tmp_path):

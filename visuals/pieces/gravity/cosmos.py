@@ -454,14 +454,66 @@ def bake(got: dict, mod: tuple[dict, dict] | None, sheet: dict | None = None) ->
     full = a["energy"].astype(np.float64)
     lo, hi = np.percentile(full[silent < 0.5] if (silent < 0.5).any() else full, [5, 95])
     level = ease.smooth((0.4 + 0.6 * np.clip((full - lo) / max(hi - lo, 1e-6), 0.0, 1.0)) * (1.0 - silent), bar)
-    gesture = dance.score(downbeats, beats, [d["t"] for d in ch.drops] + [s_.start for s_ in ch.sections or []],
-                          ease.smooth(hold, 2 * bar), level, bar)
+    anchors = [d["t"] for d in ch.drops] + [s_.start for s_ in ch.sections or []]
+    gesture = dance.score(downbeats, beats, anchors, ease.smooth(hold, 2 * bar), level, bar)
     # how fast each planet goes along its orbit, at the least it could be drawn: what sway may not take back
     along = np.gradient(lon, axis=0) * RATE * (0.255 + off) * np.minimum(spread, 1.0)[:, None]
+    # Where the Sun's waves meet what goes round it, as the shader draws them from the home
+    # distance: the Sun's limb, and how far out each orbit stands
+    sun_r = 0.078 * (0.50 + 0.80 * col["uMass"]) * (1.0 + 0.22 * extra["uSunPulse"][1])
+    a0_home = np.maximum(0.255, 0.156 / np.clip(tilt_s, 0.20, 0.98))
+    # A wave of hops runs out through the planets on an important moment. On a re-entry, as
+    # the shock's front reaches each planet (the shader's front: it is there when the planet's
+    # bow wave is), that planet's hop tops out: Mercury first, Neptune a second later. At the
+    # start of every other phrase, and of every section, that is not a re-entry, a lighter
+    # one, travelling out from the downbeat as a kick's pull does.
+    fronts = None
+    if feel["wave"]:
+        at_drop = np.abs(downbeats[:, None] - drop_t[None, :]).min(1) < bar / 2 if len(drop_t) else np.zeros(len(downbeats), bool)
+        light = downbeats[(dance.phrase_bars(downbeats, anchors, 2 * dance.PHRASE_BARS) == 0) & ~at_drop]
+        light = light[silent[np.minimum(np.round(light * RATE).astype(int), n - 1)] < 0.5]
+
+        def fronts(lean):
+            waves = []
+            for i in range(shader_cosmos.N_PLANETS):
+                takes = (np.maximum((a0_home + off[:, i]) * spread + lean[:, i] - sun_r, 0.0) / 0.60) ** (1.0 / 0.70)
+                met = []
+                for td in drop_t:
+                    k = np.arange(int(np.ceil(td * RATE)), min(int((td + 5.0) * RATE), n))
+                    k = k[t[k] - td >= takes[k]]
+                    met.append(t[k[0]] if len(k) else np.nan)
+                times = np.concatenate([met, light + (dance.R_MEAN[i] - dance.R_MEAN[0]) / orrery.PULL_SPEED])
+                tops = feel["wave"] * np.concatenate([dance.WAVE_HOP * np.clip(drop_a, 0.0, 1.0), np.full(len(light), dance.WAVE_LIGHT)])
+                ok = np.isfinite(times)
+                waves.append((times[ok], tops[ok]))
+            return waves
     danced = dance.simulate(planet_notes, (kt[strong], ka[strong]), strikes, downbeats, grid, n, bar, flares,
                             rings_every_bars=feel["planet_rings_every_bars"], gesture=gesture,
                             breathe=feel["planets_breathe"], sway=feel["planets_sway"], kick_pull=feel["kick_pull"],
-                            accents=feel["accents"], orbit_speed=along)
+                            accents=feel["accents"], orbit_speed=along,
+                            arc=dance.arc(downbeats, anchors, level), rise=feel["planets_arc"], fronts=fronts)
+    # The belts dance the score too (`dance.belts`); and as a kick's pull passes through a belt,
+    # its rocks stand larger for a moment - eased onto the moment the pull's front (the stars'
+    # ripple's, from the Sun's limb) reaches its middle. (Baked, a belt at a time: the shader
+    # knows only the last kick, and at 125 BPM the next one comes before the front is out as
+    # far as the Kuiper belt.)
+    belt_lean = dance.belts(gesture, n, feel["belts_breathe"])
+    k_at = np.minimum(np.round(kt[strong] * RATE).astype(int), n - 1)
+    for b in range(len(dance.BELT_MID)):
+        extra[f"uBeltLean{b}"] = (direct.LERP, belt_lean[:, b])
+        reach = (a0_home[k_at] + dance.BELT_MID[b]) * spread[k_at] - sun_r[k_at]
+        extra[f"uBeltSwell{b}"] = (direct.LERP, feel["belts_breathe"] * dance.BELT_SWELL
+                                   * ease.envelope(kt[strong] + reach / orrery.PULL_SPEED, np.clip(ka[strong], 0, 1), n, 0.10, 0.36)
+                                   if feel["belts_breathe"] else np.zeros(n))
+    # The sky answers the phrase: the score's slow part, with nothing of the beat left in it
+    # (a bar's box, twice), at 1 where the song swells furthest out. The shader moves the stars
+    # out from the middle of the frame by it, the nearest furthest.
+    slow = ease.smooth(gesture(t)[0], 2 * bar)
+    extra["uSky"] = (direct.LERP, feel["sky_breathes"] * slow / max(np.abs(slow).max(), 1e-9) if feel["sky_breathes"] else np.zeros(n))
+    # In a close shot a planet's dance is sized to the body, not only to the frame (the shader's
+    # pullGain); and where the planets rise and fall together, a planet's trail rises with it
+    extra["uNearDance"] = (direct.LERP, np.full(n, float(feel["near_dance"])))
+    extra["uTrailRise"] = (direct.LERP, np.full(n, 1.0 if feel["planets_arc"] > 0 else 0.0))
     ping_cols = []
     for i in range(shader_cosmos.N_PLANETS):
         for name in ("uLean", "uHop", "uSway", "uGlow", "uBig", "uSwing", "uSpin"):

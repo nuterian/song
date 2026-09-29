@@ -67,7 +67,12 @@
     "planets_breathe": 0.5,
     "kick_pull": 0.3,
     "accents": 1.0,
-    "planets_sway": 1.0
+    "planets_sway": 1.0,
+    "planets_arc": 0.35,
+    "near_dance": 1.0,
+    "belts_breathe": 0.5,
+    "sky_breathes": 1.0,
+    "wave": 1.0
   },
   "lyrics": {
     "show": true,

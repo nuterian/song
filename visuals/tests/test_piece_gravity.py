@@ -663,6 +663,27 @@ def test_an_accent_is_the_note_that_stands_out_in_its_bar_and_it_hops_higher_on_
             assert np.abs(np.diff(x)).max() < 0.25 * np.ptp(x) and np.abs(np.diff(x, 2)).max() < 0.09 * np.ptp(x)
 
 
+def test_they_rise_together_over_a_phrase_and_a_wave_tops_out_on_each_planet_in_turn():
+    # four beats to a bar, two seconds; a phrase begins at bar 0, and again at bar 5
+    downs, bar = np.arange(0.0, 40.0, 2.0), 2.0
+    n = int(40 * direct.RATE)
+    y = dance.arc(downs, [0.0, 10.0], np.ones(n))(np.arange(n) / direct.RATE)
+    at = lambda s: y[int(round(s * direct.RATE))]
+    assert [at(s) for s in (0.0, 4.0, 8.0, 10.0, 14.0)] == pytest.approx([-1, 1, -1, -1, 1])   # low on a phrase's first downbeat, high on its third bar's
+    assert at(2.0) == pytest.approx(0.0, abs=0.01) and at(6.0) == pytest.approx(0.0, abs=0.01)
+    assert np.abs(np.diff(y)).max() < 0.25 * np.ptp(y) and np.abs(np.diff(y, 2)).max() < 0.09 * np.ptp(y)
+    # a wave: each planet's hop tops out on its own moment, one after another outward, as high as its radius
+    n = int(12 * direct.RATE)
+    none = (np.zeros(0), np.zeros(0))
+    moments = 6.0 + 0.1 * np.arange(8)
+    out = dance.simulate([none] * 8, none, [], np.arange(0, 12, bar), np.arange(0, 12, 0.25), n, bar, cosmos.flares,
+                         fronts=lambda lean: [(np.array([m]), np.ones(1)) for m in moments])
+    hops = [out[f"uHop{i}"] for i in range(8)]
+    tops = np.array([np.argmax(h[int(5.0 * direct.RATE):int(8.0 * direct.RATE)]) / direct.RATE + 5.0 for h in hops])
+    assert np.all(np.diff(tops) > 0) and np.abs(tops - moments).max() < 0.030, tops - moments
+    assert [h.max() for h in hops] == pytest.approx(list(orrery.SIZE), rel=0.3)      # (and its neighbours' lift it a little: Jupiter's, Mars most)
+
+
 @pytest.mark.local
 def test_the_real_dance_is_smooth_every_planet_plays_and_rings_are_rare():
     got, ch = _real_cosmos()
