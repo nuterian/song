@@ -2049,3 +2049,26 @@ sheets.
 - Not yet: on a telephone, or in a browser other than a headless one; the wave's moments
   in the hybrid and cinematic cameras (they are reckoned for the static one's tilt); the
   comet, which answers nothing; the 58 channels the shader never reads.
+
+## What is sent is what is read (2026-09-28, late)
+
+A cosmos bake holds `direct`'s channels for the other styles' shaders, and ones it reads
+itself while baking (a note's time, the section's tilt), and all of them were sent: 277
+channels, of which the cosmos shader read 219. The player reads no channel by name but the
+camera's, which the shader also declares; everything that measures reads the bake in
+memory, never what is sent.
+
+- **The rule** (`render.shipped`): in the cosmos style a channel is sent if its name,
+  without a camera's suffix, is a uniform the shader declares. The other styles are sent
+  everything, as before. The 49 uniforms the shader declared and never used are gone from
+  it, so that declared is read; a test holds both halves.
+- **Measured.** Gravity's frames 3.59 MB to 3.02 (the dance of two rounds had taken them
+  from 3.30 to 3.59); Shattered Voices' 1.95 to 1.65. What the plain player is staged:
+  38.0 MB to 30.0.
+- **Nothing changes in the picture**: 36 frames at 1080p, two songs, three cameras, three
+  moments, drawn from the bake and from what is sent, before and after: not one level in
+  one pixel. In the browser, paused at the same moments, full and lean: the same, pixel
+  for pixel, with a camera changed, the words on, and the frame turned tall.
+- Left: the camera's plain channels are the static camera's, sent twice (18 KB); the
+  player finds a camera's channel through the plain one's name, so they stay.
+- The landing page's bundles under `docs/` are the old ones until the demo is built again.

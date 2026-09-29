@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 import shutil
 import subprocess
 
@@ -138,6 +139,44 @@ def test_packing_again_gives_the_same_bytes(bundle, tmp_path):
     again = render.pack(out, tmp_path / "again")
     for name in ("frames-000.bin.gz", "frames-002.bin.gz", "uTex.bin.gz", "plan.json"):
         assert (again / name).read_bytes() == (dest / name).read_bytes(), name
+
+
+@pytest.mark.local
+def test_the_cosmos_bundle_sends_what_its_shader_reads_and_nothing_else(tmp_path):
+    # The cosmos bake also holds `direct`'s channels for the other styles' shaders, and ones it
+    # reads itself while baking (uNoteT, uTilt): nothing reads them after, so they are not sent.
+    moderngl = pytest.importorskip("moderngl")
+    from visuals.pieces.gravity import cosmos, listen, models, scorecard, shader_cosmos
+    from visuals.pieces.gravity.track import Track
+
+    track = Track.resolve()
+    got = listen.load_cached(track.cache)
+    if got is None:
+        pytest.skip("no listening cache for the real track")
+    try:
+        moderngl.create_standalone_context(require=330).release()
+    except Exception as exc:
+        pytest.skip(f"no headless GL: {exc}")
+    ch = cosmos.bake(got, models.load_cached(track.cache))
+    style = render.STYLE
+    try:
+        render.STYLE = "glow"
+        assert render.shipped(ch) == list(range(len(ch.names)))       # the other styles are sent everything
+        render.STYLE = "cosmos"
+        out = render.stage(got, track, tmp_path / "out", ch)
+    finally:
+        render.STYLE = style
+    plan = json.loads((render.pack(out, tmp_path / "packed") / "plan.json").read_text())
+    sent = [f["name"] for f in plan["grid"]["features"]]
+    named = set(re.findall(r"\bu[A-Z][A-Za-z0-9]*", shader_cosmos.fragment_source()))
+    read = scorecard.drawn()                                            # what the compiled program keeps
+    assert named <= read                                                # the shader declares nothing it does not read
+    set_here = {"uTime", "uResolution", "uSS", "uTall", "uWiden"} | set(shader_cosmos.TEXTURES)
+    assert named - set_here <= {name.split(".")[0] for name in sent}   # all it reads is sent
+    assert {name.split(".")[0] for name in sent} <= read                # and nothing it does not read
+    cameras = plan["variants"]["camera"]["choices"].values()
+    assert {c for choice in cameras for c in choice.values()} | {u for choice in cameras for u in choice} <= set(sent)
+    assert len(sent) < len(ch.names)
 
 
 def _node(tmp_path, body: str) -> str:

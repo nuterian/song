@@ -13,6 +13,7 @@ import functools
 import gzip
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -388,8 +389,22 @@ def heard(ch: direct.Channels) -> dict:
             "voice": part(held("uWindT", "uWindA", shader_cosmos.N_WIND))}
 
 
+def shipped(ch: direct.Channels) -> list[int]:
+    """Which of the channels the player is sent. In the cosmos style, those the shader declares
+    a uniform for, under its own name or as one camera's (uCamX.cinematic, which the player
+    feeds uCamX from): the cosmos bake also holds `direct`'s channels for the other styles'
+    shaders, and ones it reads itself while baking (uNoteT, uTilt), which nothing reads after.
+    The player reads no channel by name but these, and the measuring reads the bake itself.
+    The other styles are sent every channel."""
+    if STYLE != "cosmos":
+        return list(range(len(ch.names)))
+    declared = set(re.findall(r"\bu[A-Z]\w*", " ".join(re.findall(r"^uniform [^;]*", shader_cosmos.FRAGMENT_BODY, re.M))))
+    return [c for c, name in enumerate(ch.names) if name.split(".")[0] in declared]
+
+
 def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
-    """plan.json + frames.bin + audio, in the format visuals/player already reads."""
+    """plan.json + frames.bin + audio, in the format visuals/player already reads: of the
+    channels, what the player is sent (`shipped`)."""
     bad = [name for name, col in zip(ch.names, ch.data.T) if not np.isfinite(col).all()]
     if bad:
         raise ValueError(f"channels that are not finite, which the player would draw as nothing: {bad}")
@@ -398,9 +413,12 @@ def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
     edges = [0.0] + [d["t"] for d in ch.drops if d["t"] > bar] + [ch.duration]
     sections = [{"index": i, "name": f"from bar {int(round(a / bar))}", "start": a, "end": b,
                  "scene": "gravity"} for i, (a, b) in enumerate(zip(edges[:-1], edges[1:]))]
+    sent = shipped(ch)
+    grid = ch.header()
+    grid["features"] = [grid["features"][c] for c in sent]
     plan = {
         "version": 1, "track": track.slug, "duration": ch.duration, "tempo": meta["tempo"],
-        "meter": int(meta.get("meter", 4)), "seed": 0, "grid": ch.header(), "per_frame": ["uTime"],
+        "meter": int(meta.get("meter", 4)), "seed": 0, "grid": grid, "per_frame": ["uTime"],
         "sections": sections,
         "program": {"key": f"{track.slug}-{STYLE}",
                     "fragment": shader_module().fragment_source(shader.WEBGL_HEADER)},
@@ -427,7 +445,7 @@ def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
         if words:
             plan["lyrics"] = words
         plan["heard"] = heard(ch)
-    (out_dir / "frames.bin").write_bytes(ch.data.astype("<f4").tobytes())
+    (out_dir / "frames.bin").write_bytes(ch.data[:, sent].astype("<f4").tobytes())
     (out_dir / "plan.json").write_text(json.dumps(plan, indent=1) + "\n")
     src, dst = track.mix_m4a, out_dir / "mix.m4a"
     if src.exists():
@@ -464,8 +482,9 @@ def export(got: dict, ch: direct.Channels, track: Track, out_dir: Path) -> None:
 #
 # And the frames are cut into pieces of PIECE_SECONDS, each a file of its own, so that a
 # page draws as soon as it has the piece under the moment it starts at, and has the rest
-# come while it plays. On Gravity: twenty pieces, 3.3 MB in all and 0.16 MB the largest
-# wait, against 2.9 MB in one (and 5.1 MB for plain float16, 14.7 MB for float32, gzipped).
+# come while it plays. On Gravity: twenty pieces, 3.0 MB in all and 0.18 MB the largest
+# wait. (When it was 3.3 MB: 2.9 MB in one, 5.1 MB for plain float16, 14.7 MB for float32,
+# gzipped.)
 
 PIECE_SECONDS = 15.0
 

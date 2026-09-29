@@ -51,7 +51,7 @@ nothing crawls when the camera moves.
 from __future__ import annotations
 
 from . import orrery, sky
-from .direct import N_METEORS, N_RINGS, N_SATS, PALETTE_ROLES
+from .direct import N_METEORS, N_RINGS, N_SATS
 
 GL_HEADER = "#version 410 core\n"
 WEBGL_HEADER = "#version 300 es\n"
@@ -103,10 +103,6 @@ def _floats(values) -> str:
     return ", ".join(f"{float(v):.5f}" for v in values)
 
 
-def _palette_uniforms() -> str:
-    return "\n".join(f"uniform float uC{role}R, uC{role}G, uC{role}B;" for role in PALETTE_ROLES)
-
-
 def _vec3(v) -> str:
     return "vec3(" + ", ".join(f"{float(x):.7f}" for x in v) + ")"
 
@@ -126,21 +122,16 @@ uniform sampler2D uGalaxyTex;
 
 uniform float uMass, uKickT, uKickA, uBass, uSunPulse;
 uniform float uHold, uSpreadSlow, uOrbitSlow;
-uniform float uHatT, uHatA, uHatK;
-uniform float uVoice, uPitch, uSyllT, uSyllA, uSustain;
-uniform float uTint, uTintR, uTintG, uTintB;
+uniform float uVoice, uPitch, uSustain;
+uniform float uTint;
 uniform float uField, uExposure, uStars, uBeats, uRays;
-uniform float uDropT, uDropA, uCrashT, uCrashA;
+uniform float uDropT, uDropA;
 uniform float uCamTurn, uCamTilt, uCamRoll, uCamSpan, uCamX, uCamY;
 uniform float uTall;               // 1 in the tall frame, whose camera is the wide frame's turned and 16/9 as far off (unset = 0)
 uniform float uWiden;              // how many of the frame's heights the picture is high: more than 1 where it goes on round the frame (unset = 1)
-{_palette_uniforms()}
 {_scalars("uRingT", N_RINGS)}
 {_scalars("uRingA", N_RINGS)}
 {_scalars("uRingM", N_RINGS)}
-{_scalars("uNoteT", N_SATS)}
-{_scalars("uNoteA", N_SATS)}
-{_scalars("uNoteM", N_SATS)}
 {_scalars("uLean", N_PLANETS)}
 {_scalars("uHop", N_PLANETS)}
 {_scalars("uSway", N_PLANETS)}
