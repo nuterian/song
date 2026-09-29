@@ -71,8 +71,8 @@ def song_map(track: Track, got: dict, sheet: dict, focus: dict | None = None) ->
     rows.append("Shots: " + "; ".join(f"{k} - {v}" for k, v in sheet_.SHOTS.items()))
     rows.append("Planets (subjects): " + ", ".join(sheet_.PLANETS))
     rows.append("Cast choices: " + "; ".join(f"{k}: {', '.join(v)}" for k, v in CHOICES.items()))
-    rows.append("Feel dials now: " + "; ".join(f"{k} = {sheet['feel'][k]} ({lo}-{hi}: {what})"
-                                               for k, (_, lo, hi, what) in sheet_.FEEL.items()))
+    rows.append("Feel dials now: " + "; ".join(f"{k} = {sheet['feel'].get(k, dflt)} ({lo}-{hi}: {what})"
+                                               for k, (dflt, lo, hi, what) in sheet_.FEEL.items()))
     rows.append("Lyrics now: " + "; ".join(f"{k} = {json.dumps(sheet['lyrics'][k])}" + (f" ({lo}-{hi}: {what})" if lo is not None else f" ({what})")
                                            for k, (_, lo, hi, what) in sheet_.LYRICS.items()))
     if focus:

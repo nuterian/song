@@ -578,7 +578,7 @@ function dial(k, spec, value, commit) {
 function paneFeel(pane) {
   pane.appendChild(el(`<div class="h">${icon("sliders", 18)}Feel</div>`));
   for (const [k, spec] of Object.entries(song.vocabulary.feel)) {
-    pane.appendChild(dial(k, spec, sheet.feel[k], (v) => edit([{ op: "feel", dial: k, value: v }])));
+    pane.appendChild(dial(k, spec, sheet.feel[k] ?? spec.default, (v) => edit([{ op: "feel", dial: k, value: v }])));
   }
 }
 

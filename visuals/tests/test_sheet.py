@@ -94,6 +94,80 @@ def test_the_dials_do_what_they_say(gravity):
     assert col(out, "uVoice").max() == 0.0 and col(ch, "uVoice").max() > 0.5
 
 
+DANCE = {"planets_breathe": 0.5, "planets_sway": 1.0, "kick_pull": 0.3, "accents": 1.0}
+
+
+def test_the_dance_dials_at_their_defaults_change_nothing(gravity):
+    tr, got, ch, sh = gravity
+    edit = copy.deepcopy(sh)
+    for k in DANCE:
+        del edit["feel"][k]                                            # a sheet written before them
+    out = render.bake(got, tr, edit)
+    assert out.names == ch.names and np.array_equal(out.data, ch.data)
+    assert all(not col(ch, f"uSway{i}").any() for i in range(8))
+
+
+@pytest.mark.parametrize("dial,inside,outside", [("planets_breathe", 1.0, 1.2), ("planets_sway", 2.0, -0.1),
+                                                 ("kick_pull", 0.0, 1.6), ("accents", 0.5, 2.0)])
+def test_the_dance_dials_are_taken_in_their_range_and_refused_outside_it(gravity, dial, inside, outside):
+    tr, got, ch, sh = gravity
+    assert sheet_.validate(dict(sh, feel=dict(sh["feel"], **{dial: inside})), got) == []
+    bad = sheet_.validate(dict(sh, feel=dict(sh["feel"], **{dial: outside})), got)
+    assert bad and any("outside" in b for b in bad), bad
+
+
+def _clearance(ch, mode):
+    """Mercury's least distance from the Sun's limb on screen, disc to disc, in frame heights."""
+    from visuals.pieces.gravity import follow
+
+    g = follow.geometry(ch, np.arange(len(ch.data)), mode)
+    return float((np.hypot(g["planet_x"][:, 0] - g["sun_x"], g["planet_y"][:, 0] - g["sun_y"]) - g["sun_r"] - g["planet_r"][:, 0]).min())
+
+
+def test_the_planets_dance_together_smoothly_clear_of_the_sun_and_never_backward(gravity):
+    from visuals.pieces.gravity import cosmos, dance, follow
+
+    tr, got, ch, sh = gravity
+    out = render.bake(got, tr, dict(sh, feel=dict(sh["feel"], **DANCE)))
+    deepest = render.bake(got, tr, dict(sh, feel=dict(sh["feel"], **dict(DANCE, planets_breathe=1.0))))
+    for i in range(8):
+        for name in ("uLean", "uHop", "uSway", "uGlow", "uBig", "uSwing"):
+            x = col(out, f"{name}{i}")
+            assert np.abs(np.diff(x)).max() < 0.25 * max(np.ptp(x), 1e-9), (name, i)      # nothing jumps
+            assert np.abs(np.diff(x, 2)).max() < 0.09 * max(np.ptp(x), 1e-9), (name, i)   # and nothing has a corner in it
+        assert np.ptp(col(out, f"uSway{i}")) > 0                                         # and every planet sways
+    for mode in cosmos.MODES:
+        j = follow.jolt(out, mode)
+        assert j["planet_speed_peak"] < 1.0 and j["planet_speed_p99"] < 0.30, (mode, j)  # the bounds of test_no_camera_jolts
+        for moved in (out, deepest):                                                     # Mercury is no nearer the Sun than it was
+            assert _clearance(moved, mode) >= _clearance(ch, mode), mode
+        # and each planet goes on round, its own way (the camera's turn left out): slower and faster, never back
+        e = np.clip(col(out, f"uCamTilt.{mode}"), 0.20, 0.98)
+        tug, gain = col(out, f"uSpreadSlow.{mode}"), np.clip(col(out, f"uCamSpan.{mode}"), 0.0, 1.0)
+        for i in range(8):
+            a = (np.maximum(0.255, 0.156 / e) + col(out, f"uPd{i}")) * tug + gain * col(out, f"uLean{i}")
+            th = 2 * np.pi * col(out, f"uPh{i}") + gain * col(out, f"uSway{i}") / np.maximum(a, 0.05)
+            assert np.diff(th).min() > 0, (mode, i)
+    # the score's turns are on the song's own downbeats
+    a = got["arrays"]
+    n, bar = len(out.data), 4 * float(got["meta"]["period"])
+    t = np.arange(n) / 120.0
+    downs = a["downbeats"].astype(np.float64)
+    score, _ = dance.score(downs, a["beats"].astype(np.float64), [d["t"] for d in out.drops] + [s.start for s in out.sections],
+                           col(out, "uHold"), np.ones(n), bar)(t)
+    turns = 0
+    for k in range(1, len(downs) - 1):
+        if not bar < downs[k] < t[-1] - bar:
+            continue
+        v = score[np.round(downs[k - 1:k + 2] * 120).astype(int)]
+        if (v[1] - v[0]) * (v[2] - v[1]) > -1e-3:                          # not a turn: a bar held still
+            continue
+        i, h = int(round(downs[k] * 120)), int(round(bar / 2 * 120))
+        assert abs(int(np.argmax(score[i - h:i + h] * np.sign(v[1] - v[0]))) - h) <= 0.030 * 120, downs[k]
+        turns += 1
+    assert turns > 0.8 * len(downs)
+
+
 def test_lyrics_follow_the_sheet(gravity, tmp_path):
     tr, got, ch, sh = gravity
     from visuals.pieces.gravity import lyrics

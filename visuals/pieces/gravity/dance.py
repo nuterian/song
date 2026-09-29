@@ -33,6 +33,15 @@ Rings are rare now, and mean something. A planet's notes charge it (a leaky sum,
 bass charges the corona); past its threshold, the next strong note *on the grid* throws a
 ring - about one in a bar and a half of the time that planet is playing, the threshold
 being found from the song (`cosmos.flares` does the same for the Sun).
+
+And they dance together, to a score (`score`, with the sheet's `planets_breathe`): all of
+them go out and in with the bars, each by its share of the room it has, the gesture
+travelling outward from the Sun as the kick's pull does, and each following it through
+its own spring - Mercury on time and a little past, Jupiter late to start and slow to
+settle, and each started early by as much as it lags, so that they arrive together. With
+`planets_sway` a planet also surges ahead along its orbit as it comes in and falls back
+as it goes out (`uSway`), never so far that it goes backward. With `accents` a planet
+answers not every note but the one that stands out in each bar, and more.
 """
 
 from __future__ import annotations
@@ -49,6 +58,11 @@ DAMP = 0.52 + 0.26 * (orrery.SIZE - orrery.SIZE.min()) / (orrery.SIZE.max() - or
 COUPLING = 0.16                  # how strongly a planet is tied to its neighbours
 HOP = 0.55                       # the top of a full note's hop, in the planet's own radii
 RESTLESS_AFTER_BARS = 6.0
+ACCENT_HOP = 1.0                 # the top of an accent's hop, in radii: larger...
+ACCENT_PUSH = 0.24               # ...and slower, pushed over this long
+GAP = np.convolve(np.pad(np.diff(orrery.MEAN_STEP), 1, mode="edge"), [0.5, 0.5], mode="valid")   # the room each planet has: the mean gap either side
+AHEAD = 0.8                      # sway never takes back more than this share of a planet's own speed along its orbit
+MERCURY_IN = 0.5                 # the deepest Mercury is drawn in, in full kicks' pulls (orrery.PULL): less than the kicks alone drew it (0.75)
 
 
 def time_to_peak(freq: np.ndarray, damp: np.ndarray) -> np.ndarray:
@@ -104,28 +118,117 @@ def balance(slot_events: list[tuple[np.ndarray, np.ndarray]], slot_to_planet) ->
 PUSH_TIME = 0.10                 # a push is not a blow: it is applied over a tenth of a second
 
 
-def _impulses(times, amps, n: int) -> np.ndarray:
-    """Pushes, as velocity per sample: each spread over PUSH_TIME (a raised cosine, centred
+def _bell(width: float) -> np.ndarray:
+    k = max(int(width * RATE), 3)
+    bell = 1.0 - np.cos(2 * np.pi * (np.arange(k) + 0.5) / k)
+    return bell / bell.sum()
+
+
+def _impulses(times, amps, n: int, width: float = PUSH_TIME) -> np.ndarray:
+    """Pushes, as velocity per sample: each spread over `width` (a raised cosine, centred
     on its moment), so that not even the *velocity* of a body has a corner in it."""
     out = np.zeros(n)
     i = np.round(np.asarray(times) * RATE).astype(int)
     ok = (i >= 0) & (i < n)
     np.add.at(out, i[ok], np.asarray(amps)[ok])
-    k = max(int(PUSH_TIME * RATE), 3)
-    bell = 1.0 - np.cos(2 * np.pi * (np.arange(k) + 0.5) / k)
-    return np.convolve(out, bell / bell.sum(), mode="same")
+    return np.convolve(out, _bell(width), mode="same")
+
+
+def _answer(freq: float, damp: float, width: float) -> tuple[float, float]:
+    """`time_to_peak` and `peak_of_unit_push` for a push spread over `width`: worked out,
+    since a long push arrives at its top later than a blow would."""
+    w = 2 * np.pi * freq
+    wd = w * np.sqrt(1 - damp ** 2)
+    s = np.arange(int(3 * RATE)) / RATE
+    y = np.convolve(_bell(width), np.exp(-damp * w * s) * np.sin(wd * s) / wd)
+    top = int(np.argmax(y))
+    return (top - (len(_bell(width)) - 1) / 2) / RATE, float(y[top])
+
+
+def accented(t: np.ndarray, a: np.ndarray, downbeats: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The notes that stand out: in each bar a planet plays in, its strongest, if that is
+    at least its usual (median) note."""
+    if len(t) == 0:
+        return t, a
+    bar_of = np.searchsorted(downbeats, t, side="right")
+    o = np.lexsort((-a, bar_of))                        # by bar, the strongest first
+    first = o[np.r_[True, np.diff(bar_of[o]) > 0]]
+    keep = np.sort(first[a[first] >= np.median(a)])
+    return t[keep], a[keep]
+
+
+# ---- the score ---------------------------------------------------------------------------------
+# What they dance together, from the grid. The system is at its tightest on the downbeat of
+# every other bar and at its widest on the one between, and travels from one to the other
+# over the whole bar: it breathes once in two bars, biased outward, so that the orbits hardly
+# ever stand inside where they rest. A phrase is four bars, and its second pair goes out
+# further than its first, so a phrase swells; and the draw-in over its last bar is the run-up
+# to the next phrase's downbeat. There are no phrase marks, so phrases are counted in fours
+# from every re-entry and every section's start, afresh at the next. Where the kick is in,
+# the travel across a bar is a step to a beat, each arriving on its beat; where it is not, one
+# glide across the bar; in between, a blend of the two - never a switch.
+IN, OUT = -0.3, 1.0              # the score at its tightest and at its widest: the dial is how far out it goes
+SWELL = (0.7, 1.0)               # how far out the first and the second pair of a phrase's bars go
+PHRASE_BARS = 4
+STEP = 0.55                      # a step takes this share of its beat, and ends on it
+
+
+def phrase_bars(downbeats: np.ndarray, anchors) -> np.ndarray:
+    """Each bar's place in its phrase, 0 to 3: counted in fours from every anchor (a bar
+    line nearest a re-entry or a section's start), afresh at the next."""
+    k = np.arange(len(downbeats))
+    anchors = np.asarray(anchors, dtype=np.float64)
+    at = np.unique(np.abs(downbeats[:, None] - anchors[None, :]).argmin(0)) if len(anchors) else np.zeros(0, int)
+    start = np.concatenate([[0], at])[np.searchsorted(at, k, side="right")]
+    return (k - start) % PHRASE_BARS
+
+
+def score(downbeats: np.ndarray, beats: np.ndarray, anchors, stepping: np.ndarray, level: np.ndarray, bar: float):
+    """The gesture every planet dances, as a function of time: at any times (each planet
+    reads it at its own), how far out the system stands (`IN`..`OUT`), and how far ahead
+    along the orbits (the same gesture, gliding, a quarter of its two bars away: ahead as it
+    comes in, behind as it goes out). `stepping` (0..1, at RATE) is how far the kick is in;
+    `level` (at RATE) how full the song is: the size of the whole gesture."""
+    d = np.asarray(downbeats, dtype=np.float64)
+    place = phrase_bars(d, anchors)
+    v = np.where(place % 2 == 0, IN, OUT * np.where(place < 2, SWELL[0], SWELL[1]))
+    beat_no = lambda x: np.interp(x, beats, np.arange(len(beats), dtype=np.float64))
+    d_beat = np.round(beat_no(d))
+    frames = np.arange(len(level), dtype=np.float64)
+
+    def glide(t):
+        k = np.clip(np.searchsorted(d, t, side="right") - 1, 0, len(d) - 2)
+        u = np.clip((t - d[k]) / (d[k + 1] - d[k]), 0.0, 1.0)
+        return k, v[k] + (v[k + 1] - v[k]) * ease.EASE_IN(u)
+
+    def at(t):
+        t = np.asarray(t, dtype=np.float64)
+        k, glided = glide(t)
+        s = np.clip(beat_no(t) - d_beat[k], 0.0, None) + STEP          # beats since the downbeat, a step early
+        steps = np.floor(s) - 1.0 + ease.EASE_IN(np.minimum((s % 1.0) / STEP, 1.0))
+        stepped = v[k] + (v[k + 1] - v[k]) * np.clip(steps / (d_beat[k + 1] - d_beat[k]), 0.0, 1.0)
+        w, size = np.interp(t * RATE, frames, stepping), np.interp(t * RATE, frames, level)
+        ahead = 0.5 * (IN + OUT) - glide(t - bar / 2)[1]
+        return size * ((1.0 - w) * glided + w * stepped), size * ahead
+    return at
 
 
 def simulate(notes: list[tuple[np.ndarray, np.ndarray]], kicks: tuple[np.ndarray, np.ndarray],
              strikes: list[tuple[float, int, float]], downbeats: np.ndarray, grid: np.ndarray,
-             n: int, bar: float, find_threshold, rings_every_bars: float = 1.5) -> dict:
+             n: int, bar: float, find_threshold, rings_every_bars: float = 1.5, gesture=None,
+             breathe: float = 0.0, sway: float = 0.0, kick_pull: float = 1.0, accents: float = 0.0,
+             orbit_speed: np.ndarray | None = None) -> dict:
     """Run the eight bodies through the song. `notes[i]` are planet i's (times, sizes);
     `strikes` are (arrival time, planet, size) of flares; `grid` is the lattice a ring may
-    be thrown on. Returns the channels, and what was decided (rings, restless moments)."""
+    be thrown on. `gesture` is the score (`score`), danced as far as `breathe` and `sway`
+    say; `orbit_speed` (scene units a second, each planet's slowest along its orbit) is what
+    sway may not take back. Returns the channels, and what was decided (rings, restless
+    moments)."""
     dt = 1.0 / RATE
     w = 2 * np.pi * FREQ
     r_mean = 0.255 + orrery.MEAN_STEP
     radius = orrery.SIZE
+    stand_out = [accented(t, a, downbeats) for t, a in notes]
 
     # ---- what each planet decides to do: its rings, and its restless moments -----------------
     rings, restless = [], []
@@ -149,24 +252,40 @@ def simulate(notes: list[tuple[np.ndarray, np.ndarray]], kicks: tuple[np.ndarray
 
     # ---- the forces -----------------------------------------------------------------------------
     tp = time_to_peak(FREQ, DAMP)
+    tpa, peak_a = np.array([_answer(FREQ[i], DAMP[i], ACCENT_PUSH) for i in range(N)]).T
     push = np.zeros((n, N))                     # upward pushes: notes (advanced, so the top is on the note) and restlessness
     for i, (t, a) in enumerate(notes):
         unit = HOP * radius[i] / peak_of_unit_push(FREQ[i], DAMP[i])
-        push[:, i] += unit * _impulses(t - tp[i], np.clip(a, 0, 1.2), n)
+        push[:, i] += (1.0 - accents) * unit * _impulses(t - tp[i], np.clip(a, 0, 1.2), n)
         push[:, i] += unit * 0.55 * _impulses(restless[i] - tp[i], np.ones(len(restless[i])), n)
+        if accents:
+            ta, aa = stand_out[i]
+            push[:, i] += accents * ACCENT_HOP * radius[i] / peak_a[i] * _impulses(ta - tpa[i], np.clip(aa, 0, 1.2), n, ACCENT_PUSH)
     kt, ka = kicks
     pull = np.zeros((n, N))                     # the Sun's pull: a smooth bump, arriving later the further out
     bump = ease.envelope(kt, np.clip(ka, 0, 1.2), n, 0.06, 0.24)
     for i in range(N):
         late = int(round((r_mean[i] - r_mean[0]) / orrery.PULL_SPEED * RATE))
         pull[late:, i] = -orrery.pull_depth(r_mean[i], r_mean[0]) * bump[:n - late] if late else -orrery.pull_depth(r_mean[i], r_mean[0]) * bump
+    pull *= kick_pull
     throw = np.zeros((n, N))                    # struck by a flare: thrown outward
     for at, planet, size in strikes:
         throw[:, planet] += 1.1 * radius[planet] * size / peak_of_unit_push(FREQ[planet], DAMP[planet]) * _impulses([at - tp[planet]], [1.0], n)
+    # the score: each planet reads it as late as it travels out from the Sun, and as early as
+    # its own spring lags a slow gesture, so that it arrives on time
+    along = np.zeros((n, N))
+    if gesture is not None and breathe > 0:
+        read = np.arange(n) * dt
+        for i in range(N):
+            out_i, along_i = gesture(read - (r_mean[i] - r_mean[0]) / orrery.PULL_SPEED + 2 * DAMP[i] / w[i])
+            pull[:, i] += breathe * GAP[i] * out_i
+            along[:, i] = sway * breathe * GAP[i] * along_i
 
-    # ---- the bodies: two damped springs each, coupled along the chain (semi-implicit Euler) --------
-    lean, hop = np.zeros((n, N)), np.zeros((n, N))
-    x, vx, y, vy = np.zeros(N), np.zeros(N), np.zeros(N), np.zeros(N)
+    # ---- the bodies: two damped springs each, coupled along the chain (semi-implicit Euler), --------
+    # and a third for the sway along the orbit, on its own
+    lean, hop, ahead = np.zeros((n, N)), np.zeros((n, N)), np.zeros((n, N))
+    x, vx, y, vy, z, vz = np.zeros(N), np.zeros(N), np.zeros(N), np.zeros(N), np.zeros(N), np.zeros(N)
+    swayed = along.any()
     for k in range(n):
         nx = np.concatenate([[x[0]], x, [x[-1]]]); ny = np.concatenate([[y[0]], y, [y[-1]]])
         cx = COUPLING * w ** 2 * (nx[:-2] + nx[2:] - 2 * x)
@@ -175,6 +294,20 @@ def simulate(notes: list[tuple[np.ndarray, np.ndarray]], kicks: tuple[np.ndarray
         vy += dt * (-2 * DAMP * w * vy - w ** 2 * y + cy) + push[k]
         x += dt * vx; y += dt * vy
         lean[k], hop[k] = x, y
+        if swayed:
+            vz += dt * (-2 * DAMP * w * vz - w ** 2 * (z - along[k]))
+            z += dt * vz
+            ahead[k] = z
+    if breathe:
+        # Mercury, which a steady draw-in could take across the Sun's limb, is held back from
+        # it: softly, with no corner
+        room = MERCURY_IN * orrery.PULL
+        lean[:, 0] = np.where(lean[:, 0] < 0, -room * np.tanh(-lean[:, 0] / room), lean[:, 0])
+    if swayed and orbit_speed is not None:
+        # it slows and it surges, and never goes back: where sway would take back more than
+        # AHEAD of a planet's own speed along its orbit, the whole of its sway is made smaller
+        back = np.maximum(-np.gradient(ahead, axis=0) * RATE, 1e-12)
+        ahead *= np.minimum(AHEAD * orbit_speed / back, 1.0).min(axis=0)
 
     # ---- what follows the notes directly, eased ---------------------------------------------------
     out: dict = {}
@@ -182,6 +315,11 @@ def simulate(notes: list[tuple[np.ndarray, np.ndarray]], kicks: tuple[np.ndarray
         amp = np.clip(a, 0, 1.2)
         glow = ease.envelope(t, amp, n, 0.12, 0.60, soften=0.06)
         swell = ease.envelope(t, amp, n, max(float(tp[i]), 0.14), 0.70, rise=ease.EASE_SLOW, soften=0.07)
+        if accents:                                  # the accent lights it, and swells it with its hop
+            ta, aa = stand_out[i]
+            aa = np.clip(aa, 0, 1.2)
+            glow = (1.0 - accents) * glow + accents * ease.envelope(ta, aa, n, 0.12, 0.60, soften=0.06)
+            swell = (1.0 - accents) * swell + accents * ease.envelope(ta, aa, n, max(float(tpa[i]), 0.14), 0.70, rise=ease.EASE_SLOW, soften=0.07)
         # the moons are on strings: they follow the swell late, and overshoot a little
         s, vs, swing = 0.0, 0.0, np.zeros(n)
         ws = 0.6 * w[i]
@@ -190,7 +328,7 @@ def simulate(notes: list[tuple[np.ndarray, np.ndarray]], kicks: tuple[np.ndarray
             s += dt * vs
             swing[k] = s
         spin = np.cumsum(ease.envelope(t, amp, n, 0.10, 1.6)) * dt * 0.9
-        out[f"uLean{i}"], out[f"uHop{i}"] = lean[:, i], hop[:, i]
+        out[f"uLean{i}"], out[f"uHop{i}"], out[f"uSway{i}"] = lean[:, i], hop[:, i], ahead[:, i]
         out[f"uGlow{i}"], out[f"uBig{i}"], out[f"uSwing{i}"], out[f"uSpin{i}"] = glow, swell, swing, spin
     out["rings"], out["restless"] = rings, restless
     return out

@@ -63,7 +63,11 @@
     "planet_rings_every_bars": 1.5,
     "camera_move_bars": 8.0,
     "hybrid_turn_bars": 96.0,
-    "orbits_breathe": 0.55
+    "orbits_breathe": 0.55,
+    "planets_breathe": 0.5,
+    "kick_pull": 0.3,
+    "accents": 1.0,
+    "planets_sway": 1.0
   },
   "lyrics": {
     "show": true,

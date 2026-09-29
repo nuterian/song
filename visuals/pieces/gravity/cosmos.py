@@ -442,12 +442,29 @@ def bake(got: dict, mod: tuple[dict, dict] | None, sheet: dict | None = None) ->
 
     # ---- the dancers ---------------------------------------------------------------------------
     beats = a["beats"].astype(np.float64)
+    downbeats = a["downbeats"].astype(np.float64)
     grid = np.sort(np.concatenate([beats, 0.5 * (beats[:-1] + beats[1:])])) if len(beats) > 1 else beats
-    danced = dance.simulate(planet_notes, (kt[strong], ka[strong]), strikes, a["downbeats"].astype(np.float64), grid, n, bar, flares,
-                            rings_every_bars=feel["planet_rings_every_bars"])
+    # The score they dance together (`dance.score`): phrases counted from every re-entry and
+    # every section's start; in steps where the kick is in; as large as the song is full -
+    # from 0.4 in its quietest part to 1 in its fullest, by its own loudness - and still in silence.
+    silent = np.zeros(n)
+    for s_ in ch.sections or []:
+        if s_.state == "silent":
+            silent[int(s_.start * RATE):int(s_.end * RATE)] = 1.0
+    full = a["energy"].astype(np.float64)
+    lo, hi = np.percentile(full[silent < 0.5] if (silent < 0.5).any() else full, [5, 95])
+    level = ease.smooth((0.4 + 0.6 * np.clip((full - lo) / max(hi - lo, 1e-6), 0.0, 1.0)) * (1.0 - silent), bar)
+    gesture = dance.score(downbeats, beats, [d["t"] for d in ch.drops] + [s_.start for s_ in ch.sections or []],
+                          ease.smooth(hold, 2 * bar), level, bar)
+    # how fast each planet goes along its orbit, at the least it could be drawn: what sway may not take back
+    along = np.gradient(lon, axis=0) * RATE * (0.255 + off) * np.minimum(spread, 1.0)[:, None]
+    danced = dance.simulate(planet_notes, (kt[strong], ka[strong]), strikes, downbeats, grid, n, bar, flares,
+                            rings_every_bars=feel["planet_rings_every_bars"], gesture=gesture,
+                            breathe=feel["planets_breathe"], sway=feel["planets_sway"], kick_pull=feel["kick_pull"],
+                            accents=feel["accents"], orbit_speed=along)
     ping_cols = []
     for i in range(shader_cosmos.N_PLANETS):
-        for name in ("uLean", "uHop", "uGlow", "uBig", "uSwing", "uSpin"):
+        for name in ("uLean", "uHop", "uSway", "uGlow", "uBig", "uSwing", "uSpin"):
             extra[f"{name}{i}"] = (direct.LERP, danced[f"{name}{i}"])
         rt, ra = danced["rings"][i]
         hit_t = np.array([s_[0] for s_ in strikes if s_[1] == i])

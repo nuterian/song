@@ -61,7 +61,7 @@ def geometry(ch: direct.Channels, rows: np.ndarray, camera: str | None = None, s
     for i in range(sc.N_PLANETS):
         gain = np.clip(wide, 0.0, 1.0)                           # a body's movement is scaled to the frame in a close shot
         a = (a0 + col(f"uPd{i}")) * tug + gain * col(f"uLean{i}")    # it leans toward the Sun and away (`dance`)
-        th = 2 * np.pi * col(f"uPh{i}") + turn
+        th = 2 * np.pi * col(f"uPh{i}") + turn + gain * col(f"uSway{i}") / np.maximum(a, 0.05)   # and it sways along its orbit
         up = a * col(f"uPz{i}") + gain * col(f"uHop{i}")         # its orbit is tipped; and it hops
         x, y, depth = a * np.cos(th), a * np.sin(th) * e + up * c, -a * np.sin(th) * c + up * e
         fx, fy = to_frame(x, y)

@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--solo", default=None,
                    help="draw only this stream's response (for the separation matrix)")
     p.add_argument("--no-lyrics", action="store_true", help="cosmos only: leave the words out of the mp4")
+    p.add_argument("--sheet", default=None, help="cosmos only: bake from this direction sheet, not the song's own")
 
     p = sub.add_parser("measure", help="decode the mp4 and check it against the audio")
     p.add_argument("--video", default=None)
@@ -35,7 +36,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("models", help="notes, melody, chords, mood, lyrics - from small local models")
     p.add_argument("--force", action="store_true")
 
-    sub.add_parser("stage", help="export to the browser player only: no mp4, a few seconds")
+    p = sub.add_parser("stage", help="export to the browser player only: no mp4, a few seconds")
+    p.add_argument("--sheet", default=None, help="cosmos only: bake from this direction sheet, not the song's own")
 
     sub.add_parser("smooth", help="only section decisions live: is there a step anywhere?")
 
@@ -65,6 +67,17 @@ def main(argv: list[str] | None = None) -> int:
             # looked for in the disc it swells in instead
             _m.ROLE_REGION["syllable"] = "heart"
 
+    def from_sheet():
+        """The channels baked from --sheet (a variant of the song's own, say), or None."""
+        if not getattr(args, "sheet", None):
+            return None
+        from . import render, sheet as sheet_
+        got, the = _listen(), sheet_.read(args.sheet)
+        bad = sheet_.validate(the, got)
+        if bad:
+            raise SystemExit(f"{args.sheet} cannot be baked:\n  " + "\n  ".join(bad))
+        return render.bake(got, track, the)
+
     if args.cmd == "listen":
         from . import report
         report.print_listen(_listen(args.force))
@@ -76,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         made = render.render(_listen(), track, out if args.out is None else args.out,
                             start=args.start, duration=args.duration,
                             size=(w, h), fps=args.fps, crf=args.crf, solo=args.solo,
-                            camera=args.camera, words=not args.no_lyrics)
+                            camera=args.camera, words=not args.no_lyrics, ch=from_sheet())
         print(made)
         return 0
 
@@ -109,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "stage":
         from . import render
-        staged = render.stage(_listen(), track, out)
+        staged = render.stage(_listen(), track, out, ch=from_sheet())
         print(f"staged {staged}\n  python -m visuals serve   ->   http://localhost:8765/player/?track={staged.name}")
         return 0
 

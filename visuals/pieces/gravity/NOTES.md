@@ -1943,3 +1943,56 @@ motion and the first seconds before the rest.
 - Tried and left: a lighter sky after the film (the Sun sinking half the window, not 0.8,
   and 0.35 of dark, not 0.5). The sky is dark of itself: the mean went from 4 to 5 of 255,
   and nine texts fell under 4.5 to 1. Kept as it was.
+
+## The planets dance together (2026-09-28, evening)
+
+Jugal: the Sun dances, the planets flicker in place. They should widen their orbits
+together, each by its weight, smoothly, and answer every important moment of the song.
+Measured first, from the baked channels (Gravity, the static camera at 1080p; Shattered
+Voices agrees), then built as dials on the sheet whose defaults are the old picture.
+
+- **What the flicker was.** The inner planets moved 3 to 6 pixels, 0.3 to 0.7 of their
+  own radius, at the kick's rate (2.06 Hz), and came back to where they were: the path
+  they travelled in a beat was 11 to 16 times what they had moved by its end, and they
+  turned back twice a second. It was the kick's pull, not their notes. The giants' lean
+  was under a pixel; their hops 5 to 10. The Sun, at the same rate, moves 20 pixels on a
+  radius of 102: the same rhythm, large, is a dance, and small, a twitch. Only a twentieth
+  to a seventh of the planets' movement was faster than 4 Hz, so "how much of it is fast"
+  was the wrong measure and was dropped for how far, against the gap to the next orbit,
+  and how often it turns back.
+- **Nothing answered the bar or the phrase.** The orbits' spread answers the floor leaving
+  and returning, eight times in Gravity. A planet's place along its orbit answers nothing.
+  The belts, the comet, Pluto and the moons' orbits are moved by no sound at all.
+- **The score** (`dance.score`). Every planet dances one gesture: tightest on the downbeat
+  of a phrase's first and third bars, widest on its second and fourth, further out in the
+  second pair than the first. Phrases are counted in fours from every re-entry and every
+  section's start (one count for the whole song fails on both songs). Where the kick is in
+  the travel is a step to a beat, each landing on its beat; where it is not, one glide;
+  between, a blend. Its size is how full the song is, 0.4 to 1. Each planet reads it as
+  late as the kick's pull reaches it and as early as its own spring lags, and follows it
+  through that spring. It rides in `uLean`: no new channel.
+- **Sway** (`uSway`, eight channels, 305 KB of Gravity's bundle). Drawn in, a planet goes
+  ahead along its orbit; going out, it falls behind: the same gesture a quarter of its two
+  bars away, so the two together are a loop. Sized in the shader as lean and hop are, less
+  in a close shot; the cameras follow the orbit left alone. It never takes back more than
+  0.8 of the planet's own speed, so a planet slows and surges and does not go backward.
+- **Accents.** A planet answers the strongest note in each bar it plays in, if that is at
+  least its usual note, with a hop of one radius, pushed over 0.24 s. (A planet had about
+  0.68 notes a second already; it is the size and the pace that change, more than the count.)
+- **The dials**, and what Jugal chose (B: breathe and sway), now in both songs' sheets:
+  `planets_breathe` 0.5, `planets_sway` 1.0, `kick_pull` 0.3, `accents` 1.0.
+- **Measured, before and after** (both songs): path over net in a beat 2 to 16, now 1.3 to
+  1.9; turns back in a second, the inner planets, 1.1 to 2.1, now 0.4 to 0.8; how far, of
+  the gap to the next orbit, 0.06 to 0.15, now 0.25 to 0.52; neighbours together 0.98 to
+  1.00, the lag in order outward. Mercury is further from the Sun's limb in every camera
+  (in the hybrid it crossed it by 8.5 pixels at 1:53 of Gravity, before; by 0.2 now).
+- **A trail was cut.** A trail is looked for only in a band about its orbit, as wide as a
+  kick's pull; a planet that leans further lost its trail. The band is as wide as the lean.
+- Tried and left: the kick's pull at 0.4 (Mercury still turned back 1.4 times a second);
+  the widest of the breath at 0.7 of the dial (Mercury, Saturn and Neptune reached 0.17 to
+  0.23 of their gaps); Mercury held back from the Sun at 0.75 and 0.6 of a kick's pull
+  (closer to the limb than it had been; 0.5 is kept).
+- Not yet: the frame's time with the new shader, measured where it can be trusted; the
+  58 channels the shader never reads, which would pay for the sway; the studio showing
+  more than one sheet of a song at once (it cannot; the plain player can, from
+  `visuals/out/<slug>-cosmos-<name>`).

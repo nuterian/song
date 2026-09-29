@@ -614,6 +614,55 @@ def test_the_planets_are_bodies_nothing_in_them_jumps_and_a_hop_tops_out_on_its_
     assert dance.time_to_peak(dance.FREQ, dance.DAMP)[4] > 2 * dance.time_to_peak(dance.FREQ, dance.DAMP)[0]
 
 
+def test_the_score_breathes_in_two_bars_swells_in_four_and_turns_on_the_downbeat():
+    # two beats a second, four to a bar; a phrase begins at bar 0, and again at bar 5
+    beats, downs, bar = np.arange(0.0, 40.0, 0.5), np.arange(0.0, 40.0, 2.0), 2.0
+    assert list(dance.phrase_bars(downs, [0.0, 10.0])[:12]) == [0, 1, 2, 3, 0, 0, 1, 2, 3, 0, 1, 2]
+    n = int(40 * direct.RATE)
+    t = np.arange(n) / direct.RATE
+    at = lambda x, s: x[int(round(s * direct.RATE))]
+    keys = [dance.IN, dance.OUT * dance.SWELL[0], dance.IN, dance.OUT * dance.SWELL[1], dance.IN]
+    for kick in (0.0, 0.5, 1.0):                    # no kick: a glide across the bar; the kick in: a step to a beat
+        out, along = dance.score(downs, beats, [0.0, 10.0], np.full(n, kick), np.ones(n), bar)(t)
+        assert [at(out, d) for d in downs[:5]] == pytest.approx(keys)
+        assert np.abs(np.diff(out)).max() < 0.25 * np.ptp(out)                   # nothing jumps
+        assert np.abs(np.diff(out, 2)).max() < 0.09 * np.ptp(out)                # and nothing has a corner in it
+        # every turn is on its downbeat: nothing further out (or in) within half a bar either side of it
+        for k in range(1, len(downs) - 1):
+            v = [at(out, d) for d in downs[k - 1:k + 2]]
+            if (v[1] - v[0]) * (v[2] - v[1]) >= 0:
+                continue
+            i, h = int(round(downs[k] * direct.RATE)), int(round(bar / 2 * direct.RATE))
+            seg = out[i - h:i + h] * np.sign(v[1] - v[0])
+            assert abs(int(np.argmax(seg)) - h) <= 0.030 * direct.RATE, (kick, downs[k])
+        # along the orbit: a quarter of the two bars away, ahead as it comes in and behind as it goes out
+        assert at(along, 1.0) > 0 > at(along, 3.0)
+    # with the kick in, each step arrives on its beat and holds until the next sets off
+    out, _ = dance.score(downs, beats, [0.0, 10.0], np.ones(n), np.ones(n), bar)(t)
+    for j in range(5):
+        assert at(out, 2.0 + 0.5 * j) == pytest.approx(keys[1] + (keys[2] - keys[1]) * j / 4)
+    assert at(out, 2.5 + 0.2) == pytest.approx(at(out, 2.5))
+
+
+def test_an_accent_is_the_note_that_stands_out_in_its_bar_and_it_hops_higher_on_it():
+    # in each bar its strongest note, if it is at least the planet's median one
+    t, a = np.array([1.0, 1.5, 3.0, 5.0, 5.5, 7.2]), np.array([0.5, 0.9, 0.2, 0.6, 0.4, 0.8])
+    assert list(dance.accented(t, a, np.arange(0.0, 12.0, 2.0))[0]) == [1.5, 5.0, 7.2]
+    n, bar = int(12 * direct.RATE), 2.0
+    none = (np.zeros(0), np.zeros(0))
+    for planet in (0, 4):
+        notes = [none] * 8
+        notes[planet] = (np.array([3.0, 3.25, 6.0, 9.0]), np.array([1.0, 0.4, 1.0, 1.0]))
+        out = dance.simulate(notes, none, [], np.arange(0, 12, bar), np.arange(0, 12, 0.25), n, bar, cosmos.flares, accents=1.0)
+        hop, glow = out[f"uHop{planet}"], out[f"uGlow{planet}"]
+        top = np.argmax(hop[int(5.5 * direct.RATE):int(7.0 * direct.RATE)]) / direct.RATE + 5.5
+        assert abs(top - 6.0) < 0.03, (planet, top)                                  # it tops out on its note
+        assert hop.max() == pytest.approx(dance.ACCENT_HOP * orrery.SIZE[planet], rel=0.2)
+        assert glow[int(3.25 * direct.RATE)] < glow[int(3.0 * direct.RATE)]            # the note that did not stand out lights nothing
+        for x in (hop, glow, out[f"uBig{planet}"], out[f"uSwing{planet}"]):
+            assert np.abs(np.diff(x)).max() < 0.25 * np.ptp(x) and np.abs(np.diff(x, 2)).max() < 0.09 * np.ptp(x)
+
+
 @pytest.mark.local
 def test_the_real_dance_is_smooth_every_planet_plays_and_rings_are_rare():
     got, ch = _real_cosmos()

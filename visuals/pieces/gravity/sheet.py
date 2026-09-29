@@ -76,6 +76,10 @@ FEEL = {
     "camera_move_bars": (8.0, 1.0, 32.0, "cinematic camera: how many bars a move from one shot to the next takes"),
     "hybrid_turn_bars": (96.0, 16.0, 1024.0, "hybrid camera: bars for one slow turn all the way round"),
     "orbits_breathe": (0.55, 0.0, 1.5, "how far the orbits widen when the floor goes (0 = not at all)"),
+    "planets_breathe": (0.0, 0.0, 1.0, "how far the planets go out and in together with the bars, as a share of the gap to the next orbit"),
+    "planets_sway": (0.0, 0.0, 2.0, "how far they surge along their orbits as they come in and fall back as they go out, against how far they breathe"),
+    "kick_pull": (1.0, 0.0, 1.5, "how hard a kick pulls the planets toward the Sun"),
+    "accents": (0.0, 0.0, 1.0, "0: a planet answers every note; 1: only the note that stands out in each bar, and more"),
 }
 LYRICS = {
     "show": (True, None, None, "whether the words are shown"),

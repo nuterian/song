@@ -143,6 +143,7 @@ uniform float uWiden;              // how many of the frame's heights the pictur
 {_scalars("uNoteM", N_SATS)}
 {_scalars("uLean", N_PLANETS)}
 {_scalars("uHop", N_PLANETS)}
+{_scalars("uSway", N_PLANETS)}
 {_scalars("uGlow", N_PLANETS)}
 {_scalars("uBig", N_PLANETS)}
 {_scalars("uSwing", N_PLANETS)}
@@ -658,6 +659,7 @@ void main() {{
     float pingA[N_PLANETS] = {_gather("uPingA", N_PLANETS)};
     float pLean[N_PLANETS] = {_gather("uLean", N_PLANETS)};
     float pHop[N_PLANETS] = {_gather("uHop", N_PLANETS)};
+    float pSway[N_PLANETS] = {_gather("uSway", N_PLANETS)};
     float pGlow[N_PLANETS] = {_gather("uGlow", N_PLANETS)};
     float pBig[N_PLANETS] = {_gather("uBig", N_PLANETS)};
     float pSwing[N_PLANETS] = {_gather("uSwing", N_PLANETS)};
@@ -733,7 +735,7 @@ void main() {{
         float aFree = (a0 + pOff[i]) * tug;                             // where it would be, left alone
         float pulled = -pullGain * pLean[i];
         float a = aFree - pulled;
-        float th = TAU * phase[i] + uCamTurn;
+        float th = TAU * phase[i] + uCamTurn + pullGain * pSway[i] / max(a, 0.05);   // and it sways along its orbit, ahead and behind
         vec3 sv = toView(vec3(a * cos(th), a * sin(th), a * pRise[i] + pullGain * pHop[i]), e, c);   // its orbit is tipped; and it hops
         vec2 dq = q - sv.xy;
         int slot = PLANET_SLOT[i];
@@ -749,9 +751,10 @@ void main() {{
         // longitude, where is that orbit? (Its height there is taken off the pixel first, so
         // the wake of a tipped orbit stays under its planet.)
         // (Only where this pixel could be on it: within the orbit's own range of distance, and
-        // of height. Eight ovals' worth of trigonometry at every pixel was a third of the frame.)
+        // of height, and of how far it leans. Eight ovals' worth of trigonometry at every pixel was
+        // a third of the frame.)
         float meanR = (a0 + ORBIT_STEP[i]) * tug;
-        float band = (1.2 * K_MAP * ORB_ECC[i] + (a0 + ORBIT_STEP[i]) * ORB_SINI[i] * c / e) * tug + PULL + 4.0 * pxScene / e;
+        float band = (1.2 * K_MAP * ORB_ECC[i] + (a0 + ORBIT_STEP[i]) * ORB_SINI[i] * c / e) * tug + max(PULL, abs(pulled)) + 4.0 * pxScene / e;
         if (abs(rhoW - meanR) < band) {{
             float lonPix = thW - uCamTurn;
             float rise = ORB_SINI[i] * sin(lonPix - ORB_NODE[i]);
