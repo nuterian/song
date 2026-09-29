@@ -2072,3 +2072,37 @@ memory, never what is sent.
 - Left: the camera's plain channels are the static camera's, sent twice (18 KB); the
   player finds a camera's channel through the plain one's name, so they stay.
 - The landing page's bundles under `docs/` are the old ones until the demo is built again.
+
+## The wave in every camera, and the comet (2026-09-29)
+
+- **The wave was late where the camera moved.** A planet hops as the re-entry's shock
+  reaches it, and when that is was reckoned for the static camera. A camera that tips
+  puts the innermost orbit further out (0.476 for 0.283 in the approach shot), and one
+  that comes close draws the orbits less wide; so the front reached a planet later than
+  its hop: 54 ms at the 95th centile in the hybrid and 390 in the cinematic, on Gravity
+  (446 at worst; the static camera 9). An error under 40 is not seen. The front is now
+  reckoned as the home camera draws it and set as far beyond the innermost orbit, in the
+  orbits' own measure, among the orbits of the camera that is watching (`uSpreadHome`,
+  `uInnerHome`, nothing when `wave` is nothing); near the Sun it goes over from the one
+  to the other. After: 9 and 10 ms at the 95th centile, 12 at worst, every camera, both
+  songs. The static camera's picture is what it was; in the cinematic the front stands
+  92 pixels further out at 0:04 and 173 further in at 1:06, which is where its planets are.
+  The lighter waves go out from the downbeat at the pull's speed and ask nothing of the
+  camera: they were the same in all three.
+- **The comet rounds the Sun on the song's strongest re-entry** (`comet`; 4:13.4 of Gravity,
+  1:52.0 of Shattered Voices; a re-entry in the song's first eighth is the song beginning,
+  and is not counted). Its place on its orbit is one number for the song, as the planets'
+  row is; and its orbit is turned, for the song, to where it passes furthest from the
+  Sun's disc in all three cameras. It needed that: placed alone it was 13 pixels inside
+  the swollen disc in the hybrid; and as it was, before any of this, it crossed the Sun's
+  face in every camera of Gravity. It does not now. The dial places it if it is more than
+  nothing; only the tail answers to how much.
+- **A kick blows its tail** (`uCometTail`): longer by up to 0.3 as each strong kick's pull
+  reaches it, reckoned for where the comet will be when the pull arrives.
+- It is a small thing at 1080p: something rounds the Sun, rather than a moment of its own.
+- Cost, against the shader of ece3a4c: 0.06 ms a frame (one in a hundred); 19 KB of
+  Gravity's frames. The front's new reckoning cost a third of a millisecond where the
+  shader branched on it or handed a camera's values to the planets' flash, and nothing
+  where it is weighed and the flash reads the channels as they come.
+- Not yet: a telephone, Safari; Shattered Voices and the hybrid camera were measured and
+  not looked at.

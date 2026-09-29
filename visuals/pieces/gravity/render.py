@@ -500,12 +500,12 @@ def narrowest(values: np.ndarray) -> str:
     return "f16" if ok else "f32"
 
 
-PHASES = ("uPh", "uPlutoPh")
+PHASES = ("uPh", "uPlutoPh", "uCometPh")     # (the comet's is a constant, which float16 could put up to 40 ms off its moment)
 PHASE_STEP = 2.0 ** -18
 
 
 def phase(name: str) -> bool:
-    """Whether the channel `name` is a planet's phase (uPh5, uPlutoPh)."""
+    """Whether the channel `name` is a body's phase (uPh5, uPlutoPh, uCometPh)."""
     return name.split(".")[0].rstrip("0123456789") in PHASES
 
 

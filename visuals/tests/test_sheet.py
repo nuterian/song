@@ -120,13 +120,14 @@ def test_the_whole_system_dials_at_their_defaults_change_nothing(gravity):
     again = render.bake(got, tr, edit)
     assert again.names == out.names and np.array_equal(again.data, out.data)
     for c in (ch, out):                                                # the belts, the sky and the close shot are as they were
-        assert all(not col(c, name).any() for name in ("uBeltLean0", "uBeltLean1", "uBeltSwell0", "uBeltSwell1", "uSky", "uNearDance", "uTrailRise"))
+        assert all(not col(c, name).any() for name in ("uBeltLean0", "uBeltLean1", "uBeltSwell0", "uBeltSwell1", "uSky", "uNearDance", "uTrailRise", "uSpreadHome", "uInnerHome"))
 
 
 @pytest.mark.parametrize("dial,inside,outside", [("planets_breathe", 1.0, 1.2), ("planets_sway", 2.0, -0.1),
                                                  ("kick_pull", 0.0, 1.6), ("accents", 0.5, 2.0),
                                                  ("planets_arc", 1.0, 1.1), ("near_dance", 0.5, -0.1),
-                                                 ("belts_breathe", 0.0, 1.5), ("sky_breathes", 1.0, 2.0), ("wave", 0.3, -1.0)])
+                                                 ("belts_breathe", 0.0, 1.5), ("sky_breathes", 1.0, 2.0), ("wave", 0.3, -1.0),
+                                                 ("comet", 1.0, 1.5)])
 def test_the_dance_dials_are_taken_in_their_range_and_refused_outside_it(gravity, dial, inside, outside):
     tr, got, ch, sh = gravity
     assert sheet_.validate(dict(sh, feel=dict(sh["feel"], **{dial: inside})), got) == []
@@ -215,13 +216,15 @@ def test_the_whole_system_dances_smoothly_clear_of_itself_and_the_wave_runs_outw
         assert ((a0 + sc.BELTS[0][0]) * tug + gain * col(out, "uBeltLean0") - mars).min() > 0, mode
     # The wave, alone (the hops are springs: less the same without it): on a re-entry each
     # planet tops out as the shock's front reaches it where the shader draws the two of them,
-    # from the home camera; at every other phrase's start, and every section's, as a kick's
-    # pull would - one after another outward, on time.
+    # in every camera (the front is reckoned in the home camera and drawn among this one's orbits);
+    # at every other phrase's start, and every section's, as a kick's pull would - one after
+    # another outward, on time.
     calm = render.bake(got, tr, dict(whole, feel=dict(whole["feel"], wave=0.0)))
     n, bar = len(out.data), 4 * float(got["meta"]["period"])
     t = np.arange(n) / 120.0
-    e = np.clip(col(out, "uCamTilt.static"), 0.20, 0.98)
-    a0, tug, gain = np.maximum(0.255, 0.156 / e), col(out, "uSpreadSlow.static"), np.sqrt(np.clip(col(out, "uCamSpan.static"), 0.0, 1.0))
+    home_a0, home = col(out, "uInnerHome"), col(out, "uSpreadHome")
+    assert np.array_equal(home, col(out, "uSpreadSlow.static"))
+    assert np.allclose(home_a0, np.maximum(0.255, 0.156 / np.clip(col(out, "uCamTilt.static"), 0.20, 0.98)), rtol=1e-6, atol=0)
     sun = 0.078 * (0.5 + 0.8 * col(out, "uMass")) * (1.0 + 0.22 * col(out, "uSunPulse"))
     downs = got["arrays"]["downbeats"].astype(np.float64)
     drops = np.array([d["t"] for d in out.drops])
@@ -231,17 +234,64 @@ def test_the_whole_system_dances_smoothly_clear_of_itself_and_the_wave_runs_outw
              and not any(s0 <= d < s1 for s0, s1 in silent) and 1.0 < d < t[-1] - 2.0]     # (with room for its run-up and its fall)
     assert len(light) > 5
     wave = [col(out, f"uHop{i}") - col(calm, f"uHop{i}") for i in range(8)]
-    for d, shock in [(d, True) for d in drops] + [(d, False) for d in light]:
-        moments = []
-        for i in range(8):
-            if shock:
-                takes = (np.maximum((a0 + col(out, f"uPd{i}")) * tug + gain * col(out, f"uLean{i}") - sun, 0.0) / 0.60) ** (1 / 0.70)
-                k = np.arange(int(np.ceil(d * 120)), n)
-                moments.append(t[k[t[k] - d >= takes[k]][0]])
-            else:
-                moments.append(d + (dance.R_MEAN[i] - dance.R_MEAN[0]) / orrery.PULL_SPEED)
-        tops = np.array([(int((m - 0.4) * 120) + np.argmax(w[int((m - 0.4) * 120):int((m + 0.4) * 120)])) / 120 for m, w in zip(moments, wave)])
-        assert np.all(np.diff(tops) > 0) and np.abs(tops - moments).max() <= 0.030, (d, tops - moments)
+    for mode in cosmos.MODES:
+        e = np.clip(col(out, f"uCamTilt.{mode}"), 0.20, 0.98)
+        a0, tug, gain = np.maximum(0.255, 0.156 / e), col(out, f"uSpreadSlow.{mode}"), np.sqrt(np.clip(col(out, f"uCamSpan.{mode}"), 0.0, 1.0))
+        for d, shock in [(d, True) for d in drops] + [(d, False) for d in light]:
+            moments = []
+            for i in range(8):
+                if shock:
+                    a = (a0 + col(out, f"uPd{i}")) * tug + gain * col(out, f"uLean{i}")
+                    takes = (np.maximum((a / tug - a0 + home_a0) * home - sun, 0.0) / 0.60) ** (1 / 0.70)
+                    k = np.arange(int(np.ceil(d * 120)), n)
+                    moments.append(t[k[t[k] - d >= takes[k]][0]])
+                else:
+                    moments.append(d + (dance.R_MEAN[i] - dance.R_MEAN[0]) / orrery.PULL_SPEED)
+            tops = np.array([(int((m - 0.4) * 120) + np.argmax(w[int((m - 0.4) * 120):int((m + 0.4) * 120)])) / 120 for m, w in zip(moments, wave)])
+            assert np.all(np.diff(tops) > 0) and np.abs(tops - moments).max() <= 0.020, (mode, d, tops - moments)
+
+
+COMET = ("uCometPh", "uCometTurn", "uCometTail")
+
+
+def test_the_comet_at_its_default_changes_nothing_and_moves_nothing_but_itself(gravity):
+    tr, got, ch, sh = gravity
+    whole = dict(sh, feel=dict(sh["feel"], **DANCE, **WHOLE))
+    out = render.bake(got, tr, whole)
+    edit = copy.deepcopy(whole)
+    del edit["feel"]["comet"]                                          # a sheet written before it
+    again = render.bake(got, tr, edit)
+    assert again.names == out.names and np.array_equal(again.data, out.data)
+    assert all(not col(out, name).any() for name in COMET)
+    moved = render.bake(got, tr, dict(whole, feel=dict(whole["feel"], comet=1.0)))
+    others = [c for c, name in enumerate(out.names) if name not in COMET]
+    assert moved.names == out.names and np.array_equal(moved.data[:, others], out.data[:, others])
+
+
+def test_the_comet_rounds_the_sun_on_the_strongest_reentry_clear_of_its_face(gravity):
+    from visuals.pieces.gravity import cosmos, follow
+    from visuals.pieces.gravity import shader_cosmos as sc
+
+    tr, got, ch, sh = gravity
+    out = render.bake(got, tr, dict(sh, feel=dict(sh["feel"], **DANCE, **WHOLE, comet=1.0)))
+    n = len(out.data)
+    late = [d for d in out.drops if d["t"] > float(got["meta"]["duration"]) / 8]      # (the song starting is not a return)
+    t_s = max(late, key=lambda d: d["strength"])["t"]
+    # at perihelion, within a frame: its mean anomaly, as the shader has it, passes a whole turn there
+    m = col(out, "uOrbitSlow") * sc.COMET_RATE + sc.COMET_PHASE + col(out, "uCometPh")
+    k = np.flatnonzero(np.floor(m[1:]) > np.floor(m[:-1]))
+    assert np.abs((k + (np.floor(m[k + 1]) - m[k]) / (m[k + 1] - m[k])) / 120.0 - t_s).min() < 1 / 60
+    tail = col(out, "uCometTail")                                      # the kicks blow its tail out, to 1.3 at most
+    assert 0.2 < tail.max() <= cosmos.COMET_TAIL + 1e-6
+    assert np.abs(np.diff(tail)).max() < 0.25 * np.ptp(tail)          # nothing jumps
+    assert np.abs(np.diff(tail, 2)).max() < 0.09 * np.ptp(tail)       # and nothing has a corner in it
+    head, at = 1.9 / 1080, int(round(t_s * 120))                       # its head at its largest, in frame heights at 1080p
+    for mode in cosmos.MODES:
+        g = follow.geometry(out, np.arange(n), mode)
+        gap = np.hypot(g["comet_x"] - g["sun_x"], g["comet_y"] - g["sun_y"]) - g["sun_r"]
+        assert gap[~g["comet_behind"]].min() > head, mode                                # it never crosses the Sun's face
+        assert gap[at] > head and abs(g["comet_x"][at]) < 16 / 18 and abs(g["comet_y"][at]) < 0.5, mode   # and is seen rounding it
+        assert follow.jolt(out, mode)["comet_speed_peak"] < 1.0, mode                    # the planets' bound (test_no_camera_jolts)
 
 
 def test_lyrics_follow_the_sheet(gravity, tmp_path):

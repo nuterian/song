@@ -69,8 +69,11 @@ def geometry(ch: direct.Channels, rows: np.ndarray, camera: str | None = None, s
         fx, fy = to_frame(x, y)
         size = sc.PLANET_SIZE[i] * (1.0 + 0.22 * col(f"uBig{i}")) * (1.0 + 0.10 * depth / np.maximum(a, 1e-3))
         px.append(fx); py.append(fy); pr.append(size / span)
+    kx, ky = cosmos.comet(col("uOrbitSlow"), a0, tug, col("uCometPh"), col("uCometTurn") + turn)   # the comet, in the plane
+    comet_x, comet_y = to_frame(kx, ky * e)
     return {"sun_x": sun_x, "sun_y": sun_y, "sun_rest": rest / span, "sun_r": rest * (1.0 + 0.22 * pulse) / span,
             "planet_x": np.stack(px, 1), "planet_y": np.stack(py, 1), "planet_r": np.stack(pr, 1),
+            "comet_x": comet_x, "comet_y": comet_y, "comet_behind": ky > 0,
             "outer": (a0 + sc.ORBIT_STEP[-1] + 0.05) * tug / span, "e": e, "roll": roll, "span": span}
 
 
@@ -359,10 +362,12 @@ def jolt(ch: direct.Channels, camera: str) -> dict:
     pv = np.hypot(np.diff(g["planet_x"], axis=0), np.diff(g["planet_y"], axis=0)) * rate
     pv = np.where(inside[1:] & inside[:-1], pv, 0.0)
     pa = np.abs(np.diff(pv, axis=0)) * rate
+    seen = (np.abs(g["comet_x"]) < 0.89) & (np.abs(g["comet_y"]) < 0.5)                 # and the comet
+    cv = np.where(seen[1:] & seen[:-1], np.hypot(np.diff(g["comet_x"]), np.diff(g["comet_y"])) * rate, 0.0)
     return {"camera": camera,
             "slide_peak": float(sun_v.max()), "slide_p99": float(np.percentile(sun_v, 99)),
             "slide_over_0.4": float((sun_v > 0.4).mean()),
             "zoom_peak": float(zoom_v.max()), "turn_peak_deg": float(np.degrees(turn_v.max())),
             "planet_speed_peak": float(pv.max()), "planet_speed_p99": float(np.percentile(pv[pv > 0], 99)) if (pv > 0).any() else 0.0,
-            "planet_accel_p999": float(np.percentile(pa, 99.9)),
+            "planet_accel_p999": float(np.percentile(pa, 99.9)), "comet_speed_peak": float(cv.max()),
             "worst_at": float(np.argmax(sun_v) / rate)}

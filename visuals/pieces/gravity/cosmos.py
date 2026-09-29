@@ -242,6 +242,22 @@ def smootherstep(x: np.ndarray) -> np.ndarray:
     return x * x * x * (x * (x * 6 - 15) + 10)
 
 
+def comet(clock, a0, tug, phase=0.0, turn=0.0) -> tuple[np.ndarray, np.ndarray]:
+    """Where the comet is in the plane of the orbits, as the shader places it (x, y; y away from the viewer):
+    `clock` is uOrbitSlow, `a0` and `tug` the camera's innermost orbit and spread, `phase` uCometPh, and `turn`
+    uCometTurn and the camera's turn."""
+    from .shader_cosmos import COMET_BEYOND, COMET_ECC as ce, COMET_PHASE, COMET_RATE, COMET_TURN
+
+    m = 2 * np.pi * (clock * COMET_RATE + COMET_PHASE + phase)
+    E = m
+    for _ in range(5):
+        E = E - (E - ce * np.sin(E) - m) / (1.0 - ce * np.cos(E))
+    ca = (a0 + COMET_BEYOND) * tug
+    x, y = ca * (np.cos(E) - ce), ca * np.sqrt(1.0 - ce * ce) * np.sin(E)
+    c, s = np.cos(COMET_TURN + turn), np.sin(COMET_TURN + turn)      # the shader's rot2: clockwise
+    return c * x + s * y, -s * x + c * y
+
+
 # ---------------------------------------------------------------------- camera
 
 
@@ -540,6 +556,44 @@ def bake(got: dict, mod: tuple[dict, dict] | None, sheet: dict | None = None) ->
             extra[f"{name}.{mode}"] = (direct.LERP, track)
     for name in PER_CAMERA:
         extra[name] = (direct.LERP, extra[f"{name}.{CAMERA}"][1])
+    # With the wave, its shock is reckoned in the home camera whichever one is watching: the shader is handed
+    # how wide the orbits stand there, and how far out the innermost is (both 0 without)
+    extra["uSpreadHome"] = (direct.LERP, cams["static"]["uSpreadSlow"] * (1.0 if feel["wave"] else 0.0))
+    extra["uInnerHome"] = (direct.LERP, a0_home * (1.0 if feel["wave"] else 0.0))
+
+    # ---- the comet (the shader's). With `comet` it rounds the Sun on the song's strongest moment: the strongest
+    # re-entry after the song's first eighth (there it is starting, not coming back), or with none the climax. Its
+    # place along its orbit is chosen for that, as the planets' are for their row; and its orbit is turned to where,
+    # in every camera, it is clear of the Sun's disc about that moment and never crosses its face (the least of those
+    # gaps made the largest, in steps of 5 degrees). And a strong kick's pull passing it blows its tail out: eased onto
+    # the moment the pull's front, from the Sun's limb, reaches it as the home camera has it - baked, as the belts' swell
+    # is, because the comet is always going nearer or further.
+    ph, turn_by, tail = 0.0, 0.0, np.zeros(n)
+    if feel["comet"]:
+        late = [d for d in ch.drops if d["t"] > float(meta["duration"]) / 8]
+        t_s = max(late, key=lambda d: d["strength"])["t"] if late else t_c
+        ph = -((shader_cosmos.COMET_RATE * float(np.interp(t_s, t, clock)) + shader_cosmos.COMET_PHASE + 0.5) % 1.0 - 0.5)
+        near = np.abs(t - t_s) <= 1.5
+        seen = []
+        for cam in cams.values():
+            e_ = np.clip(cam["uCamTilt"], 0.20, 0.98)
+            seen.append((*comet(clock, np.maximum(0.255, 0.156 / e_), cam["uSpreadSlow"], ph, cam["uCamTurn"]), e_, cam["uCamSpan"]))
+
+        def least(turn):
+            gaps = []
+            for x, y, e_, span in seen:
+                x, y = np.cos(turn) * x + np.sin(turn) * y, np.cos(turn) * y - np.sin(turn) * x      # (turned as rot2 turns)
+                gap = (np.hypot(x, y * e_) - sun_r) / span
+                gaps += [gap[y <= 0].min(initial=np.inf), gap[near].min()]
+            return min(gaps)
+        turn_by = max(np.radians(sorted(range(-180, 180, 5), key=abs)), key=least)
+        r_home = np.hypot(*comet(clock, a0_home, spread, ph))
+        at = kt[strong]
+        for _ in range(3):                                   # it goes on while the pull comes out to it
+            at = kt[strong] + (np.interp(at, t, r_home) - sun_r[k_at]) / orrery.PULL_SPEED
+        tail = feel["comet"] * COMET_TAIL * ease.envelope(at, np.clip(ka[strong], 0, 1), n, 0.10, 0.36)
+    extra["uCometPh"], extra["uCometTurn"] = (direct.LERP, np.full(n, ph)), (direct.LERP, np.full(n, turn_by))
+    extra["uCometTail"] = (direct.LERP, tail)
 
     base = {name: c for c, name in enumerate(ch.names)}
     keep = [c for c, name in enumerate(ch.names) if name not in extra]            # (what is re-baked here replaces direct's)
@@ -582,6 +636,7 @@ CAMERA_UNIFORMS = ("uCamTurn", "uCamTilt", "uCamRoll", "uCamSpan", "uCamX", "uCa
 PER_CAMERA = CAMERA_UNIFORMS + ("uSpreadSlow",)      # what changes when the player changes camera
 MODES = ("static", "hybrid", "cinematic")
 KICK_TUG = 0.030                                     # how far a kick pulls the orbits in, seen from the home distance
+COMET_TAIL = 0.3                                     # how much longer a full kick's pull makes the comet's tail, at `comet` 1
 
 
 def _shot(act: Act, e: np.ndarray, tilt_s: float) -> dict:

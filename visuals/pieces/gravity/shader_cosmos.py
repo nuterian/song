@@ -89,6 +89,10 @@ N_FLARE = 2           # flares in flight: the corona's discharges
 # belt from 39 to 48 AU.
 BELTS = tuple((float(orrery.displayed(lo)), float(orrery.displayed(hi) - orrery.displayed(lo)) / lanes, lanes)
               for (lo, hi), lanes in zip(orrery.BELTS, (3, 2)))
+# The comet's orbit: its eccentricity; its semi-major axis, beyond the innermost orbit's home distance; how many times it
+# goes round in a turn of the slow clock (uOrbitSlow); and, as the clock reads 0, where along its orbit it is (in turns)
+# and which way its perihelion points (radians). `cosmos.comet` places it as the shader does.
+COMET_ECC, COMET_BEYOND, COMET_RATE, COMET_PHASE, COMET_TURN = 0.70, 0.30, 0.30, 0.37, 0.95
 
 
 def _scalars(prefix: str, count: int, suffix: str = "") -> str:
@@ -165,6 +169,9 @@ uniform float uBeltLean0, uBeltLean1;      // how far each belt leans out (+) or
 uniform float uBeltSwell0, uBeltSwell1;    // how much larger its rocks stand as a kick's pull passes through it
 uniform float uSky;                // the sky's breath with the phrase, -1..1: how far the stars stand out from the middle of the frame
 uniform float uTrailRise;          // 1 where the planets rise and fall together: a planet's trail rises with it
+uniform float uSpreadHome, uInnerHome;     // with the wave, how wide the orbits stand, and how far out the innermost, as the home camera draws them (0 without)
+uniform float uCometPh, uCometTurn;        // how much further along its orbit the comet is (turns), and its orbit turned (radians)
+uniform float uCometTail;          // how much longer its tail streams out as a kick's pull passes it
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
@@ -278,6 +285,8 @@ vec2 lensed(vec2 at, vec2 sun, float a1, float r1, float a2, float r2) {{
     return at + dv / dist * (a1 * exp(-g1 * g1) + a2 * exp(-g2 * g2));
 }}
 
+// How far out the innermost orbit is drawn, seen from a camera at this tilt: far enough to clear the Sun
+float innermost(float tilt) {{ return max(0.255, 0.156 / clamp(tilt, 0.20, 0.98)); }}
 // From the plane of the orbits (u, v) and height above it, to the screen and to depth
 // toward the viewer; e and c are the sine and cosine of the camera's height over the plane.
 vec3 toView(vec3 w, float e, float c) {{ return vec3(w.x, w.y * e + w.z * c, -w.y * c + w.z * e); }}
@@ -668,7 +677,14 @@ void main() {{
     }}
     if (dropAge >= 0.0 && dropAge < 4.5) {{
         // slow enough to be watched crossing the system: it was too quick to appreciate
+        // With the wave (uSpreadHome > 0) it is reckoned as the home camera draws it, and drawn where that is among this
+        // camera's own orbits: as far beyond the innermost orbit, in the orbits' own units. So it reaches each planet at
+        // the moment its hop tops out (`cosmos`, `fronts`) in every camera, and in the home camera it is where it was.
+        // Near the Sun, inside every orbit, it goes over from the one to the other as it leaves the limb.
+        // (Weighed, not branched on: branched, it cost the frame 0.4 ms.)
         float rad = R + 0.60 * pow(dropAge, 0.70);
+        rad = mix(rad, (innermost(uCamTilt) + rad / max(uSpreadHome, 1e-3) - uInnerHome) * uSpreadSlow,
+                  step(1e-3, uSpreadHome) * sstep((rad - R) / (0.5 * (uInnerHome * uSpreadHome - R))));
         float g = (rho - rad) / 0.07;
         shove += 0.034 * uDropA * exp(-g * g) * exp(-dropAge / 1.3);
         for (int k = 0; k < 3; k++) {{
@@ -689,7 +705,7 @@ void main() {{
 
     // The innermost orbit clears the Sun even at the top of a beat, however far the plane
     // is tipped: a planet behind the Sun, or across its face, is a note nobody saw.
-    float a0 = max(0.255, 0.156 / e);
+    float a0 = innermost(uCamTilt);
     float tug = uSpreadSlow;                                          // how wide the orbits stand, as this camera sees it
     // The planets are bodies (`dance`): how far each leans toward the Sun or away, and how far
     // it has hopped off the plane, are simulated - springs, driven by its notes, by the Sun's
@@ -764,22 +780,24 @@ void main() {{
     // Its tail streams out *behind* it, as every trail in this picture does, longer the
     // faster it is going - quick and long round the Sun, short and slow far out. (A real
     // comet's tail points away from the Sun whichever way it is travelling, and drawn that
-    // way it looked like something drifting sideways with a stick on it.) ------------------------
+    // way it looked like something drifting sideways with a stick on it.) With `comet` it rounds
+    // the Sun on the song's strongest moment (uCometPh, uCometTurn: `cosmos`), and a kick's pull
+    // passing it blows its tail out a moment longer (uCometTail). ------------------------------------
     {{
-        float ce = 0.70, ca = (a0 + 0.30) * tug;
-        float M = TAU * (uOrbitSlow * 0.30 + 0.37);
+        float ce = {COMET_ECC:.2f}, ca = (a0 + {COMET_BEYOND:.2f}) * tug;
+        float M = TAU * (uOrbitSlow * {COMET_RATE:.2f} + {COMET_PHASE:.2f} + uCometPh);
         float E = M;
         for (int k = 0; k < 5; k++) E -= (E - ce * sin(E) - M) / (1.0 - ce * cos(E));
-        vec2 orb = rot2(0.95 + uCamTurn) * vec2(ca * (cos(E) - ce), ca * sqrt(1.0 - ce * ce) * sin(E));
+        vec2 orb = rot2({COMET_TURN:.2f} + uCometTurn + uCamTurn) * vec2(ca * (cos(E) - ce), ca * sqrt(1.0 - ce * ce) * sin(E));
         vec2 cs = vec2(orb.x, orb.y * e);
         float closeness = clamp(ca * (1.0 - ce) / max(length(orb), 1e-3), 0.0, 1.0);
-        vec2 vel = rot2(0.95 + uCamTurn) * vec2(-sin(E), sqrt(1.0 - ce * ce) * cos(E));
+        vec2 vel = rot2({COMET_TURN:.2f} + uCometTurn + uCamTurn) * vec2(-sin(E), sqrt(1.0 - ce * ce) * cos(E));
         float speed = length(vel) / (1.0 - ce * cos(E));                 // Kepler: 2.4 at perihelion, 0.4 at the far end
         vec2 anti = normalize(cs + 1e-6);                                // away from the Sun: the tail leans a little that way, as dust does
         vec2 away = normalize(-normalize(vec2(vel.x, vel.y * e) + 1e-6) + 0.25 * anti);
         vec2 d = q - cs;
         float back = dot(d, away);
-        float len = (0.010 + 0.030 * speed) * (0.7 + 0.5 * uField);
+        float len = (0.010 + 0.030 * speed) * (0.7 + 0.5 * uField) * (1.0 + uCometTail);
         float u = clamp(back / len, 0.0, 1.0);
         // a fine wedge that fades to nothing along its length
         float tailA = step(0.0, back) * step(back, len) * disc(abs(dot(d, vec2(-away.y, away.x))) / pxScene, (0.55 + 0.8 * closeness) * (1.0 - 0.9 * u) + 0.2);
@@ -858,7 +876,9 @@ void main() {{
                 if (f > struck) {{ struck = f; struckInk = mix(mix(kA, kB, ringM[k]), white, 0.35); }}
             }}
             {{
-                float since = dropAge - pow(max(a - R, 0.0) / 0.60, 1.0 / 0.70);
+                // (where it is as the home camera reckons it: from the raw channels, or it cost the frame 0.4 ms)
+                float aHome = uSpreadHome > 0.0 ? (pOff[i] + uInnerHome) * uSpreadHome + pullGain * pLean[i] : a;
+                float since = dropAge - pow(max(aHome - R, 0.0) / 0.60, 1.0 / 0.70);
                 float f = uDropA * arrive(since, 1.5 * LEAD, 1.10);
                 if (f > struck) {{ struck = f; struckInk = mix(kA, white, 0.55); }}
             }}
