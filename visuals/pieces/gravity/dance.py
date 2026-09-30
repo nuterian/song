@@ -47,6 +47,11 @@ With `planets_arc` they also rise and fall together, once in a phrase (`arc`), a
 notes' hops ride on that. With `wave`, on an important moment a hop runs out through them
 one after another, Mercury first (`simulate`'s `fronts`). And the belts dance as the
 heaviest bodies of all (`belts`).
+
+With `gravity` none of that moves them: the Sun leads, and they follow (`gravity`). How
+strongly it pulls is its size, and a stronger pull holds a tighter orbit; each planet, and
+each belt, follows as a body with the period of its own orbit, and runs ahead along it as
+it is drawn in. Nothing hops.
 """
 
 from __future__ import annotations
@@ -279,6 +284,19 @@ def belts(gesture, n: int, breathe: float) -> np.ndarray:
     return out
 
 
+def moons(swell: np.ndarray, w) -> np.ndarray:
+    """The moons are on strings: they follow the swell late, and overshoot a little. `swell`
+    is one planet's (n) or every planet's (n x N); `w` its planet's natural frequency, rad/s."""
+    dt, ws = 1.0 / RATE, 0.6 * np.asarray(w)
+    s, vs = np.zeros(swell.shape[1:]), np.zeros(swell.shape[1:])
+    swing = np.zeros(swell.shape)
+    for k in range(len(swell)):
+        vs += dt * (-2 * 0.45 * ws * vs - ws ** 2 * (s - swell[k]))
+        s += dt * vs
+        swing[k] = s
+    return swing
+
+
 def _hops(push: np.ndarray, high: np.ndarray) -> np.ndarray:
     """Every planet off the plane: a damped spring tied to its neighbours (semi-implicit Euler),
     pushed by `push` (velocity per sample) and drawn toward `high` (both n x N)."""
@@ -415,15 +433,213 @@ def simulate(notes: list[tuple[np.ndarray, np.ndarray]], kicks: tuple[np.ndarray
             aa = np.clip(aa, 0, 1.2)
             glow = (1.0 - accents) * glow + accents * ease.envelope(ta, aa, n, 0.12, 0.60, soften=0.06)
             swell = (1.0 - accents) * swell + accents * ease.envelope(ta, aa, n, max(float(tpa[i]), 0.14), 0.70, rise=ease.EASE_SLOW, soften=0.07)
-        # the moons are on strings: they follow the swell late, and overshoot a little
-        s, vs, swing = 0.0, 0.0, np.zeros(n)
-        ws = 0.6 * w[i]
-        for k in range(n):
-            vs += dt * (-2 * 0.45 * ws * vs - ws ** 2 * (s - swell[k]))
-            s += dt * vs
-            swing[k] = s
+        swing = moons(swell, w[i])
         spin = np.cumsum(ease.envelope(t, amp, n, 0.10, 1.6)) * dt * 0.9
         out[f"uLean{i}"], out[f"uHop{i}"], out[f"uSway{i}"] = lean[:, i], hop[:, i], ahead[:, i]
         out[f"uGlow{i}"], out[f"uBig{i}"], out[f"uSwing{i}"], out[f"uSpin{i}"] = glow, swell, swing, spin
     out["rings"], out["restless"] = rings, restless
     return out
+
+
+# ---- gravity ------------------------------------------------------------------------------------
+# With `gravity` the Sun leads and the planets follow it, and nothing else moves them. How
+# strongly the Sun pulls is what it is seen to do: its size, the lead, 1 at its median. A
+# stronger pull holds a tighter orbit, so each orbit's place at rest is drawn in by `gravity`
+# of its distance for each unit the lead stands over 1, and let out as it falls under, read as
+# late as the pull takes to travel out to it. The planet has inertia: it follows that place as
+# a damped spring whose period is its orbit's, by Kepler's third law brought into the song's
+# range (Mercury's two beats, Neptune's nine). Drawn in, it runs ahead along its orbit, as
+# angular momentum says. Nothing leaves the plane. The belts obey the same law, as the heaviest
+# bodies. And, all of it soft, Mercury is held off the Sun's disc, neighbours are kept apart and
+# the belts give way to the planets, in whichever camera they stand closest.
+KEPLER_BEATS = 2.0          # Mercury's period, in beats; an orbit R out has (R / R_Mercury)^1.5 times it
+KEPLER_DAMP = 0.7           # of critical: it goes past where it is going by a twentieth, once
+RUN_AHEAD = 4.0             # drawn in by x, a planet goes faster along its orbit by this times x / R of its speed (nature's is 2; at 5 Mercury ran into Venus)
+MERCURY_AHEAD = 0.25        # Mercury runs ahead a quarter as far: it has the least room
+AHEAD_LEAK_BARS = 4.0       # what a planet has run ahead leaks away over this long...
+ROW_BARS = 8.0              # ...and is eased to nothing over this many bars either side of the climax, so that the row stands
+SUN_CLEAR = 6.0             # Mercury's disc is kept this far off the Sun's, in pixels at 1080p...
+NEIGHBOUR_CLEAR = 5.0       # ...a planet's this far off its inner neighbour's...
+BELT_CLEAR = 3.0            # ...and a belt this far off the planets either side of it
+KNEE = 1.5 / 1080           # a keeper takes hold over about this much lean (scene units)
+BODIES = np.concatenate([R_MEAN, 0.255 + BELT_MID])     # the distances of all that follows: the planets, then the belts
+
+
+def orbits(lead: np.ndarray, share: float, period: float) -> np.ndarray:
+    """Where each body's orbit stands, out (+) or in from where it rests, in scene units at
+    the home distance (n x 10: the planets, then the belts): `share` of its distance for each
+    unit `lead` stands under 1, read as late as the pull reaches it, followed through a spring
+    of its own orbit's period."""
+    n, dt = len(lead), 1.0 / RATE
+    late = np.round((BODIES - R_MEAN[0]) / orrery.PULL_SPEED * RATE).astype(int)
+    target = np.stack([-share * r * (np.concatenate([np.full(k, lead[0]), lead[:n - k]]) - 1.0) for r, k in zip(BODIES, late)], 1)
+    w = 2 * np.pi / (KEPLER_BEATS * period * (BODIES / R_MEAN[0]) ** 1.5)
+    x, v = target[0].copy(), np.zeros(len(BODIES))
+    out = np.empty_like(target)
+    for k in range(n):
+        v += dt * (w * w * (target[k] - x) - 2 * KEPLER_DAMP * w * v)
+        x += dt * v
+        out[k] = x
+    return out
+
+
+def run_ahead(lean: np.ndarray, lon: np.ndarray, bar: float, climax: float) -> np.ndarray:
+    """How far each planet has run ahead along its orbit, radians (n x N): drawn in (`lean`
+    below 0), a tighter orbit, faster; let out, slower. `lon` is each planet's longitude as it
+    goes round. What it gains leaks away, and about the climax (s) it is eased to nothing."""
+    dt, leak = 1.0 / RATE, AHEAD_LEAK_BARS * bar
+    speed = np.gradient(lon, axis=0) * RATE
+    phi, out = np.zeros(N), np.zeros_like(lean)
+    for k in range(len(lean)):
+        phi = phi + dt * (-RUN_AHEAD * speed[k] * lean[k] / R_MEAN - phi / leak)
+        out[k] = phi
+    u = np.clip((np.arange(len(lean)) / RATE - climax) / (ROW_BARS * bar), -1.0, 1.0)
+    out = out - out[int(climax * RATE)] * ((0.5 * (1.0 + np.cos(np.pi * u))) ** 2)[:, None]
+    out[:, 0] *= MERCURY_AHEAD
+    return out
+
+
+def _softplus(u: np.ndarray, w) -> np.ndarray:
+    """max(u, 0) with its corner rounded over about w."""
+    return w * np.logaddexp(0.0, u / w)
+
+
+def _views(cams: dict, off: np.ndarray, near: float) -> dict:
+    """How each camera draws the planets, every frame, as the shader does: its tilt, the
+    innermost orbit and the spread, where each planet's orbit rests, how far a unit of lean
+    moves a planet, pixels (at 1080p) to a scene unit, and its turn."""
+    views = {}
+    for mode, cam in cams.items():
+        e, g = np.clip(cam["uCamTilt"], 0.20, 0.98), np.clip(cam["uCamSpan"], 0.0, 1.0)
+        a0 = np.maximum(0.255, 0.156 / e)
+        views[mode] = {"e": e, "c": np.sqrt(1.0 - e * e), "a0": a0, "spread": cam["uSpreadSlow"],
+                       "rest": (a0[:, None] + off) * cam["uSpreadSlow"][:, None], "gain": g * (1.0 - near) + np.sqrt(g) * near,
+                       "px": 1080.0 / cam["uCamSpan"], "turn": cam["uCamTurn"]}
+    return views
+
+
+def _along(phi: np.ndarray, lean, v: dict, st: dict, i: int) -> np.ndarray:
+    """The angle planet i has run ahead by as camera `v` draws it, leaning `lean`: `phi` is the
+    static camera's (`st`), whose uSway it is written for."""
+    sway = phi * (st["rest"][:, i] + st["gain"] * lean) / st["gain"]
+    return v["gain"] * sway / np.maximum(v["rest"][:, i] + v["gain"] * lean, 0.05)
+
+
+def _off_the_sun(lean: np.ndarray, phi: np.ndarray, lon, rise, big, sun_r, views: dict) -> np.ndarray:
+    """Mercury's lean, held so that where it will be along its orbit (run ahead by `phi`) it
+    comes no nearer the Sun's disc than SUN_CLEAR in any camera: drawn in no further than
+    there is room for, easing onto that; and where even its place at rest would come nearer
+    than that, or than the picture at rest ever brings it where that is nearer (in the hybrid
+    camera it crosses the disc), let out just so far. Each limit is its least (or most) over a
+    second and a half, eased. (Letting it out to the whole margin everywhere took it 55 pixels
+    out, into Venus, and backward along its orbit.)"""
+    from scipy.ndimage import maximum_filter1d, minimum_filter1d
+
+    rooms, floors = [], []
+    for v in views.values():
+        a = v["rest"][:, 0]
+
+        def clear(ahead):
+            th = lon[:, 0] + v["turn"] + ahead
+            x, y = a * np.cos(th), a * np.sin(th) * v["e"] + a * rise[:, 0] * v["c"]
+            depth = -a * np.sin(th) * v["c"] + a * rise[:, 0] * v["e"]
+            r = orrery.SIZE[0] * (1.0 + 0.22 * big[:, 0]) * (1.0 + 0.10 * depth / np.maximum(a, 1e-3))
+            return (np.hypot(x, y) - r - sun_r) * v["px"], th
+
+        c0, th = clear(_along(phi, 0.0, v, views["static"], 0))
+        rooms.append((c0 - SUN_CLEAR) / (v["gain"] * v["px"]))
+        target = min(SUN_CLEAR, float(clear(0.0)[0].min()) + 2.5)
+        # letting it out moves it on screen by less, as the tipped plane shows a step along the radius there
+        seen = np.where(c0 < target, np.maximum(np.hypot(np.cos(th), v["e"] * np.sin(th)), 0.2), 1.0)
+        floors.append((target - c0) / (v["gain"] * v["px"] * seen))
+    k = int(1.5 * RATE)
+    room = np.maximum(ease.smooth(minimum_filter1d(np.maximum(np.min(rooms, 0), 0.0), k), 1.0), 1e-5)
+    floor = ease.smooth(maximum_filter1d(np.max(floors, 0), k), 1.0)
+    u = np.maximum(-lean, 0.0) / room                    # drawn in: untouched to 0.6 of the room, then easing onto it
+    held = np.where(lean < 0, -room * np.where(u <= 0.6, u, 0.6 + 0.4 * np.tanh((u - 0.6) / 0.4)), lean)
+    return held + _softplus(floor - held, 1.0 / 1080)
+
+
+def _apart(lean: np.ndarray, phi: np.ndarray, lon, rise, big, views: dict) -> np.ndarray:
+    """From Mercury outward: where a planet's disc would come nearer its inner neighbour's
+    than NEIGHBOUR_CLEAR on screen, in any camera, each where it will be along its orbit, it is
+    held out along its radius just far enough. Where at rest the two stand nearer than that in
+    that camera, or overlap (the hybrid camera leaning in draws the orbits tighter), no nearer
+    than they stand at rest: that is the picture's, not the dance's to mend."""
+    lean = lean.copy()
+    size = orrery.SIZE * (1.0 + 0.22 * big)
+    for i in range(1, N):
+        for v in views.values():
+            g, e, c = v["gain"], v["e"], v["c"]
+            # how near the two discs stand at rest; the margin is that where it is the lesser, rounded
+            (x0, y0), (x1, y1) = [(v["rest"][:, j] * np.cos(lon[:, j] + v["turn"]),
+                                   v["rest"][:, j] * (e * np.sin(lon[:, j] + v["turn"]) + rise[:, j] * c)) for j in (i - 1, i)]
+            margin = NEIGHBOUR_CLEAR / v["px"]
+            margin = margin - _softplus(margin - (np.hypot(x1 - x0, y1 - y0) - size[:, i] - size[:, i - 1]), KNEE)
+            th0 = lon[:, i - 1] + v["turn"] + _along(phi[:, i - 1], lean[:, i - 1], v, views["static"], i - 1)
+            th = lon[:, i] + v["turn"] + _along(phi[:, i], lean[:, i], v, views["static"], i)
+            # the inner neighbour where it is, and the line this planet moves along as it leans
+            r0 = v["rest"][:, i - 1] + g * lean[:, i - 1]
+            px, py = r0 * np.cos(th0), r0 * (e * np.sin(th0) + rise[:, i - 1] * c)
+            ux, uy = np.cos(th), e * np.sin(th) + rise[:, i] * c
+            uu, up = ux * ux + uy * uy, ux * px + uy * py
+            near2 = np.maximum(px * px + py * py - up * up / uu, 0.0)     # how near the line passes it, squared
+            D = size[:, i] + size[:, i - 1] + margin
+            # beyond it by enough to keep the discs D apart; where the line passes further than D from it,
+            # nothing is asked (and less and less as it passes nearer: no corner)
+            need = up / uu + np.sqrt(_softplus(D * D - near2, (0.3 * D) ** 2) / uu) - 5.0 * _softplus(np.sqrt(near2) - D, KNEE)
+            lo = (need - v["rest"][:, i]) / g
+            lean[:, i] = lo + _softplus(lean[:, i] - lo, KNEE)
+    return lean
+
+
+def _clear_of_belts(lean: np.ndarray, law: np.ndarray, big, views: dict) -> tuple[np.ndarray, np.ndarray]:
+    """The belts go by their own law (`law`, n x 2) where they can, and give way where it
+    would bring a planet's disc into one, in the plane, in any camera: the asteroid belt kept
+    between Mars's disc and Jupiter's, the Kuiper belt beyond Neptune's. Where Mars and Jupiter
+    together leave the asteroid belt no room, each gives up half of what is missing. Returns
+    the planets' lean and the belts'."""
+    size = orrery.SIZE * (1.0 + 0.22 * big)
+    (a_in, a_out), (k_in, _) = [[orrery.displayed(x) for x in belt] for belt in orrery.BELTS]
+    lo = hi = kuiper = None
+    for v in views.values():
+        g, m = v["gain"], BELT_CLEAR / v["px"]
+        rest = lambda x: (v["a0"] + x) * v["spread"]  # noqa: E731
+        l_ = (v["rest"][:, 3] + size[:, 3] - rest(a_in) + m) / g + lean[:, 3]       # the least the asteroid belt may lean
+        h_ = (v["rest"][:, 4] - size[:, 4] - rest(a_out) - m) / g + lean[:, 4]      # the most
+        k_ = (v["rest"][:, 7] + size[:, 7] - rest(k_in) + m) / g + lean[:, 7]       # the least the Kuiper belt may
+        # the most that any camera asks, rounded
+        lo = l_ if lo is None else lo + _softplus(l_ - lo, KNEE)
+        hi = h_ if hi is None else hi - _softplus(hi - h_, KNEE)
+        kuiper = k_ if kuiper is None else kuiper + _softplus(k_ - kuiper, KNEE)
+    give = _softplus(lo - hi, KNEE)
+    lean = lean.copy()
+    lean[:, 3] -= give / 2
+    lean[:, 4] += give / 2
+    lo, hi = lo - give / 2, hi + give / 2
+    belts = np.stack([lo + _softplus(law[:, 0] - lo, KNEE) - _softplus(law[:, 0] - hi, KNEE),
+                      kuiper + _softplus(law[:, 1] - kuiper, KNEE)], 1)
+    return lean, belts
+
+
+def gravity(lead: np.ndarray, share: float, lon, off, rise, sun_r, big, cams: dict, near: float,
+            period: float, bar: float, climax: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The planets and the belts following the Sun: how far each planet leans (uLean) and has
+    run ahead along its orbit (uSway), and how far each belt leans (uBeltLean), as the shader
+    reads them (n x N, n x N, n x 2). `lead` is the Sun's size over its median; `lon`, `off`
+    and `rise` each planet's longitude, distance beyond the innermost orbit and height (n x N,
+    `orrery.track`'s); `sun_r` the Sun's radius and `big` each planet's swell, as they are drawn;
+    `cams` the cameras' tracks (`cosmos.cameras`), whose planets dance as `near_dance` is `near`;
+    `climax` the moment of the row, s."""
+    views = _views(cams, off, near)
+    law = orbits(lead, share, period)
+    free = law[:, :N]
+    phi = run_ahead(free, lon, bar, climax)
+    for _ in range(2):                  # held, a planet runs ahead differently; run ahead, it is held differently: twice round
+        lean = free.copy()
+        lean[:, 0] = _off_the_sun(lean[:, 0], phi[:, 0], lon, rise, big, sun_r, views)
+        lean = _apart(lean, phi, lon, rise, big, views)
+        lean, belts = _clear_of_belts(lean, law[:, N:], big, views)
+        phi = run_ahead(lean, lon, bar, climax)
+    st = views["static"]
+    return lean, phi * (st["rest"] + st["gain"][:, None] * lean) / st["gain"][:, None], belts

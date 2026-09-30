@@ -529,7 +529,7 @@ def bake(got: dict, mod: tuple[dict, dict] | None, sheet: dict | None = None) ->
     # In a close shot a planet's dance is sized to the body, not only to the frame (the shader's
     # pullGain); and where the planets rise and fall together, a planet's trail rises with it
     extra["uNearDance"] = (direct.LERP, np.full(n, float(feel["near_dance"])))
-    extra["uTrailRise"] = (direct.LERP, np.full(n, 1.0 if feel["planets_arc"] > 0 else 0.0))
+    extra["uTrailRise"] = (direct.LERP, np.full(n, 1.0 if feel["planets_arc"] > 0 and not feel["gravity"] else 0.0))
     ping_cols = []
     for i in range(shader_cosmos.N_PLANETS):
         for name in ("uLean", "uHop", "uSway", "uGlow", "uBig", "uSwing", "uSpin"):
@@ -556,6 +556,21 @@ def bake(got: dict, mod: tuple[dict, dict] | None, sheet: dict | None = None) ->
             extra[f"{name}.{mode}"] = (direct.LERP, track)
     for name in PER_CAMERA:
         extra[name] = (direct.LERP, extra[f"{name}.{CAMERA}"][1])
+    # With `gravity` the Sun leads and the planets and the belts follow it (`dance.gravity`), kept clear of the Sun,
+    # of each other and of the belts in all three cameras: how strongly it pulls is its size, over its median. They
+    # do not hop; and a planet's swell and light, which came with the hop, are eased: its swell over a beat, its
+    # light over half of one, and its moons follow the swell
+    if feel["gravity"]:
+        big = np.stack([ease.smooth(danced[f"uBig{i}"], period) for i in range(shader_cosmos.N_PLANETS)], 1)
+        lean, sway, belt_lean = dance.gravity(sun_r / np.median(sun_r), feel["gravity"], lon, off, rise, sun_r, big, cams,
+                                              feel["near_dance"], period, bar, t_c)
+        swing = dance.moons(big, 2 * np.pi * dance.FREQ)
+        for i in range(shader_cosmos.N_PLANETS):
+            extra[f"uLean{i}"], extra[f"uSway{i}"], extra[f"uHop{i}"] = (direct.LERP, lean[:, i]), (direct.LERP, sway[:, i]), (direct.LERP, np.zeros(n))
+            extra[f"uBig{i}"], extra[f"uSwing{i}"] = (direct.LERP, big[:, i]), (direct.LERP, swing[:, i])
+            extra[f"uGlow{i}"] = (direct.LERP, ease.smooth(danced[f"uGlow{i}"], period / 2))
+        for b in range(len(dance.BELT_MID)):
+            extra[f"uBeltLean{b}"] = (direct.LERP, belt_lean[:, b])
     # With the wave, its shock is reckoned in the home camera whichever one is watching: the shader is handed
     # how wide the orbits stand there, and how far out the innermost is (both 0 without)
     extra["uSpreadHome"] = (direct.LERP, cams["static"]["uSpreadSlow"] * (1.0 if feel["wave"] else 0.0))

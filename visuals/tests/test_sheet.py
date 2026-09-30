@@ -127,7 +127,7 @@ def test_the_whole_system_dials_at_their_defaults_change_nothing(gravity):
                                                  ("kick_pull", 0.0, 1.6), ("accents", 0.5, 2.0),
                                                  ("planets_arc", 1.0, 1.1), ("near_dance", 0.5, -0.1),
                                                  ("belts_breathe", 0.0, 1.5), ("sky_breathes", 1.0, 2.0), ("wave", 0.3, -1.0),
-                                                 ("comet", 1.0, 1.5)])
+                                                 ("comet", 1.0, 1.5), ("gravity", 0.6, 0.7)])
 def test_the_dance_dials_are_taken_in_their_range_and_refused_outside_it(gravity, dial, inside, outside):
     tr, got, ch, sh = gravity
     assert sheet_.validate(dict(sh, feel=dict(sh["feel"], **{dial: inside})), got) == []
@@ -292,6 +292,132 @@ def test_the_comet_rounds_the_sun_on_the_strongest_reentry_clear_of_its_face(gra
         assert gap[~g["comet_behind"]].min() > head, mode                                # it never crosses the Sun's face
         assert gap[at] > head and abs(g["comet_x"][at]) < 16 / 18 and abs(g["comet_y"][at]) < 0.5, mode   # and is seen rounding it
         assert follow.jolt(out, mode)["comet_speed_peak"] < 1.0, mode                    # the planets' bound (test_no_camera_jolts)
+
+
+def test_the_gravity_dial_at_its_default_changes_nothing(gravity):
+    tr, got, ch, sh = gravity
+    whole = dict(sh, feel=dict(sh["feel"], **DANCE, **WHOLE, comet=1.0))
+    out = render.bake(got, tr, whole)
+    edit = copy.deepcopy(whole)
+    del edit["feel"]["gravity"]                                        # a sheet written before it
+    again = render.bake(got, tr, edit)
+    assert again.names == out.names and np.array_equal(again.data, out.data)
+    # and the dance the other dials make is left as it is: the planets hop, and a trail rises with its planet
+    assert all(np.ptp(col(out, f"uHop{i}")) > 0 for i in range(8)) and col(out, "uTrailRise").min() == 1.0
+
+
+# the planets follow the Sun, and the dance of the rounds before is off
+GRAVITY = {"gravity": 0.3, "planets_breathe": 0.0, "planets_sway": 0.0, "kick_pull": 0.0, "planets_arc": 0.0, "wave": 0.0}
+
+
+@pytest.fixture(scope="module", params=["gravity-in-motion", "shattered-voices"])
+def following(request):
+    """A song with a curated sheet, baked from it with GRAVITY; and with every planet at rest (no lean, hop or sway)."""
+    from visuals.pieces.gravity import ROOT, listen, make, models
+    from visuals.pieces.gravity.track import Track
+
+    slug = request.param
+    tr = Track.resolve() if slug == "gravity-in-motion" else Track(slug, ROOT / "visuals" / "cache" / slug / "source.wav")
+    fix = sheet_.grid_fix(tr)
+    cache = make.cache_of(tr, fix)
+    got = listen.load_cached(cache, fix)
+    mod = models.load_cached(cache)
+    if got is None or mod is None or mod[1].get("listened") != models.listened_key(got["meta"]):
+        pytest.skip(f"no current listening and models cached for {slug}")
+    render.STYLE = "cosmos"
+    the = sheet_.read(sheet_.CURATED / f"{slug}.json")
+    out = render.bake(got, tr, dict(the, feel=dict(the["feel"], **GRAVITY)))
+    rest = copy.copy(out)
+    rest.data = out.data.copy()
+    for i in range(8):
+        for name in ("uLean", "uHop", "uSway"):
+            rest.data[:, rest.index(f"{name}{i}")] = 0.0
+    return got, out, rest
+
+
+def _placed(ch, mode):
+    """Each planet's distance from the Sun in the plane and its angle along its orbit, as the shader has them
+    (scene units, radians; n x 8); and the camera's innermost orbit, spread and gain."""
+    e = np.clip(col(ch, f"uCamTilt.{mode}"), 0.20, 0.98)
+    a0, tug, g = np.maximum(0.255, 0.156 / e), col(ch, f"uSpreadSlow.{mode}"), np.clip(col(ch, f"uCamSpan.{mode}"), 0.0, 1.0)
+    near = col(ch, "uNearDance")
+    gain = g * (1.0 - near) + np.sqrt(g) * near                                  # the shader's pullGain
+    a = np.stack([(a0 + col(ch, f"uPd{i}")) * tug + gain * col(ch, f"uLean{i}") for i in range(8)], 1)
+    th = np.stack([2 * np.pi * col(ch, f"uPh{i}") for i in range(8)], 1) + gain[:, None] * np.stack([col(ch, f"uSway{i}") for i in range(8)], 1) / np.maximum(a, 0.05)
+    return a, th, a0, tug, gain
+
+
+def _follows(lead, inward):
+    """How well a planet's place, inward, follows the lead, at the lag (0 to 3 s, every sample) where it follows it
+    best: (correlation, lag in samples)."""
+    n, best = len(lead), (-1.0, 0)
+    for k in range(0, 3 * 120):
+        x, y = lead[:n - k] - lead[:n - k].mean(), inward[k:] - inward[k:].mean()
+        best = max(best, (float((x * y).sum() / np.sqrt((x * x).sum() * (y * y).sum())), k))
+    return best
+
+
+def test_the_planets_follow_the_sun_in_turn_smoothly_and_nothing_hops(following):
+    from visuals.pieces.gravity import cosmos, dance, follow
+
+    got, out, rest = following
+    lead = 0.078 * (0.5 + 0.8 * col(out, "uMass")) * (1.0 + 0.22 * col(out, "uSunPulse"))
+    lead = lead / np.median(lead)
+    law = dance.orbits(lead, GRAVITY["gravity"], float(got["meta"]["period"]))[:, :8]
+    lags = []
+    for i in range(8):
+        # the law alone, before any keeper: every planet follows the lead, as late as it is far out. (Today the
+        # outermost, Neptune, measures 0.961 on Gravity and 0.902 on Shattered Voices: the further out, the less.)
+        r, k = _follows(lead, -law[:, i])
+        assert r >= 0.88, (i, r)
+        lags.append(k)
+        # and the keepers, which hold them off the Sun, off each other and out of the belts, take little from it
+        assert _follows(lead, -col(out, f"uLean{i}"))[0] >= r - 0.01, i
+    assert np.all(np.diff(lags) > 0), lags                                          # Mercury soonest, Neptune last
+    assert all(not col(out, f"uHop{i}").any() for i in range(8)) and not col(out, "uTrailRise").any()   # nothing leaves the plane
+    for name in [f"{k}{i}" for k in ("uLean", "uSway", "uBig", "uGlow", "uSwing") for i in range(8)] + ["uBeltLean0", "uBeltLean1"]:
+        x = col(out, name)
+        assert np.ptp(x) > 0, name                                                  # it moves
+        assert np.abs(np.diff(x)).max() < 0.25 * np.ptp(x), name                    # nothing jumps
+        assert np.abs(np.diff(x, 2)).max() < 0.09 * np.ptp(x), name                 # and nothing has a corner in it
+    k = int(out.climax * 120)
+    for mode in cosmos.MODES:
+        j = follow.jolt(out, mode)
+        assert j["planet_speed_peak"] < 1.0 and j["planet_speed_p99"] < 0.30, (mode, j)    # the bounds of test_no_camera_jolts
+        # at the climax the eight stand in a row, run ahead or not (test_acts_cover_the_song_and_the_planets_align_at_the_climax)
+        _, th, _, _, _ = _placed(out, mode)
+        row = (th[k] + col(out, f"uCamTurn.{mode}")[k] + np.pi) % (2 * np.pi) - np.pi
+        assert np.degrees(np.abs(row).max()) < 8.0, (mode, np.degrees(row))
+
+
+def test_the_planets_following_the_sun_touch_nothing_in_any_camera_and_never_go_back(following):
+    from visuals.pieces.gravity import cosmos, follow
+    from visuals.pieces.gravity import shader_cosmos as sc
+
+    got, out, rest = following
+    n, px = len(out.data), 1.0 / 1080                                           # a pixel at 1080p, in frame heights
+    for mode in cosmos.MODES:
+        g, g0 = follow.geometry(out, np.arange(n), mode), follow.geometry(rest, np.arange(n), mode)
+
+        def gaps(g):
+            sun = np.hypot(g["planet_x"][:, 0] - g["sun_x"], g["planet_y"][:, 0] - g["sun_y"]) - g["sun_r"] - g["planet_r"][:, 0]
+            pair = np.hypot(np.diff(g["planet_x"], axis=1), np.diff(g["planet_y"], axis=1)) - g["planet_r"][:, 1:] - g["planet_r"][:, :-1]
+            return sun, pair
+        sun, pair = gaps(g)
+        sun0, pair0 = gaps(g0)
+        # Mercury off the Sun's disc, or where at rest it is on it (the hybrid camera), no further on
+        assert sun.min() >= min(sun0.min(), 0.0), (mode, sun.min() / px, sun0.min() / px)
+        # neighbours' discs apart on screen, or where at rest they overlap, no further (within a pixel)
+        assert (pair - np.minimum(pair0, 0.0)).min() > -px, (mode, (pair - np.minimum(pair0, 0.0)).min(0) / px)
+        # no disc in a belt, in the plane: Mars and Jupiter either side of the asteroid belt, Neptune inside the Kuiper belt
+        a, th, a0, tug, gain = _placed(out, mode)
+        size = np.stack([sc.PLANET_SIZE[i] * (1.0 + 0.22 * col(out, f"uBig{i}")) for i in range(8)], 1)
+        belt = lambda x, b: (a0 + x) * tug + gain * col(out, f"uBeltLean{b}")  # noqa: E731
+        assert (belt(sc.BELTS[0][0], 0) - a[:, 3] - size[:, 3]).min() > 0, mode
+        assert (a[:, 4] - size[:, 4] - belt(sc.BELTS[0][0] + sc.BELTS[0][1] * sc.BELTS[0][2], 0)).min() > 0, mode
+        assert (belt(sc.BELTS[1][0], 1) - a[:, 7] - size[:, 7]).min() > 0, mode
+        # and each goes on round its orbit, slower and faster, never back
+        assert np.diff(th, axis=0).min() > 0, (mode, np.diff(th, axis=0).min(0))
 
 
 def test_lyrics_follow_the_sheet(gravity, tmp_path):

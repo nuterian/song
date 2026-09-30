@@ -2106,3 +2106,63 @@ memory, never what is sent.
   where it is weighed and the flash reads the channels as they come.
 - Not yet: a telephone, Safari; Shattered Voices and the hybrid camera were measured and
   not looked at.
+
+## The Sun's gravity is the music (2026-09-29, later)
+
+Jugal watched the dance of the rounds before and did not find it: "I honestly don't see
+much of a difference... still a bit abrupt, still unnatural... the planets are bouncing
+around abruptly and unexpectedly, looks too gimmicky... something cool, plausible, physics
+based. The Sun is dancing well; that is the lead. I want the planets to follow along."
+Every number asked of that dance had been met. The numbers were of what is easy to count
+(how often a planet turns back, how far it goes against its gap), and none of them was
+whether it follows the Sun, which it did not: a planet's place went with the Sun's size at
+0.05 of 1. It was also slower than what it rode on: 10 pixels a second of dance on 33 to 50
+of orbit. And its hops, its steps to a beat and its swells of a fifth were pops.
+
+- **Three sketches, made outside the repository** (a bake, some channels replaced, drawn:
+  `sketch.py`, kept with the session's tools), none with anything off the plane, were put
+  beside the dance as it was, in one video of four panes with the song. He chose the first,
+  `gravity`. The others: a kick squeezing each orbit as it travels out (`ripple`: the beat
+  is seen to run outward, and may read as the twitch again); the orbits going oval
+  together, nested and turning (`ellipse`: bent where a planet would meet a belt or the Sun).
+- **The law** (`dance.gravity`, the dial `gravity`, 0.3 in both songs' sheets, with the
+  earlier dance's dials at nothing). How hard the Sun pulls is what it is seen to do: its
+  drawn size over its median. A stronger pull holds a tighter orbit, by the same share of
+  every orbit. A planet follows through an oscillator whose period is its orbit's, by
+  Kepler's third law brought into the song's range (Mercury two beats, Neptune nine),
+  damped at 0.7, and as late as the pull takes to reach it. Drawn in, it runs ahead
+  (angular momentum; twice nature, and Mercury a quarter of that: at three times nature
+  Mercury ran into Venus); what it has run ahead leaks away over four bars and is eased to
+  nothing about the climax, where the row is. Nothing leaves the plane: no hop. Size and
+  light are smoothed over a beat and half a beat. The belts obey the same law.
+- **Who carries what.** A heavy body does not answer a beat. The beat is the Sun's own, the
+  moons', the belts' rocks', the comet's tail; the bar and the phrase are the planets'; the
+  section is the whole system's, which the spread of the orbits already was.
+- **Keepers**, all soft: Mercury off the Sun's disc; discs five pixels apart; the belts
+  giving way to a disc. They hold in every camera, and a pair is kept the margin apart or
+  no nearer than it stands at rest in that camera, where at rest it is nearer: what the
+  old picture has wrong is not this dial's to mend (in the hybrid camera, at rest, Mercury
+  crosses the Sun's disc by 7.5 pixels and Uranus and Neptune overlap by up to 8).
+- **Measured.** A planet's place goes with the Sun's size at 0.96 to 0.97 on Gravity and
+  0.90 to 0.96 on Shattered Voices, the lag in order outward, 0.17 s for Mercury to 1.5
+  for Neptune. It moves 32 to 86 pixels (it was 18 to 32). Along its orbit it goes at 0.49
+  to 1.31 of its ordinary speed, never backward. The keepers take at most 0.008 from how
+  closely any planet follows. The build is the sketch to within 12 pixels, all of it the
+  keepers in the other cameras.
+- **A bound was set before anything was measured, and was wrong.** Every planet was to
+  follow at 0.9; the law alone gives Neptune 0.902 on Shattered Voices, and the keepers,
+  asked in the same breath to hold in every camera, took it to 0.898. The test now asks two
+  things, each of which can fail: the law alone brings every planet to 0.88, and the
+  keepers take no more than 0.01.
+- **Cost.** The shader is not changed. Drawing the new places costs 0.15 ms a frame more
+  than the old picture at 1080p (a trail is looked for as far from its orbit as its planet
+  leans, and they lean further). Gravity's frames: 2.51 MB (3.05): the hops are nothing, and
+  pack to nothing.
+- **What the lead lacks.** On Gravity the Sun's size has two levels, the quiet sections'
+  and the full ones', and a pulse on the beat; at the bar and the phrase, almost nothing.
+  So inside a section the planets are calm. If that is too calm, it is the Sun that should
+  be given a swell over the phrase, and the planets will follow it.
+- Still in the code, at nothing in the sheets: the score, the steps, the accents' hops,
+  the arc, the wave. To be taken out when this is settled.
+- Not yet: a telephone, Safari; the hybrid camera by eye. Frame rate was read on a warm
+  machine, the old picture and the new in turn, and both fell short of 60 alike.

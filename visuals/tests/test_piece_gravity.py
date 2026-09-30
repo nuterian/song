@@ -684,6 +684,31 @@ def test_they_rise_together_over_a_phrase_and_a_wave_tops_out_on_each_planet_in_
     assert [h.max() for h in hops] == pytest.approx(list(orrery.SIZE), rel=0.3)      # (and its neighbours' lift it a little: Jupiter's, Mars most)
 
 
+def test_a_stronger_pull_draws_every_orbit_in_smoothly_the_outer_later_and_a_planet_drawn_in_runs_ahead():
+    # the Sun a fifth larger from 2 s on, and so it stays: every orbit is drawn in by `gravity` of a fifth of its distance
+    n, period, share = 30 * direct.RATE, 0.5, 0.3
+    t = np.arange(n) / direct.RATE
+    x = dance.orbits(np.where(t < 2.0, 1.0, 1.2), share, period)
+    final = -share * 0.2 * dance.BODIES
+    assert not x[t < 2.0].any()                                                        # nothing moves before the Sun does
+    assert x[-1] == pytest.approx(final, rel=1e-3)                                     # it arrives, and stays
+    assert np.all((final - x.min(0)) / -final < 0.05)                                  # past it by a few percent at most
+    assert np.all(np.abs(np.diff(x, axis=0)).max(0) < 0.25 * np.ptp(x, 0))             # nothing jumps
+    assert np.all(np.abs(np.diff(x, 2, axis=0)).max(0) < 0.09 * np.ptp(x, 0))          # and nothing has a corner in it
+    # the planets outward: each later than the one inside it, and slower about it
+    half = np.array([t[np.argmax(x[:, i] < final[i] / 2)] for i in range(8)])
+    rise = np.array([t[np.argmax(x[:, i] < 0.9 * final[i])] - t[np.argmax(x[:, i] < 0.1 * final[i])] for i in range(8)])
+    assert np.all(np.diff(half) > 0) and np.all(np.diff(rise) > 0), (half, rise)
+    # drawn in, a planet runs ahead along its orbit; let out, it falls behind (Mercury a quarter as far)
+    lon = 2 * np.pi * orrery.rate()[None, :] * t[:, None] / 4.0
+    ahead = dance.run_ahead(x[:, :8], lon, 0.5, 29.0)
+    behind = dance.run_ahead(dance.orbits(np.where(t < 2.0, 1.0, 0.8), share, period)[:, :8], lon, 0.5, 29.0)
+    at = int(8 * direct.RATE)
+    assert np.all(ahead[at] > 0) and np.all(behind[at] < 0)
+    assert not ahead[t < 2.0].any() and np.abs(ahead[int(29.0 * direct.RATE)]).max() < 1e-12     # and at the climax, none of it
+    assert np.all(np.abs(np.diff(ahead, axis=0)).max(0) < 0.25 * np.ptp(ahead, 0))
+
+
 @pytest.mark.local
 def test_the_real_dance_is_smooth_every_planet_plays_and_rings_are_rare():
     got, ch = _real_cosmos()

@@ -45,16 +45,17 @@
     "camera_move_bars": 8.0,
     "hybrid_turn_bars": 96.0,
     "orbits_breathe": 0.55,
-    "planets_breathe": 0.5,
-    "kick_pull": 0.3,
+    "planets_breathe": 0.0,
+    "kick_pull": 0.0,
     "accents": 1.0,
-    "planets_sway": 1.0,
-    "planets_arc": 0.35,
+    "planets_sway": 0.0,
+    "planets_arc": 0.0,
     "near_dance": 1.0,
     "belts_breathe": 0.5,
     "sky_breathes": 1.0,
-    "wave": 1.0,
-    "comet": 1.0
+    "wave": 0.0,
+    "comet": 1.0,
+    "gravity": 0.3
   },
   "lyrics": {
     "show": true,

@@ -86,6 +86,7 @@ FEEL = {
     "sky_breathes": (0.0, 0.0, 1.0, "how far the stars move out and in with the phrase, the nearest furthest: at 1, 1.2 percent of the way from the middle of the frame"),
     "wave": (0.0, 0.0, 1.0, "how high a wave of hops runs out through the planets on a re-entry, and more lightly at every other phrase"),
     "comet": (0.0, 0.0, 1.0, "0: the comet answers nothing; above 0 it rounds the Sun on the song's strongest re-entry, and a strong kick blows its tail out as it passes, at 1 to 1.3 times its length"),
+    "gravity": (0.0, 0.0, 0.6, "how far the Sun's pull, which is its size, draws the orbits and the belts in and lets them out, as a share of each orbit; above 0 the planets follow it alone, and do not hop"),
 }
 LYRICS = {
     "show": (True, None, None, "whether the words are shown"),
