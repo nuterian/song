@@ -335,7 +335,9 @@
     <noscript><p class="said">This video is drawn live by JavaScript. Turn it on to watch.</p></noscript>
   </main>
   <div id="own"><span id="clock"></span><span id="readout">loading</span><span id="fps"></span><span id="choices"></span></div>
-  <audio id="audio" preload="auto"></audio>
+  <!-- The song, in a video element: Chrome starts a silent video unasked, and a silent audio
+       element only where the visitor has played one before. Nothing of it is drawn. -->
+  <video id="audio" preload="auto" playsinline hidden></video>
   <script type="module">
     // The page's own controls, over the player's (window.player): the songs, play and the
     // time, the three cameras, the words, what was heard, the full screen.

@@ -19,13 +19,13 @@
 <meta property="og:image:alt" content="A music video for any song. The Sun and its planets, drawn from a song.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://jugalm.com/song/img/card.jpg">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","@id":"https://jugalm.com/song/#app","name":"song","url":"https://jugalm.com/song/","applicationCategory":"MultimediaApplication","operatingSystem":"macOS","dateCreated":"2026","image":"https://jugalm.com/song/img/cosmos-still.webp","description":"Give it a track. It listens to the whole song, then draws it as a solar system where every beat, note and word moves something. Free, open source, and made on your own Mac.","sameAs":"https://github.com/nuterian/song","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","@id":"https://jugalm.com/#me","name":"Jugal Manjeshwar","url":"https://jugalm.com/"},"isPartOf":{"@id":"https://jugalm.com/#site"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","@id":"https://jugalm.com/song/#app","name":"song","url":"https://jugalm.com/song/","applicationCategory":"MultimediaApplication","operatingSystem":"macOS","dateCreated":"2026","image":"https://jugalm.com/song/img/cosmos-still.webp","description":"Give it a track. It listens to the whole song, then draws it as a solar system where every beat, note and word moves something. Free, open source, and made on your own Mac.","sameAs":"https://github.com/nuterian/song","license":"https://opensource.org/license/mit","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","@id":"https://jugalm.com/#me","name":"Jugal Manjeshwar","url":"https://jugalm.com/"},"isPartOf":{"@id":"https://jugalm.com/#site"}}</script>
 <link rel="apple-touch-icon" href="video/icons/icon-180.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Cpath d='M6 20 L6 12 M11 23 L11 9 M16 26 L16 6 M21 22 L21 10 M26 19 L26 13' stroke='%23ff7a3d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <!-- The poster is what the page paints first; the live picture arrives over it. -->
 <link rel="preload" as="image" href="img/poster.webp" fetchpriority="high" media="(min-aspect-ratio: 1/1)">
 <link rel="preload" as="image" href="img/poster-tall.webp" fetchpriority="high" media="(max-aspect-ratio: 1/1)">
-<script>document.documentElement.classList.add("js");</script>
+<script>document.documentElement.classList.add("js", "scripted");</script>
 <style>
 :root{
   --ink:#f5f5f7; --dim:#a1a1a6; --faint:#86868b; --line:#1d1d1f; --accent:#ff7a3d;
@@ -42,7 +42,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 img{display:block;max-width:100%;height:auto}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
 h1,h2{margin:0;font-weight:700;letter-spacing:-.045em;line-height:1.02;text-wrap:balance}
-h1{font-size:clamp(2.75rem,min(8.4vw,13.4svh),7.75rem)}     /* by the height too: a wide, short window keeps the Sun under the words */
+h1{font-size:clamp(2.75rem,min(8.4vw,23svh - 96px),7.75rem)}     /* by the height too: what is said, and its buttons, end above the Sun */
 h2{font-size:clamp(2.5rem,7.2vw,6.5rem)}
 .lede{margin:.9em auto 0;max-width:30em;color:var(--dim);font-size:clamp(1.0625rem,1.75vw,1.5rem);line-height:1.35;text-wrap:balance}
 
@@ -66,16 +66,19 @@ header .mark{padding:12px 8px 12px 0;margin-left:0}
    from the first paint. The page itself does not scroll: Safari (26, on an iPhone) does not
    draw what is fixed or sticky under its glass bar at the foot, and does draw the page, so
    the picture is part of the page, standing still, and what is read scrolls over it. */
-.film{--bar:0px;timeline-scope:--page}
-.page{position:absolute;left:0;top:0;width:100%;height:calc(100svh + var(--bar));z-index:1;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scroll-timeline:--page block}
-.page:focus{outline:none}
-/* where the Sun is: under the window's middle by --low in the first screen and --mid after it,
-   and to its right by --side (the poster, the video and the play button all go by these).
+.film{--bar:0px;--low:28svh;--mid:28svh;--side:0px;timeline-scope:--page}
+.page{position:absolute;left:0;top:0;width:100%;height:100vh;z-index:1;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scroll-timeline:--page block}
+.page:focus,section:focus{outline:none}      /* where the script puts the keyboard, not where a visitor did */
+/* where the Sun is (set on the film): under the window's middle by --low in the first screen and
+   --mid after it, and to its right by --side (the poster, the video and the play button all go by
+   these). Low enough that what the first screen says, and its buttons, end above the Sun's glow.
    The picture goes on under a telephone's browser bar, where the bar is glass (Safari's):
    --bar is how far past the window it goes (on the film, set by the script to the screen's
    own foot on a telephone, since Safari's 100lvh stops short of it), and the middle of what
-   is seen is above it. */
-.screen{position:absolute;left:0;top:0;width:100%;height:calc(100svh + var(--bar));overflow:hidden;background:#000;z-index:0;--low:21svh;--mid:calc(var(--low) + 5svh);--side:0px}
+   is seen is above it. (The height is in svh only where svh is known: a browser that does not
+   know it would have no height at all, and a page as tall as what it holds cannot be scrolled.) */
+.screen{position:absolute;left:0;top:0;width:100%;height:100vh;overflow:hidden;background:#000;z-index:0}
+@supports (height:1svh){.page,.screen{height:calc(100svh + var(--bar))}}
 /* The poster, which the video is drawn over: the video's own frame at the moment the page
    begins (1:32), at the size and in the place the video draws that frame, so that one
    crosses into the other unseen (it was another moment, larger: two Suns for a moment). It
@@ -121,11 +124,17 @@ header.muted #sound{height:34px;padding:0 15px 0 12px;margin:0;border-radius:17p
 header.muted #sound span{display:inline}
 header.muted #sound::before{content:"";position:absolute;inset:-5px 0}     /* a finger's 44 px */
 header.muted #sound:hover{transform:scale(1.04)}
+header .gh{padding:12px;margin:0 -12px}
 header .gh svg{width:20px;height:20px;display:block}
 /* where the video has not started by itself (or is not to, with less motion asked for): on
-   the Sun, as a video's play button is on its picture */
-.playbig{position:absolute;left:calc(50% + var(--side));top:calc(50% + var(--mid) - var(--bar) / 2);translate:-50% -50%;z-index:3;height:52px;padding:0 24px 0 20px;
-  border-radius:26px;display:none;align-items:center;gap:10px;background:var(--ink);color:#000;font-size:1.0625rem;font-weight:600;white-space:nowrap;
+   the Sun, as a video's play button is on its picture. It is in the page, which is what a click
+   reaches, held where the Sun is for as long as the film is on screen, and gone with the film
+   (the script fades it as the film goes). */
+.playspot{position:sticky;top:calc(50svh + var(--mid));height:0;z-index:3;display:none}
+.film.still .playspot{display:block}
+.film[data-beat="0"] .playspot{top:calc(50svh + var(--low))}
+.playbig{position:absolute;left:calc(50vw + var(--side));top:0;translate:-50% -50%;height:52px;padding:0 24px 0 20px;
+  border-radius:26px;display:inline-flex;align-items:center;gap:10px;background:var(--ink);color:#000;font-size:1.0625rem;font-weight:600;white-space:nowrap;
   transition:scale .25s var(--ease)}
 .playbig:hover{scale:1.04}
 .film.still .cue{visibility:hidden}      /* not its opacity: where the scroll moves that, the scroll has the last word */
@@ -137,8 +146,6 @@ header .gh svg{width:20px;height:20px;display:block}
 @keyframes blip{0%{opacity:0;scale:.8}25%{opacity:1;scale:1}100%{opacity:0;scale:1.12}}
 .beats{cursor:pointer}
 .playbig svg{width:18px;height:18px}
-.film.still .playbig{display:inline-flex}
-.film[data-beat="0"] .playbig{top:calc(50% + var(--low) - var(--bar) / 2)}
 
 /* What is said over it: one thing to a screen. */
 .beats{position:relative}
@@ -155,13 +162,13 @@ html.js .beat.on > :nth-child(3){transition-delay:.24s}
   transition:transform .25s var(--ease)}
 .btn:hover{transform:scale(1.04)}
 .more{color:var(--ink);display:inline-block;padding:10px 4px;margin:-10px -4px}
-.more::after{content:" \203A"}
+.more::after{content:" \203A";content:" \203A" / ""}      /* drawn, not read out */
 .more:hover{text-decoration:underline;text-underline-offset:4px}
-.cue{position:absolute;left:50%;bottom:calc(26px + var(--bar));z-index:2;width:22px;height:34px;margin-left:-11px;border-radius:11px;box-shadow:0 0 0 1.5px rgba(245,245,247,.5);
+.cue{position:absolute;left:50%;bottom:calc(26px + var(--bar));z-index:2;width:22px;height:34px;margin-left:-11px;border-radius:11px;background:rgba(0,0,0,.4);box-shadow:0 0 0 1.5px rgba(245,245,247,.5);
   transition:opacity .5s var(--ease)}
 .cue::after{content:"";position:absolute;left:50%;top:7px;width:3px;height:7px;margin-left:-1.5px;border-radius:2px;background:var(--ink);animation:cue 1.9s var(--ease) infinite}
 @keyframes cue{0%{transform:none;opacity:1}70%,100%{transform:translateY(11px);opacity:0}}
-.film:not([data-beat="0"]) .cue{opacity:0}
+.film:not([data-beat="0"]) .cue,header.solid ~ .film .cue{opacity:0}      /* nor after the film, where the page was opened there */
 /* what was heard: the song's own moments, running through now (video/heard.js) */
 .heard{display:block;width:min(86vw,640px);height:98px;margin-top:1.9em;visibility:hidden}
 .heard.ready{visibility:visible}
@@ -188,6 +195,7 @@ section.get{padding-bottom:clamp(70px,10svh,120px);min-height:calc(100svh + var(
 .copy{position:absolute;top:8px;right:8px;width:44px;height:44px;border-radius:9px;display:grid;place-items:center;color:var(--dim)}
 .copy:hover{background:var(--line);color:var(--ink)}
 .copy svg{width:17px;height:17px}
+html:not(.scripted) .copy,html:not(.scripted) .send{display:none}      /* they are the script's */
 /* a telephone cannot run the install: it sends the page to the Mac that can */
 .send{display:none;margin-top:clamp(34px,5svh,56px)}
 .send p{margin:14px 0 0;color:var(--dim);font-size:0.9375rem}
@@ -195,7 +203,7 @@ section.get{padding-bottom:clamp(70px,10svh,120px);min-height:calc(100svh + var(
   .send{display:block}
   .send + .code{margin-top:28px}
 }
-.fine{margin:26px auto 0;color:var(--dim);font-size:0.875rem;line-height:1.55;max-width:44em}
+.fine{margin:26px auto 0;color:var(--dim);font-size:0.875rem;line-height:1.55;max-width:44em;text-wrap:balance}
 /* what is read after the film is nearly white, so the picture under it may be less dark */
 section.own .lede,section.get .lede,.three span,.fine,.send p{color:rgba(245,245,247,.82)}
 footer{position:relative;z-index:2;padding:0 24px calc(40px + var(--bar));text-align:center;color:rgba(245,245,247,.72);font-size:0.8125rem}
@@ -230,8 +238,7 @@ footer a:hover{color:var(--ink)}
 
 /* wide and short: the words take more of the height, so the picture sits lower still */
 @media (min-aspect-ratio:19/10){
-  .screen{--low:28svh}
-  h1{font-size:clamp(2.75rem,min(8.4vw,11.5svh),7.75rem)}
+  .film{--low:30svh;--mid:33svh}
   .fade{background:
     linear-gradient(to bottom,rgba(0,0,0,.84),rgba(0,0,0,.62) 46%,rgba(0,0,0,0) 70%),
     linear-gradient(to top,#000,rgba(0,0,0,0) 14%)}
@@ -242,7 +249,7 @@ footer a:hover{color:var(--ink)}
    between them. */
 @media (max-aspect-ratio:1/1){
   /* the Sun in the middle of the room left between what is said and what is done */
-  .screen{--low:calc(20px + 3.5svh);--mid:var(--low);--shade:330px}
+  .film{--low:calc(20px + 3.5svh);--mid:var(--low);--shade:330px}
   .pic{width:min(100vw,calc(100svh * 9 / 16));aspect-ratio:9/16;
     background-image:url(img/poster-tall.webp)}
   .fade{background:
@@ -254,14 +261,20 @@ footer a:hover{color:var(--ink)}
   .go,.heard,.seg{margin-top:auto}
   .cue{display:none}
   header{gap:20px}
-  /* the copy button is beside the first line, which is short: the rest may have the width,
-     and a line that still does not fit goes on to the next rather than out of sight */
-  .code{font-size:0.75rem;padding:18px 16px;white-space:pre-wrap;overflow-wrap:anywhere}
+  /* the copy button is beside the first line, which is short and as tall as the button, so
+     that no command is under a finger's reach of it: the rest may have the width, and a line
+     that still does not fit goes on to the next rather than out of sight */
+  .code{font-size:0.75rem;padding:8px 16px 18px;white-space:pre-wrap;overflow-wrap:anywhere}
+  .code .c{display:inline-block;line-height:44px}
+}
+/* the longest command, 42 characters, on one line down to 320 px */
+@media (max-width:380px){
+  .code{font-size:0.6875rem}
 }
 /* a telephone on its side: no height for words over the Sun, so they are beside it, the
    words on the left and the Sun on the right */
 @media (min-aspect-ratio:1/1) and (max-height:500px){
-  .screen{--low:14px;--mid:14px;--side:22vw}
+  .film{--low:14px;--mid:14px;--side:22vw}
   .fade{background:
     linear-gradient(to right,rgba(0,0,0,.86),rgba(0,0,0,.6) 44%,rgba(0,0,0,0) 64%),
     linear-gradient(to bottom,rgba(0,0,0,.8),rgba(0,0,0,.52) 60px,rgba(0,0,0,0) 110px)}
@@ -287,9 +300,20 @@ footer a:hover{color:var(--ink)}
    page's own first button and its last section */
 @media (max-width:440px){
   header .own{display:none}
+  /* the foot does not fit one line: who made it has a line of its own, and no dot begins it */
+  footer .dot{display:none}
+  footer .by{display:block;margin-top:6px}
 }
 @media (max-width:360px){
   header{gap:12px;padding:0 14px}
+}
+/* narrower than any telephone made now (a folded one, a sliver of a split screen): the bar
+   keeps what plays the song; GitHub is at the page's foot, and the mark says the name */
+@media (max-width:340px){
+  header .gh{display:none}
+}
+@media (max-width:300px){
+  header .mark{font-size:0;gap:0}
 }
 @media (prefers-reduced-motion:reduce){
   .pic,.video iframe,.veil,.dark,.btn,.seg button{transition:none}
@@ -304,8 +328,8 @@ footer a:hover{color:var(--ink)}
   <a class="mark" href="./" aria-label="song">
     <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 20V12M11 23V9M16 26V6M21 22V10M26 19V13" stroke="#ff7a3d" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>song
   </a>
-  <button class="ctl" id="pause" aria-label="Pause"></button>
   <button class="ctl" id="sound" aria-label="Play with sound"></button>
+  <button class="ctl" id="pause" aria-label="Pause"></button>
   <a class="own" href="#get">Make your own</a>
   <a class="gh" href="https://github.com/nuterian/song" aria-label="GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
 </header>
@@ -318,9 +342,6 @@ footer a:hover{color:var(--ink)}
     <div class="dark"></div>
     <div class="fade"></div>
     <div class="dusk" id="dusk"></div>
-    <button class="playbig" id="playbig">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg>Play with sound
-    </button>
     <span class="blip" id="blip" aria-hidden="true"></span>
     <span class="cue" aria-hidden="true"></span>
   </div>
@@ -328,6 +349,9 @@ footer a:hover{color:var(--ink)}
   <div class="page" id="page" tabindex="-1">
   <main>
   <div class="beats">
+    <div class="playspot" id="playspot"><button class="playbig" id="playbig">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg>Play with sound
+    </button></div>
     <section class="beat hero on" data-beat="0">
       <h1>A music video<br>for any song.</h1>
       <p class="lede">Give it a track. It listens to the whole song, then draws it as a solar system.</p>
@@ -345,7 +369,7 @@ footer a:hover{color:var(--ink)}
 
     <section class="beat" data-beat="2" data-camera="cinematic" data-words="on">
       <h2>Then everything moves.</h2>
-      <p class="lede">The kick pulls the orbits. The bass charges the Sun. The words arrive as they are sung.</p>
+      <p class="lede">The kick swells the Sun. The planets follow its pull. The words arrive as they are sung.</p>
     </section>
 
     <section class="beat" data-beat="3" data-camera="hybrid" data-words="on">
@@ -376,12 +400,12 @@ footer a:hover{color:var(--ink)}
 git clone https://github.com/nuterian/song
 cd song && ./setup.sh
 visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-label="Copy the commands"></button></div>
-  <p class="fine">The install is 2.1 GB, plus about 8 GB of free models it asks before fetching. On an M4 MacBook Air, a 5-minute song with lyrics takes about 12 minutes to prepare. The model that times the lyrics is licensed for non-commercial use.</p>
+  <p class="fine">It needs Python 3.12 and ffmpeg, and the setup says how to get them. The install is 2.1 GB, plus about 8 GB of free models it asks before fetching. On an M4 MacBook Air, a 5-minute song with lyrics takes about 12 minutes to prepare. The model that times the lyrics is licensed for non-commercial use.</p>
 </section>
   </main>
 
   <footer>
-    <a href="https://github.com/nuterian/song">github.com/nuterian/song</a> · MIT · made by <a href="https://jugalm.com/">Jugal Manjeshwar</a>
+    <a href="https://github.com/nuterian/song">github.com/nuterian/song</a> · MIT<span class="dot"> · </span><span class="by">made by <a href="https://jugalm.com/">Jugal Manjeshwar</a></span>
   </footer>
   </div>
 </div>
@@ -404,7 +428,7 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
     play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.5v15l12-7.5z" fill="currentColor"/></svg>',
     pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>'
   };
-  var frame = null, player = null, beat = null, away = false, stopped = false, fader = 0, past = 0;
+  var frame = null, player = null, beat = null, away = false, stopped = false, fader = 0, past = 0, drawn = false;
   // where in the song it begins: four seconds before its strongest re-entry, so that the
   // page opens into it; unless the address says otherwise (?t=)
   var from = Number(new URLSearchParams(location.search).get("t")) || 92;
@@ -506,7 +530,8 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
     arrived = true;
     film.classList.add("dip");
     setTimeout(function () {
-      player.audio.currentTime = Math.max(next[0] - 1.6, 0);
+      // asked again, now that the dark is here: its sound may have been asked for meanwhile
+      if (player.audio.muted && !player.audio.paused && !stopped) player.audio.currentTime = Math.max(next[0] - 1.6, 0);
       setTimeout(function () { film.classList.remove("dip"); }, 260);
     }, 400);
   }
@@ -542,6 +567,7 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
     frame.title = "The music video, drawn live";
     frame.setAttribute("allow", "autoplay");
     frame.setAttribute("tabindex", "-1");
+    frame.setAttribute("aria-hidden", "true");      // the picture is said once, by the poster under it; its controls are this page's
     frame.src = "video/?bare=1&adapt=1&track=gravity-in-motion&camera=hybrid&lyrics=off&maxheight=" + (phone ? 1440 : 1080) + "&maxpixels=" + (phone ? 2600000 : 1920 * 1080) +
       "&lift=" + lift() + "&aside=" + aside() + "&t=" + from + "&play=1" + (heard ? "" : "&muted=1") + (upright.matches ? "&shape=tall" : "");
     document.getElementById("video").appendChild(frame);
@@ -563,7 +589,7 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
         // a browser that will not start it unasked: the play button, and a click starts it with its sound
         player.audio.addEventListener("play", function () { film.classList.remove("still"); said(); });
         player.audio.addEventListener("pause", said);
-        setTimeout(function () { if (player.audio.paused && !away && !stopped) film.classList.add("still"); }, 1500);
+        setTimeout(function () { if (player.audio.paused && !stopped) film.classList.add("still"); }, 1500);
         (function set() {
           if (player.setLift) { player.setLift(lift() + Math.round(past * innerHeight * 0.8), aside()); if (!away) clear(); }
           // the song's words give way to the page's as soon as the film begins to go
@@ -571,12 +597,22 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
           if (player.lyrics !== null && player.lyrics !== words) player.setLyrics(words);
           requestAnimationFrame(set);
         })();
-        say(); said(); direct();
+        say(); said(); direct(); beyond();
         sound.classList.add("ready"); pause.classList.add("ready");
         setTimeout(function () { film.classList.add("live"); }, 60);    // a timer, not a frame: a page not yet shown has no frames
+        // once the video has come over the poster, the dark after the film is the video's, eased to
+        setTimeout(function () {
+          drawn = true;
+          dusk.style.transition = "opacity 1.2s var(--ease)"; beyond();
+          setTimeout(function () { dusk.style.transition = ""; }, 1300);
+        }, 1500);
         // what comes after the film is decoded while there is time, not as it scrolls in
         setTimeout(function () { var im = document.querySelector(".shot"); im.loading = "eager"; if (im.decode) im.decode().catch(function () {}); }, 600);
-      } else if (++tries > 750) clearInterval(wait);       // 30 s: the poster stays, which is a page
+      } else if (++tries > 750) {       // 30 s: the poster stays, which is a page, and the play button is how to ask again
+        clearInterval(wait);
+        frame.remove(); frame = null;     // a player that came after this would play on, unseen
+        film.classList.add("still");
+      }
     }, 40);
   }
 
@@ -621,29 +657,57 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
   // it stops and starts it)
   page.addEventListener("click", function (e) {
     if (!e.target.closest(".beats") || e.target.closest("button,a")) return;
+    // what is read is not the picture (two clicks on a word choose it, and the first of them
+    // would have been taken for one on the picture); nor is the click that ends a drag across it
+    if (e.target.closest("h1,h2,p") || e.detail > 1 || String(getSelection())) return;
     if (!player || !player.audio.muted) return toggle(true);
     listen();
     blip.innerHTML = ICON.on;
     blip.classList.remove("shown"); void blip.offsetWidth; blip.classList.add("shown");
   });
-  // the page is what scrolls, so the keys that scroll are its from the first; and the window
-  // itself never does (a link to a place on the page may ask it to)
-  if (matchMedia("(hover: hover)").matches) page.focus({ preventScroll: true });
-  // A link to a place on the page goes there eased, not in one cut, and lands on it; and the
-  // page has the keys again after it.
+  // The page is what scrolls, and a key that scrolls goes to whatever has the keyboard: where
+  // that is not in the page (the bar, after a click on it, or nothing), the page is given it
+  // as the key goes down, and the key then scrolls it. The page does not take the keyboard as
+  // it loads: Tab begins at the bar, as on any page. And the window itself never scrolls (a
+  // link to a place on the page may ask it to).
+  addEventListener("keydown", function (e) {
+    var at = document.activeElement;
+    if (e.metaKey || e.ctrlKey || e.altKey || page.contains(at) || (at && at.closest("input,textarea"))) return;
+    if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End"].indexOf(e.key) >= 0 || (e.key === " " && at === document.body)) page.focus({ preventScroll: true });
+  }, true);
+  // A link to a place on the page goes there eased, not in one cut, and lands on it. The
+  // keyboard goes with it, so that Tab goes on from there, and the address says where it is.
+  // The name in the bar goes to the top the same way, not by loading the page again.
   var eased = !matchMedia("(prefers-reduced-motion: reduce)").matches;
   document.addEventListener("click", function (e) {
-    var a = e.target.closest('a[href^="#"]'), to = a && document.querySelector(a.getAttribute("href"));
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+    var a = e.target.closest('a[href^="#"], a.mark'), home = !!a && a.classList.contains("mark");
+    var to = a && (home ? page : document.querySelector(a.getAttribute("href")));
     if (!to) return;
     e.preventDefault();
-    page.scrollTo({ top: page.scrollTop + to.getBoundingClientRect().top - page.getBoundingClientRect().top, behavior: eased ? "smooth" : "auto" });
-    page.focus({ preventScroll: true });
+    page.scrollTo({ top: home ? 0 : page.scrollTop + to.getBoundingClientRect().top - page.getBoundingClientRect().top, behavior: eased ? "smooth" : "auto" });
+    to.tabIndex = -1;
+    to.focus({ preventScroll: true });
+    history.replaceState(null, "", home ? location.pathname + location.search : a.getAttribute("href"));
   });
+  // Loaded again, the page is where it was read: a browser keeps the window's place, and this
+  // is not the window's. Also where the address names a place (a link to one on the page leaves
+  // its name there): some browsers go to it again as the page is loaded again, after this has
+  // run, so it is done once more when the page has loaded.
+  try {
+    var nav = performance.getEntriesByType("navigation")[0];
+    if (nav && nav.type === "reload") {
+      var back = function () { page.scrollTop = Number(sessionStorage.getItem("song:at")) || 0; };
+      back();
+      if (location.hash) addEventListener("load", function () { back(); setTimeout(back, 0); });
+    }
+    addEventListener("pagehide", function () { sessionStorage.setItem("song:at", String(page.scrollTop)); });
+  } catch (e) {}
   addEventListener("scroll", function () { if (scrollX || scrollY) scrollTo(0, 0); });
   addEventListener("keydown", function (e) {
-    if (e.code !== "KeyK" || e.metaKey || e.ctrlKey || e.altKey || e.target.closest("input,textarea") || away) return;
+    if (e.code !== "KeyK" || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.target.closest("input,textarea")) return;
     e.preventDefault();
-    toggle(true);
+    toggle(!away);      // the sign of it is on the picture, and only where the picture is what is looked at
   });
 
   // which statement is on screen: the one across the middle of the window
@@ -659,11 +723,6 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
       });
     }, { rootMargin: "-50% 0px -50% 0px" });
     beats.forEach(function (b) { middle.observe(b); });
-    // past the four screens: the bar is solid
-    new IntersectionObserver(function (seen) {
-      away = !seen[0].isIntersecting;
-      bar.classList.toggle("solid", away);
-    }).observe(document.querySelector(".beats"));
   } else {
     document.documentElement.classList.remove("js");
   }
@@ -671,11 +730,21 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
   // How far past the four screens the page is, eased: 0 while the last fills the window, 1
   // once it is half gone, before what follows is there to be read. The picture goes on under what follows, the Sun sinking out of it and
   // the dark deepening with it.
-  var dusk = document.getElementById("dusk"), beatsEl = document.querySelector(".beats");
+  var dusk = document.getElementById("dusk"), beatsEl = document.querySelector(".beats"), spot = document.getElementById("playspot");
   function beyond() {
-    var p = Math.min(Math.max(2 - 2 * beatsEl.getBoundingClientRect().bottom / innerHeight, 0), 1);    // done by the time half is
+    var foot = beatsEl.getBoundingClientRect().bottom;
+    // past the four screens (by where they are: an observer says nothing, in Firefox, of a page opened at a place)
+    away = foot <= 0;
+    bar.classList.toggle("solid", away);
+    var p = Math.min(Math.max(2 - 2 * foot / innerHeight, 0), 1);    // done by the time half is
     past = p * p * (3 - 2 * p);
-    dusk.style.opacity = (past * 0.5).toFixed(3);
+    // the video's Sun sinks out of what is read after the film; the poster's cannot (it is one
+    // frame, with nothing above it), so while the poster is the picture the dark is deeper
+    dusk.style.opacity = (past * (drawn ? 0.5 : 0.84)).toFixed(3);
+    // and the play button on the Sun is gone before the Sun is
+    var seen = Math.max(1 - 3 * past, 0);
+    spot.style.opacity = seen.toFixed(3);
+    spot.style.visibility = seen ? "" : "hidden";
   }
   document.getElementById("page").addEventListener("scroll", beyond, { passive: true });
   addEventListener("resize", beyond);
@@ -700,8 +769,8 @@ visuals/.venv/bin/python -m visuals studio<button class="copy" id="copy" aria-la
   copy.addEventListener("click", function () {
     var text = code.textContent.split("\n").filter(function (l) { return l && l.charAt(0) !== "#"; }).join("\n");
     if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () {
-      copy.innerHTML = ICON.done;
-      setTimeout(function () { copy.innerHTML = ICON.copy; }, 1600);
+      copy.innerHTML = ICON.done; copy.setAttribute("aria-label", "Copied");
+      setTimeout(function () { copy.innerHTML = ICON.copy; copy.setAttribute("aria-label", "Copy the commands"); }, 1600);
     });
   });
 })();

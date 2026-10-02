@@ -2166,3 +2166,73 @@ of orbit. And its hops, its steps to a beat and its swells of a fifth were pops.
   the arc, the wave. To be taken out when this is settled.
 - Not yet: a telephone, Safari; the hybrid camera by eye. Frame rate was read on a warm
   machine, the old picture and the new in turn, and both fell short of 60 alike.
+
+## A film that starts by itself, and a page with fewer catches (2026-10-02)
+
+Jugal found a "Play with sound" button under the landing page's last section: it could not
+be clicked, and it stood still while the page scrolled over it. He then asked for the page
+to be gone over for every such catch. Three readers were sent first (screenshots at ten
+window sizes; the page's behaviour, by test; its files, links and loading), then a second
+reader over the mending, and three more over the screenshots after it. What they said was
+tried again here before it was acted on.
+
+- **The film did not start in Chrome.** The button is the page's answer to a browser that
+  will not start the video unasked. Chrome starts a silent *video* element unasked, and a
+  silent *audio* element only where the visitor has played media on the site before; the
+  player's song was an audio element. So a new visitor in Chrome had a still picture and
+  the button. Every check before this had run Chrome with the flag that allows autoplay,
+  and none had seen it. The song is now a video element (`demo.html`: `playsinline`,
+  `hidden`; nothing of it is drawn), and the player is otherwise as it was. Measured in
+  Chrome with its own rules and its GPU: the film starts, and its clock goes at 1.000 s a
+  second. Safari's and Firefox's engines (Playwright's builds) started it before and do
+  now. Not tried: Safari itself, a telephone. Not done: a clock of the page's own while it
+  is silent, which would need no media at all and would not fetch the song (about 3 to
+  4 MB are buffered while it plays unheard); it is a second clock, and a larger change.
+- **The button** was in the picture's layer, which the scrolling page covers: no click
+  reached it, and nothing took it away after the film. It is now in the page (`.playspot`,
+  sticky in the film's four screens), on the Sun, and fades as the film goes. With less
+  motion asked for, or a start refused, a click on it starts the song with its sound, in
+  each of the three states tried (`playbig.cjs`). A player that has not come in 30 s is
+  taken away, the button shown, and a click asks again (it played on unseen).
+- **The hero's buttons were on the Sun.** The Sun's glow, which grows with the song and
+  the camera, was over "Make your own" for most of the first half minute in a laptop's
+  window. The Sun is lower (`--low`, `--mid`: 28svh; 30 and 33 where the window is wide
+  and short) and the headline goes by the window's height (`23svh - 96px`). The gap from
+  the buttons to the glow, twice a second for 30 s, least and median, before and after:
+  1470x840, -68 and -28 px, now 13 and 68; 1440x900, -52 and -2, now 26 and 66;
+  1280x720, -76 and -37, now 19 and 66; 1600x700, -14 and 22, now 26 and 71. The scroll
+  cue, which is now often over the Sun's foot, has a dark fill.
+- **Where the poster is the picture** (less motion asked for) its Sun stayed under what is
+  read after the film; the video's sinks. The poster is one frame with nothing above it,
+  so it does not sink: the dark over it is deeper there (0.84, not 0.5).
+- **The keyboard.** The page took the keyboard as it loaded, so Tab began in the hero and
+  reached the bar last; and a click on the bar took the keyboard from the page, after
+  which no key scrolled. Now Tab begins at the bar, and a key that scrolls gives the page
+  the keyboard as it goes down. A link to a place on the page takes the keyboard there and
+  sets the address (replaced, not added: Back still leaves). The name in the bar goes to
+  the top instead of loading the page again. Loaded again, the page is where it was read.
+- **Mended.** Two clicks on a word, or a drag across a sentence, stopped the song: a click
+  on what is read is not a click on the picture. Pause jumped 140 px when the sound
+  pill shrank: the pill is before it. K works after the film too. The song is not moved to
+  a sung line if its sound was asked for in the 0.4 s before the move. A browser without
+  `svh` could not scroll the page (the height is in `vh`, and in `svh` only where that is
+  known). Without scroll-driven animation the cue stayed over the install section when the
+  page was opened there. At 280 px the bar ran off the screen. On a telephone the copy
+  button's reach was over the end of a command (the first line is as tall as the button),
+  and at 360 px a command broke in two. The 404 page scrolled by 48 px.
+- **What the second reader found in the mending**, each shown by a test and each mended:
+  the first of two clicks on a word still acted; a reload went to the wrong place once a
+  link had left `#get` in the address; the height said twice did nothing (a declaration
+  with `var()` in it is never dropped as it is read); Firefox's observer says nothing of
+  the film being past when the page opens at `#get`, so "past the film" is now by where
+  the film is (`beyond()`), for the bar, the cue and K alike; and after a reload past the
+  film the dark went to the video's before the video was seen.
+- **What is said.** "The kick pulls the orbits. The bass charges the Sun." is "The kick
+  swells the Sun. The planets follow its pull.": the pull on each kick is at nothing since
+  the planets follow the Sun. The small print begins with what the setup needs (Python
+  3.12 and ffmpeg), which the install's three lines did not say.
+- Left as they are: text fading over the Sun between two screens; planets and stars behind
+  text; the camera buttons seen faintly while the next section rises, on a telephone; the
+  black above the poster where less motion is asked for; `docs/img/cosmos-cameras.webp`
+  and `cosmos-still-tall.webp`, which nothing shows (95 KB; Jugal's to delete).
+- The checks are kept with the session's tools (`tools/landing/`).

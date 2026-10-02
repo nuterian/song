@@ -14,7 +14,7 @@
 </script>
 <style>
   html, body { margin: 0; height: 100%; background: #000; color: #f5f5f7; }
-  body { display: grid; place-content: center; justify-items: center; gap: 18px; padding: 24px; text-align: center;
+  body { box-sizing: border-box; display: grid; place-content: center; justify-items: center; gap: 18px; padding: 24px; text-align: center;
     font: 19px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   h1 { margin: 0; font-size: clamp(34px, 7vw, 56px); font-weight: 700; letter-spacing: -.04em; line-height: 1.05; }
   p { margin: 0; color: #a1a1a6; }
@@ -22,7 +22,7 @@
   a { color: inherit; text-decoration: none; }
   .btn { display: inline-flex; align-items: center; height: 46px; padding: 0 26px; border-radius: 23px; background: #f5f5f7; color: #000; font-weight: 600; }
   .more { display: inline-flex; align-items: center; min-height: 46px; }
-  .more::after { content: " \203A"; white-space: pre; }
+  .more::after { content: " \203A"; content: " \203A" / ""; white-space: pre; }
   a:focus-visible { outline: 2px solid #ff7a3d; outline-offset: 3px; border-radius: 8px; }
 </style>
 </head>
