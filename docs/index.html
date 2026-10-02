@@ -287,9 +287,15 @@ footer a:hover{color:var(--ink)}
   .seg{margin-top:1.1em}
   .cue{display:none}
 }
-/* three abreast while each has room for a line of a few words; one above another below that */
+/* three abreast while each has room for a line of a few words; one above another below that:
+   a narrow column with room at its sides, each sentence in lines of a like length, the lines
+   as close as the sentence's own size asks (the paragraph's larger one had set them apart),
+   and one even space between the three */
 @media (max-width:640px){
-  .three{grid-template-columns:1fr;text-align:center;max-width:26em}
+  .three{grid-template-columns:1fr;text-align:center;max-width:19rem;gap:38px;margin-top:clamp(44px,7svh,64px)}
+  .three p{margin:0;font-size:1.0625rem;line-height:1.42;text-wrap:balance}
+  .three b{font-size:1.375rem;line-height:1.2;margin-bottom:.4em}
+  .three span{line-height:inherit}
 }
 /* a finger has no mouse to scroll with: the cue is a plain mark */
 @media (hover:none){
