@@ -2236,3 +2236,96 @@ tried again here before it was acted on.
   black above the poster where less motion is asked for; `docs/img/cosmos-cameras.webp`
   and `cosmos-still-tall.webp`, which nothing shows (95 KB; Jugal's to delete).
 - The checks are kept with the session's tools (`tools/landing/`).
+
+## What is read after the film, and how it ends (2026-10-02, evening)
+
+Jugal: the text sections, the ones at the foot most of all, can be better; the page should
+pop a little more, be more polished, feel like a product of real quality, and be as fast on
+a telephone as on a desk. The player and the picture were not to change. What the web
+offered in 2026 was read first, and the best-regarded product pages of the last two years
+measured; three directions were sketched for the part after the film and shown as screens
+at 1440x900 and 390x844; Jugal chose the first, with everything recommended beside it.
+
+- **What the platform offered, and what was taken.** Firefox 157 still has no scroll-driven
+  animations outside Nightly (the preference is on by default only there, from 136; an
+  Interop 2026 area), so the scripted fallback stays. Taken: `text-wrap: pretty` on the
+  sentences after the film (Chrome 117, Safari 26; Firefox ignores it); a heading that begins
+  at the top of its capitals (`text-box-trim: trim-start`, Chrome 133, Safari 18.2, Firefox
+  154; elsewhere nothing changes). Measured and left: a `prefetch` of the player's first
+  files from the page made the film start later, not sooner, in Chrome on a 20 Mbit/s line
+  with 40 ms of latency (the frame's own navigation waited behind them): 909 ms to the film
+  against 855, the medians of five runs each, turn about. AVIF for the posters, encoded from
+  the WebP as served and compared at a like PSNR: 15 to 23 % fewer bytes, which is 5 to 10 KB
+  a poster, under the bar for a second format, with a slower decode on a telephone; the
+  posters stay WebP. Not taken, and why: view transitions (nothing swaps, and a snapshot of
+  a live picture), `content-visibility` (seven light sections, and a skipped section has no
+  view timeline), scroll snap (a snap kills momentum on iOS and makes the scroll-driven fades
+  binary), prerendering the demo (a prerendered page is hidden, so its picture is not drawn,
+  and it is Chrome's alone), container queries (the sections are the window's width), the
+  scheduling interfaces (nothing in Safari), field measurement of INP and LCP (nowhere to send
+  it from GitHub Pages), a blur under the bar (drawn again with every frame of the picture),
+  `inert` on the poster (it is the picture's only name to a screen reader).
+- **What the best pages do, measured** (28 pages, computed styles at 1440 and 390). No one
+  sets a heading after the hero above 72 to 76 px; this page's two were 104. Body 15 to 18 px
+  at 53 to 70 characters a line, muted sentences at 57 to 67 % white, headings near white.
+  Entrances 0.3 to 0.7 s over 24 to 40 px with an ease-out; nothing per letter. A code block
+  13 to 16 px at 1.5 to 1.6, a `$` in colour or none, radius 4 to 12, a muted copy icon at the
+  right. Fine print as one line under what it qualifies, or facts in rows, never a paragraph
+  wider than 60 characters. A page ends with air and one quiet thing (Linear: a couplet, two
+  buttons, 200 px of air, the foot; Bun: the install again; Teenage Engineering: an address).
+  Three to learn from: Bun (the command is the call, the `$` drawn), Linear (the ending), the
+  OP-XY page (text simply present, specifications as rows, the signature at the foot).
+- **Three directions, sketched** (copies of the page in `visuals/out/landing/sketch/`, A, B
+  and C): A, the same voice to the end (one column, three sentences led by what they are
+  called, four facts in rows, the name at the foot, the sky coming back); B, an editorial
+  grid (headings left, text right, numbered 01 to 03, hairlines across); C, the structure as
+  it was, polished in place. Jugal chose A.
+- **Built.** After the film the headings are 72 px at most (`clamp(2rem, 5vw, 4.5rem)`), a
+  chapter rather than a screen. The three things are an ordered list of three sentences in a
+  column 36 rem wide, each led by its name in 650 weight and followed in 72 % white; one
+  column at every width. The install is a hairline round the commands on a third of black,
+  radius 12, 15 px at 1.6, each command behind a `$` that is drawn by the style and never
+  copied (the copy button's text was tried: the three commands, nothing else); on a telephone
+  there is no `$`, since the longest command fits its width only without one. The small print
+  is four rows, Needs, Size, Time, Licence, the same facts and numbers, each on a line of its
+  own between hairlines, the label in `--dim`. The foot has 16svh of room, then the mark and
+  the name (a link to the top, as the one in the bar is), then the one line it had. And as the
+  page ends the dark over the picture lifts by half over the last six tenths of a screen, so
+  the sky comes back under the name; only where the video is the picture (the poster's Sun
+  does not sink, and the dark over it stays). The cameras are three of a width with one white
+  thumb that slides to the chosen one in 0.45 s (`--i`, as the player's own page has it).
+  Along the way: each statement enters in 0.6 s over 24 px (was 0.9 s and 34), the scroll
+  carries it 28 px in and out (was 60), what rises after the film rises 28 px (was 48), the
+  hero leaves 48 px up (was 70). Two unused colours gone, one hairline token (`--hair`).
+- **Measured, before and after**, headless Chrome on the M4, the local server. The page's own
+  frame loop 0.1 ms at the median, 0.6 then 0.3 at the 95th; 0 frames over 20 ms in 8 s of
+  scrolling, both; 60 a second at the top of the page, 0 over 20 ms in 10 s, best of three,
+  both. First and largest paint 260 then 304 ms (the run-to-run spread is 180 to 400), CLS 0
+  both, the film live at 681 then 609 ms. The page 51.4 KB raw and 16.9 gzipped, now 53.9 and
+  17.6; images 103 KB, unchanged; nothing new fetched. Every text after the film against every
+  pixel behind it at 1440x900, 390x844 and 820x1180 (139 texts; buttons with a fill of their
+  own and a line under the bar's shade not counted): least 5.3 against the picture blurred by a
+  letter's height, the medians 11 to 12.5; one moment at 3.1, a star's sparkle in the empty part
+  of a label's column on the telephone; against single pixels the least is 1.6 to 2.4, which
+  is a star under a letter, as it was before. The hero's buttons clear the Sun's glow by more,
+  since a heading trimmed to its capitals sits higher: the least gap over the first 30 s,
+  twice a second, 1440x900 36 px (was 26), 1470x840 35 (was 13), 1600x700 34 (was 26),
+  1280x720 32 (was 19); 1920x1080 96 and 1024x768 92.
+- **Checked.** 266 tests, and 175 without the local ones. The play button in its three states;
+  the film starting by itself in Chrome's, Safari's and Firefox's engines, wide and tall, and
+  the pill giving it its sound; Chrome with its own rules and its GPU, the clock at 1.000;
+  every control; the keyboard, Tab from the bar, the keys that scroll; sizes and turns; the
+  links, a reload, a selection, the keys after a click on the bar, a browser without `svh`,
+  the cue opened at `#get`, a player that comes late, the page without a script and opened at
+  `#get` in both modes, back from the demo. Screenshots at ten window sizes and eleven places,
+  with less motion asked for at two, before and after, read by two readers: no overlap, no
+  clipping, the thumb under the chosen camera, the `$` once before each command, the foot
+  whole; the flags the capture raises are the ones it raised before (the bar over what scrolls
+  under it, the foot's two links' reach on a telephone). What they noted and was mended: at
+  360 px the facts' label column was too wide for the text (it is 4.75 rem there) and
+  "5-minute" and "non-commercial" broke at the hyphen (a hyphen that does not break); on a
+  tablet the install section was forced to a window's height on top of the foot's own room
+  (it is now a window less the foot). Left: the sky's brightest star under a fact row at some
+  sizes, the song's line seen under the camera control on a tablet, a sentence seen faintly
+  through the bar as it goes under it (all the picture's, and as before).
+- Not seen: Safari itself, a telephone, a screen reader. Jugal's to say, on the live page.
