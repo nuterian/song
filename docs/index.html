@@ -50,7 +50,7 @@ h1,h2{text-box-trim:trim-start;text-box-edge:cap alphabetic}
 
 /* The bar: a name and two ways on, over the picture. The hero's own two ways on are quiet
    links: the one white button on the first screen is the film's. */
-header{position:fixed;inset:0 0 auto;height:52px;display:flex;align-items:center;gap:26px;padding:0 max(22px,env(safe-area-inset-left));
+header{position:fixed;inset:0 0 auto;height:52px;display:flex;align-items:center;gap:28px;padding:0 max(22px,env(safe-area-inset-left));
   z-index:10;font-size:0.875rem;color:rgba(245,245,247,.82);white-space:nowrap}
 /* what scrolls goes under the bar, not through it: a shade, all but solid behind the bar's
    words and gone a little under them (a blur would be drawn again with every frame of the
@@ -117,35 +117,19 @@ header .mark{padding:12px 8px 12px 0;margin-left:0}
 .ctl.ready{visibility:visible;opacity:1}
 .ctl:hover{color:var(--ink)}
 .ctl svg{width:16px;height:16px}
-/* said once, under the sound control, on the first strong beat while the song is silent */
-/* The sound, while there is none: one white pill that says what it does, the most
-   prominent thing in the bar (the song is half of what this is). With the sound on, an
-   icon beside the pause, as small as it. */
-.ctl span{display:none}
-header.muted #sound{height:34px;padding:0 15px 0 12px;margin:0;border-radius:17px;background:var(--ink);color:#000;font-weight:600;position:relative;
-  transition:opacity .6s var(--ease),transform .25s var(--ease)}
-header.muted #sound span{display:inline}
-header.muted #sound::before{content:"";position:absolute;inset:-5px 0}     /* a finger's 44 px */
-header.muted #sound:hover{transform:scale(1.04)}
-/* One white button to a screen. While the big one is on the Sun (the film did not start by
-   itself), it is the one that says it, and the pill in the bar waits; after the film the pill is
-   the small sign, so that the call at the end is the one white thing there. */
-body:has(#film.still) header.muted #sound{visibility:hidden}
-header.solid.muted #sound{height:auto;padding:14px;margin:-14px;border-radius:0;background:none;color:inherit;font-weight:inherit}
-header.solid.muted #sound span{display:none}
+/* The sound has a small sign in the bar, beside the pause: struck through while the song is
+   silent. What asks for the sound is in the hero, the one white button on the first screen. */
 header .gh{padding:12px;margin:0 -12px}
 header .gh svg{width:20px;height:20px;display:block}
-/* where the video has not started by itself (or is not to, with less motion asked for): on
-   the Sun, as a video's play button is on its picture. It is in the page, which is what a click
-   reaches, held where the Sun is for as long as the film is on screen, and gone with the film
-   (the script fades it as the film goes). */
-.playspot{position:sticky;top:calc(50svh + var(--mid));height:0;z-index:3;display:none}
-.film.still .playspot{display:block}
-.film[data-beat="0"] .playspot{top:calc(50svh + var(--low))}
-.playbig{position:absolute;left:calc(50vw + var(--side));top:0;translate:-50% -50%;height:52px;padding:0 24px 0 20px;
-  border-radius:26px;display:inline-flex;align-items:center;gap:10px;background:var(--ink);color:#000;font-size:1.0625rem;font-weight:600;white-space:nowrap;
-  transition:scale .25s var(--ease)}
-.playbig:hover{scale:1.04}
+/* Play with sound: at the head of the hero's row, over nothing of the picture. It is there
+   while the song is silent, whether the film is moving or has not started (a click starts it
+   with its sound). With the sound on it draws in and goes, and the two links beside it settle
+   to the middle; upright it keeps its line, so nothing under it moves. */
+#playbig{gap:9px;padding:0 24px 0 20px;max-width:16rem;overflow:hidden;white-space:nowrap;
+  transition:transform .25s var(--ease),opacity .4s var(--ease),max-width .5s var(--ease),padding .5s var(--ease),margin .5s var(--ease),visibility 0s}
+#playbig svg{width:17px;height:17px;flex:none}
+header.loud ~ .film #playbig{opacity:0;max-width:0;padding:0;margin-right:-26px;pointer-events:none;visibility:hidden;transition-delay:0s,0s,0s,0s,0s,.5s}
+html:not(.scripted) #playbig{display:none}      /* it is the script's */
 .film.still .cue{visibility:hidden}      /* not its opacity: where the scroll moves that, the scroll has the last word */
 /* paused or played by a click on the picture: said once, in the middle, and gone */
 .blip{position:absolute;inset:0;margin:auto;z-index:3;width:72px;height:72px;border-radius:50%;display:grid;place-items:center;pointer-events:none;
@@ -154,7 +138,6 @@ header .gh svg{width:20px;height:20px;display:block}
 .blip.shown{animation:blip .7s var(--ease)}
 @keyframes blip{0%{opacity:0;scale:.8}25%{opacity:1;scale:1}100%{opacity:0;scale:1.12}}
 .beats{cursor:pointer}
-.playbig svg{width:18px;height:18px}
 
 /* What is said over it: one thing to a screen. */
 .beats{position:relative}
@@ -166,7 +149,8 @@ html.js .beat > *{opacity:0;transform:translateY(24px);transition:opacity .6s va
 html.js .beat.on > *{opacity:1;transform:none}
 html.js .beat.on > :nth-child(2){transition-delay:.1s}
 html.js .beat.on > :nth-child(3){transition-delay:.2s}
-.go{margin-top:1.7em;display:flex;flex-wrap:wrap;gap:20px 26px;align-items:center;justify-content:center;font-size:1.0625rem}     /* 20 down: two quiet links one above the other keep their reach apart */
+.go{margin-top:1.7em;display:flex;flex-wrap:wrap;gap:18px 26px;align-items:center;justify-content:center;font-size:1.0625rem}
+.ways{display:flex;flex-wrap:wrap;gap:20px 26px;align-items:center;justify-content:center}     /* 20 down: two quiet links one above the other keep their reach apart */
 .btn{display:inline-flex;align-items:center;height:46px;padding:0 26px;border-radius:23px;background:var(--ink);color:#000;font-weight:600;
   transition:transform .25s var(--ease)}
 .btn:hover{transform:scale(1.04)}
@@ -284,8 +268,9 @@ footer a:hover{color:var(--ink)}
      at its foot, where the thumb is (the page's buttons, what was heard, the cameras) */
   .beat{display:flex;flex-direction:column;justify-content:start;align-items:center;height:100svh;padding:76px 20px calc(34px + env(safe-area-inset-bottom))}
   .go,.heard,.seg{margin-top:auto}
+  .go{flex-direction:column}
+  header.loud ~ .film #playbig{margin-right:0}
   .cue{display:none}
-  header{gap:20px}
   /* the copy button is beside the first line, which is short and as tall as the button, so
      that no command is under a finger's reach of it: the rest may have the width, and a line
      that still does not fit goes on to the next rather than out of sight */
@@ -309,6 +294,7 @@ footer a:hover{color:var(--ink)}
   h1,h2{font-size:clamp(1.875rem,min(12svh,5.4vw),3.25rem);text-wrap:pretty}
   .beat .lede{margin-left:0;font-size:1rem;text-wrap:pretty}
   .go{justify-content:flex-start;margin-top:1.1em;gap:10px 22px}
+  .ways{justify-content:flex-start;gap:10px 22px}
   .heard{width:min(46vw,440px);margin-top:.9em}
   .seg{margin-top:1.1em}
   .cue{display:none}
@@ -335,7 +321,7 @@ footer a:hover{color:var(--ink)}
   footer .by{display:block;margin-top:6px}
 }
 @media (max-width:360px){
-  header{gap:12px;padding:0 14px}
+  header{padding:0 14px}
 }
 /* narrower than any telephone made now (a folded one, a sliver of a split screen): the bar
    keeps what plays the song; GitHub is at the page's foot, and the mark says the name */
@@ -346,7 +332,7 @@ footer a:hover{color:var(--ink)}
   header .mark{font-size:0;gap:0}
 }
 @media (prefers-reduced-motion:reduce){
-  .pic,.video iframe,.veil,.dark,.btn,.seg button,.seg::before{transition:none}
+  .pic,.video iframe,.veil,.dark,.btn,#playbig,.seg button,.seg::before{transition:none}
   html.js .beat > *{opacity:1;transform:none;transition:none}
   .cue::after{animation:none}
 }
@@ -379,15 +365,12 @@ footer a:hover{color:var(--ink)}
   <div class="page" id="page" tabindex="-1">
   <main>
   <div class="beats">
-    <div class="playspot" id="playspot"><button class="playbig" id="playbig">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg>Play with sound
-    </button></div>
     <section class="beat hero on" data-beat="0">
       <h1>A music video<br>for any song.</h1>
       <p class="lede">Give it a track. It listens to the whole song, then draws it as a solar system.</p>
       <div class="go">
-        <a class="more" href="#get">Make your own</a>
-        <a class="more" href="video/">Watch the whole song</a>
+        <button class="btn" id="playbig"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z" fill="currentColor"/></svg>Play with sound</button>
+        <span class="ways"><a class="more" href="#get">Make your own</a><a class="more" href="video/">Watch the whole song</a></span>
       </div>
     </section>
 
@@ -449,7 +432,7 @@ footer a:hover{color:var(--ink)}
 (function () {
   var film = document.getElementById("film"), pic = document.getElementById("pic");
   var sound = document.getElementById("sound"), pause = document.getElementById("pause"), blip = document.getElementById("blip");
-  var cams = document.getElementById("cams"), bar = document.getElementById("bar");
+  var cams = document.getElementById("cams"), bar = document.getElementById("bar"), big = document.getElementById("playbig");
   var ICON = {
     off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></svg>',
     on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg>',
@@ -458,7 +441,7 @@ footer a:hover{color:var(--ink)}
     play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.5v15l12-7.5z" fill="currentColor"/></svg>',
     pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>'
   };
-  var frame = null, player = null, beat = null, away = false, stopped = false, fader = 0, past = 0, drawn = false;
+  var frame = null, player = null, beat = null, away = false, stopped = false, fader = 0, past = 0, drawn = false, wanted = false;
   // where in the song it begins: four seconds before its strongest re-entry, so that the
   // page opens into it; unless the address says otherwise (?t=)
   var from = Number(new URLSearchParams(location.search).get("t")) || 92;
@@ -514,12 +497,13 @@ footer a:hover{color:var(--ink)}
   function say() {
     var muted = !player || player.audio.muted;
     bar.classList.toggle("muted", muted);
-    sound.innerHTML = ICON.on + '<span aria-hidden="true">Play with sound</span>';
+    bar.classList.toggle("loud", !muted);      // the hero's button goes while the song is heard
+    sound.innerHTML = muted ? ICON.off : ICON.on;
     sound.setAttribute("aria-label", muted ? "Play with sound" : "Mute");
   }
 
-  // That it has a sound is shown once while it is silent: the pill swells as the song's
-  // next strong beat lands (a re-entry if one is near, else a kick).
+  // That it has a sound is shown once while it is silent: the hero's button swells as the
+  // song's next strong beat lands (a re-entry if one is near, else a kick), if it is in view.
   function nudge() {
     var t = player.time(), near = function (x) { return x >= t + 2 && x <= t + 14; };
     var beats = (player.drops || []).filter(near);
@@ -527,7 +511,7 @@ footer a:hover{color:var(--ink)}
     var wait = (beats.length ? beats[0] - t : 3) * 1000;
     setTimeout(function () {
       if (!player.audio.muted || player.audio.paused || stopped || away) return;
-      if (sound.animate) sound.animate([{ scale: 1 }, { scale: 1.08, offset: .4 }, { scale: 1 }], { duration: 900, delay: 200, easing: "ease-in-out" });
+      if (big.animate && film.dataset.beat === "0") big.animate([{ scale: 1 }, { scale: 1.08, offset: .4 }, { scale: 1 }], { duration: 900, delay: 200, easing: "ease-in-out" });
     }, Math.max(wait - 600, 0));
   }
 
@@ -629,6 +613,7 @@ footer a:hover{color:var(--ink)}
           requestAnimationFrame(set);
         })();
         say(); said(); direct(); beyond();
+        if (wanted) { wanted = false; listen(); }      // asked for before it was here
         sound.classList.add("ready"); pause.classList.add("ready");
         setTimeout(function () { film.classList.add("live"); }, 60);    // a timer, not a frame: a page not yet shown has no frames
         // once the video has come over the poster, the dark after the film is the video's, eased to
@@ -675,12 +660,10 @@ footer a:hover{color:var(--ink)}
     else fade(0, 260, function () { a.muted = true; a.volume = 1; });
   });
   pause.addEventListener("click", function () { toggle(false); });
-  document.getElementById("playbig").addEventListener("click", function (e) {
+  big.addEventListener("click", function (e) {
     e.stopPropagation();
-    if (!player) return start(true);
-    player.audio.muted = false;
-    stopped = false;
-    go();
+    if (!player) { wanted = true; return start(true); }      // not here yet: it is given its sound as it comes
+    listen();
   });
   // a click or a touch on the picture, where the film is (what is read after it is not the picture's)
   var page = document.getElementById("page");
@@ -761,7 +744,7 @@ footer a:hover{color:var(--ink)}
   // How far past the four screens the page is, eased: 0 while the last fills the window, 1
   // once it is half gone, before what follows is there to be read. The picture goes on under what follows, the Sun sinking out of it and
   // the dark deepening with it.
-  var dusk = document.getElementById("dusk"), beatsEl = document.querySelector(".beats"), spot = document.getElementById("playspot");
+  var dusk = document.getElementById("dusk"), beatsEl = document.querySelector(".beats");
   function beyond() {
     var foot = beatsEl.getBoundingClientRect().bottom;
     // past the four screens (by where they are: an observer says nothing, in Firefox, of a page opened at a place)
@@ -775,10 +758,6 @@ footer a:hover{color:var(--ink)}
     // (where the Sun has sunk: over the poster it has not, and the dark stays)
     var end = Math.min(Math.max((page.scrollTop + 1.6 * innerHeight - page.scrollHeight) / (0.6 * innerHeight), 0), 1);
     dusk.style.opacity = (past * (drawn ? 0.5 * (1 - 0.5 * end * end * (3 - 2 * end)) : 0.84)).toFixed(3);
-    // and the play button on the Sun is gone before the Sun is
-    var seen = Math.max(1 - 3 * past, 0);
-    spot.style.opacity = seen.toFixed(3);
-    spot.style.visibility = seen ? "" : "hidden";
   }
   document.getElementById("page").addEventListener("scroll", beyond, { passive: true });
   addEventListener("resize", beyond);

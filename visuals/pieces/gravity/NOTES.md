@@ -2365,3 +2365,49 @@ screen, and a heading with its picture on each screen of the film.
   sound sign and the pause sign share 2 px of reach, as the pause and GitHub signs have.
 - Not seen: Safari itself, his telephone. If the film stood still on his telephone before he
   tapped, Safari refused to start the hidden muted video, which is the player's to look at.
+
+## Play with sound is in the hero, and the Sun is left clear (2026-10-03)
+
+Jugal, of the page as deployed: he does not like the button at the head for the sound; it is
+too wide, and too near the top, with no room round it; a play button in the middle, on the
+hero, would be better, or "play" where the Sun is. Four sketches were shown beside the live
+page (`visuals/out/landing/sketch/`, E1 to E4: a white round button on the Sun; the same as
+dark glass with a ring, which went muddy on the Sun's cream; the white pill with its words on
+the Sun; and the Sun left clear, the pill at the head of the hero's row of links). He chose
+the last.
+
+- **Built.** One button, `#playbig`, a white pill at the head of the hero's row ("Play with
+  sound"), the two quiet links after it; upright it is on a line of its own over them, at the
+  thumb. It is there from the first paint and while the song is silent, whether the film is
+  moving or has not started; a click gives the sound (and starts the film where the browser
+  had not; one made before the player is there is kept, and the film comes with its sound).
+  With the sound on it draws in and goes (`header.loud`), and the links beside it settle to
+  the middle over half a second; upright it keeps its line, so nothing under it moves. Muted
+  again from the bar, it comes back. It swells once on the song's next strong beat, as the
+  pill did, if the first screen is in view. The button that stood on the Sun and its wrapper
+  are gone (one button, not two), and so is the pill: the bar's sound control is a small sign
+  beside the pause, struck through while the song is silent. The bar's signs are 28 px apart
+  at every width, so that no two share any of their 44 px of reach (pause and GitHub had
+  shared 6 to 14 px on a telephone).
+- **Measured** (`verify_heroplay.cjs`, 1440x900 and 390x844). A click on it with the film
+  playing silent: unmuted, playing, the button 0 wide and hidden; the links moved 110 px to the
+  middle on a desk and 0 px on a telephone; muted again, everything back to the pixel. A click
+  0.8 s after the page began, the player's script held back 3 s: the film came with its sound.
+  In the three ways a film may begin (by itself, less motion asked for, refused), a click
+  starts it with its sound (`playbig.cjs`); in Chrome's, Safari's and Firefox's engines, wide
+  and tall, a click on it gives the sound (`engines.cjs`). One white button in the window at
+  the head in every state, and at the install as before (`verify_onebutton.cjs`). The hero's
+  row ends where it did when "Make your own" was a pill, and clears the Sun's glow by 32 px at
+  the least over 30 s (1280x720), 36 to 44 at 1440x900, 1470x840 and 1600x700. No tap areas
+  overlap in the bar from 280 to 3840 px wide. The frame loop 0.1 ms at the median; 0 frames
+  over 20 ms; CLS 0. 17.3 KB gzipped. The time to the first paint could not be told apart
+  from the page as deployed on a machine hours into headless runs: the two taken turn about,
+  three loads a set, the deployed page 184 to 1948 ms and this one 184 to 672 (its one
+  undisturbed set 184 on a desk and 196 on a telephone, the film live in under 400); a
+  fourth set hung as its browser started and was not finished. The gates as before, all passing; three of the check
+  scripts named what is gone (the wrapper on the Sun, the pill) and were mended.
+- Contrast: every text as before, but the small print at 1440x900 met the sky's brightest
+  star again at one moment (3.6 against the blurred picture; 6.1 at the same place on the run
+  before): it is the picture's, and passes as the page is read.
+- Not seen: Safari itself, his telephone. Whether a click on a button in the page, not in the
+  player's frame, gives the frame's song its sound on an iPhone is the thing to try there.
