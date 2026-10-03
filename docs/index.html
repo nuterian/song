@@ -48,7 +48,8 @@ h2{font-size:clamp(2.5rem,7.2vw,6.5rem)}
 h1,h2{text-box-trim:trim-start;text-box-edge:cap alphabetic}
 .lede{margin:.9em auto 0;max-width:30em;color:var(--dim);font-size:clamp(1.0625rem,1.75vw,1.5rem);line-height:1.35;text-wrap:balance}
 
-/* The bar: a name and two ways on, over the picture. */
+/* The bar: a name and two ways on, over the picture. The hero's own two ways on are quiet
+   links: the one white button on the first screen is the film's. */
 header{position:fixed;inset:0 0 auto;height:52px;display:flex;align-items:center;gap:26px;padding:0 max(22px,env(safe-area-inset-left));
   z-index:10;font-size:0.875rem;color:rgba(245,245,247,.82);white-space:nowrap}
 /* what scrolls goes under the bar, not through it: a shade, all but solid behind the bar's
@@ -126,6 +127,12 @@ header.muted #sound{height:34px;padding:0 15px 0 12px;margin:0;border-radius:17p
 header.muted #sound span{display:inline}
 header.muted #sound::before{content:"";position:absolute;inset:-5px 0}     /* a finger's 44 px */
 header.muted #sound:hover{transform:scale(1.04)}
+/* One white button to a screen. While the big one is on the Sun (the film did not start by
+   itself), it is the one that says it, and the pill in the bar waits; after the film the pill is
+   the small sign, so that the call at the end is the one white thing there. */
+body:has(#film.still) header.muted #sound{visibility:hidden}
+header.solid.muted #sound{height:auto;padding:14px;margin:-14px;border-radius:0;background:none;color:inherit;font-weight:inherit}
+header.solid.muted #sound span{display:none}
 header .gh{padding:12px;margin:0 -12px}
 header .gh svg{width:20px;height:20px;display:block}
 /* where the video has not started by itself (or is not to, with less motion asked for): on
@@ -159,7 +166,7 @@ html.js .beat > *{opacity:0;transform:translateY(24px);transition:opacity .6s va
 html.js .beat.on > *{opacity:1;transform:none}
 html.js .beat.on > :nth-child(2){transition-delay:.1s}
 html.js .beat.on > :nth-child(3){transition-delay:.2s}
-.go{margin-top:1.7em;display:flex;flex-wrap:wrap;gap:12px 26px;align-items:center;justify-content:center;font-size:1.0625rem}
+.go{margin-top:1.7em;display:flex;flex-wrap:wrap;gap:20px 26px;align-items:center;justify-content:center;font-size:1.0625rem}     /* 20 down: two quiet links one above the other keep their reach apart */
 .btn{display:inline-flex;align-items:center;height:46px;padding:0 26px;border-radius:23px;background:var(--ink);color:#000;font-weight:600;
   transition:transform .25s var(--ease)}
 .btn:hover{transform:scale(1.04)}
@@ -216,12 +223,8 @@ html:not(.scripted) .copy,html:not(.scripted) .send{display:none}      /* they a
   .send{display:block}
   .send + .code{margin-top:28px}
 }
-/* the small print as what it is: four facts, each on a line of its own */
-.facts{margin:clamp(28px,4svh,40px) auto 0;width:min(100%,620px);text-align:left;font-size:0.9375rem;line-height:1.45;color:rgba(245,245,247,.78)}
-.facts div{display:grid;grid-template-columns:6.5rem 1fr;gap:0 16px;padding:11px 0;border-top:1px solid var(--hair)}
-.facts div:last-child{border-bottom:1px solid var(--hair)}
-.facts dt{color:var(--dim)}
-.facts dd{margin:0;text-wrap:pretty}
+/* the small print: the four facts in one line, parted by dots */
+.fine{margin:22px auto 0;max-width:34em;font-size:0.875rem;line-height:1.5;color:rgba(245,245,247,.72);text-wrap:balance}
 /* what is read after the film is nearly white, so the picture under it may be less dark */
 section.own .lede,section.get .lede,.send p{color:rgba(245,245,247,.82)}
 /* the end: room, the name, and one line */
@@ -317,7 +320,6 @@ footer a:hover{color:var(--ink)}
 @media (max-width:640px){
   .three{max-width:21rem;margin-top:clamp(48px,8svh,80px)}
   .three li{font-size:1.25rem}
-  .facts div{grid-template-columns:4.75rem 1fr}
 }
 /* a finger has no mouse to scroll with: the cue is a plain mark */
 @media (hover:none){
@@ -384,25 +386,23 @@ footer a:hover{color:var(--ink)}
       <h1>A music video<br>for any song.</h1>
       <p class="lede">Give it a track. It listens to the whole song, then draws it as a solar system.</p>
       <div class="go">
-        <a class="btn" href="#get">Make your own</a>
+        <a class="more" href="#get">Make your own</a>
         <a class="more" href="video/">Watch the whole song</a>
       </div>
     </section>
 
     <section class="beat" data-beat="1" data-camera="static" data-words="off">
       <h2>First, it listens.</h2>
-      <p class="lede">The whole song, before a frame is drawn. Every kick, every note, every sung word, heard in the song itself.</p>
       <canvas class="heard" id="heard" role="img" aria-label="The kick, the bass, the notes and the voice of the song, each moment marked as it plays"></canvas>
     </section>
 
     <section class="beat" data-beat="2" data-camera="cinematic" data-words="on">
       <h2>Then everything moves.</h2>
-      <p class="lede">The kick swells the Sun. The planets follow its pull. The words arrive as they are sung.</p>
+      <p class="lede">The kick swells the Sun. The planets follow its pull.</p>
     </section>
 
     <section class="beat" data-beat="3" data-camera="hybrid" data-words="on">
       <h2>Three cameras.<br>One song.</h2>
-      <p class="lede">Switch while it plays.</p>
       <span class="seg" id="cams" role="group" aria-label="Camera"></span>
     </section>
   </div>
@@ -414,9 +414,9 @@ footer a:hover{color:var(--ink)}
        width="2880" height="1800" loading="lazy" decoding="async"
        alt="The studio: the video, with the planets in a line, above a timeline of the song's sections, camera shots and lyric lines">
   <ol class="three">
-    <li class="rise"><b>By hand.</b> <span>Shots, moments and words sit on one timeline. Drag them. The video follows in under two seconds.</span></li>
-    <li class="rise"><b>By asking.</b> <span>Say it in words. A model on your own Mac, through Ollama, proposes the change, and you decide.</span></li>
-    <li class="rise"><b>To keep.</b> <span>1080p at 60 frames a second, wide or tall, with the words burned in. Or a seamless loop for Spotify's Canvas.</span></li>
+    <li class="rise"><b>By hand.</b> <span>Shots, moments and words on one timeline. Drag them.</span></li>
+    <li class="rise"><b>By asking.</b> <span>A model on your Mac proposes the change. You decide.</span></li>
+    <li class="rise"><b>To keep.</b> <span>1080p at 60, wide or tall, or a loop for Spotify's Canvas.</span></li>
   </ol>
 </section>
 
@@ -428,12 +428,7 @@ footer a:hover{color:var(--ink)}
 <span class="l">git clone https://github.com/nuterian/song</span>
 <span class="l">cd song &amp;&amp; ./setup.sh</span>
 <span class="l">visuals/.venv/bin/python -m visuals studio</span><button class="copy" id="copy" aria-label="Copy the commands"></button></div>
-  <dl class="facts rise">
-    <div><dt>Needs</dt><dd>Python 3.12 and ffmpeg. The setup says how to get them.</dd></div>
-    <div><dt>Size</dt><dd>2.1 GB, plus about 8 GB of free models it asks before fetching.</dd></div>
-    <div><dt>Time</dt><dd>About 12 minutes for a 5&#8209;minute song with lyrics, on an M4 MacBook Air.</dd></div>
-    <div><dt>Licence</dt><dd>MIT. The model that times the lyrics is for non&#8209;commercial use.</dd></div>
-  </dl>
+  <p class="fine rise">Python 3.12 and ffmpeg · 2.1 GB, plus about 8 GB of models · about 12 minutes a song on an M4 Air · MIT, the lyric model non&#8209;commercial</p>
 </section>
   </main>
 

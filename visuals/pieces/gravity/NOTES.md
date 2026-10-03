@@ -2329,3 +2329,39 @@ at 1440x900 and 390x844; Jugal chose the first, with everything recommended besi
   sizes, the song's line seen under the camera control on a tablet, a sentence seen faintly
   through the bar as it goes under it (all the picture's, and as before).
 - Not seen: Safari itself, a telephone, a screen reader. Jugal's to say, on the live page.
+
+## One white button to a screen, and fewer words (2026-10-02, night)
+
+Jugal, with the deployed page on his telephone: too much text and less picture than he would
+like; and the wide white "Play with sound" at the head and the one below it on the Sun are
+redundant, there should be one highlighted button. On his telephone the film had not started
+by itself, so the big button was on the Sun while the same words were the pill in the bar, and
+"Make your own" was a third white pill under the headline. Sketched (D, in
+`visuals/out/landing/sketch/`, against the page as deployed) and chosen: one white thing to a
+screen, and a heading with its picture on each screen of the film.
+
+- **One white button.** While the big button is on the Sun (the film refused, `#film.still`)
+  the bar's pill waits (`body:has(#film.still)`); once the film plays silent the pill is the
+  one; after the film (`header.solid`) the pill is the small sound sign, so that the call at
+  the end, "Send to my Mac" on a telephone or the command itself, is the one white thing. The
+  hero's "Make your own" is a quiet link beside "Watch the whole song"; the install at the end
+  is where that call is made in full. Counted, the white buttons and links in the window
+  (`verify_onebutton.cjs`): at the head, one (the big button with the film refused, the pill
+  with it playing); at the install, one on a telephone (Send to my Mac) and none on a desk,
+  where the command is the call; 1440x900 and 390x844, both states.
+- **Fewer words.** "First, it listens" keeps only the strip (its labels say kick, bass, notes,
+  voice); "Then everything moves" keeps one sentence, "The kick swells the Sun. The planets
+  follow its pull." (the words appearing on that screen show the rest); "Three cameras" keeps
+  only the control. After the film the three things are one short line each, and the four
+  facts are one small line parted by dots, the numbers as they were. The page's prose, the
+  commands left out, is 161 words, from 241: a third fewer.
+- **Measured.** The frame loop 0.0 ms at the median, 0.4 at the 95th; 0 frames over 20 ms;
+  60 a second at the head. 17.5 KB gzipped. Every text over the film and after it against the
+  picture behind it, blurred by a letter's height, at three sizes: least 6.1, medians 16 to 18,
+  none under 4.5 (the small print at 62 % white had met the sky's brightest star at 2.8 once;
+  it is 72 %). The gates as before, all passing; the link check named the hero's button by its
+  old class and names it by its target now. Two quiet links one above the other on a narrow
+  telephone shared 8 px of reach: the row's gap is 20 px down. Left: after the film the small
+  sound sign and the pause sign share 2 px of reach, as the pause and GitHub signs have.
+- Not seen: Safari itself, his telephone. If the film stood still on his telephone before he
+  tapped, Safari refused to start the hidden muted video, which is the player's to look at.
